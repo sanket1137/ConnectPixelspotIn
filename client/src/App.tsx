@@ -1,18 +1,123 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthGuard } from "@/components/AuthGuard";
+import { AppSidebar } from "@/components/AppSidebar";
 import NotFound from "@/pages/not-found";
+import Login from "@/pages/Login";
+import AdminDashboard from "@/pages/admin/AdminDashboard";
+import OwnerDashboard from "@/pages/owner/OwnerDashboard";
+import ScreensList from "@/pages/owner/ScreensList";
+import AddScreen from "@/pages/owner/AddScreen";
+import AdvertiserDashboard from "@/pages/advertiser/AdvertiserDashboard";
+import DiscoverScreens from "@/pages/advertiser/DiscoverScreens";
+import CampaignsList from "@/pages/advertiser/CampaignsList";
+import CreateCampaign from "@/pages/advertiser/CreateCampaign";
+
+function RedirectToDashboard() {
+  const { user, loading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  if (loading) return null;
+
+  if (!user) {
+    setLocation("/login");
+    return null;
+  }
+
+  if (user.role === "admin") setLocation("/admin");
+  else if (user.role === "screen_owner") setLocation("/owner");
+  else setLocation("/advertiser");
+
+  return null;
+}
 
 function Router() {
   return (
     <Switch>
-      {/* Add pages below */}
-      {/* <Route path="/" component={Home}/> */}
-      {/* Fallback to 404 */}
+      {/* Root - Redirect to appropriate dashboard */}
+      <Route path="/" component={RedirectToDashboard} />
+      
+      {/* Public Routes */}
+      <Route path="/login" component={Login} />
+      
+      {/* Admin Routes */}
+      <Route path="/admin">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminDashboard />
+        </AuthGuard>
+      </Route>
+      
+      {/* Screen Owner Routes */}
+      <Route path="/owner">
+        <AuthGuard allowedRoles={["screen_owner"]}>
+          <OwnerDashboard />
+        </AuthGuard>
+      </Route>
+      <Route path="/owner/screens">
+        <AuthGuard allowedRoles={["screen_owner"]}>
+          <ScreensList />
+        </AuthGuard>
+      </Route>
+      <Route path="/owner/screens/new">
+        <AuthGuard allowedRoles={["screen_owner"]}>
+          <AddScreen />
+        </AuthGuard>
+      </Route>
+      
+      {/* Advertiser Routes */}
+      <Route path="/advertiser">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <AdvertiserDashboard />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/discover">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <DiscoverScreens />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/campaigns">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <CampaignsList />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/campaigns/new">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <CreateCampaign />
+        </AuthGuard>
+      </Route>
+      
+      {/* Fallback */}
       <Route component={NotFound} />
     </Switch>
+  );
+}
+
+function AuthenticatedLayout() {
+  const { user } = useAuth();
+  
+  if (!user) {
+    return <Router />;
+  }
+
+  const style = {
+    "--sidebar-width": "20rem",
+    "--sidebar-width-icon": "4rem",
+  };
+
+  return (
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full">
+        <AppSidebar />
+        <main className="flex-1 overflow-auto bg-background">
+          <Router />
+        </main>
+      </div>
+    </SidebarProvider>
   );
 }
 
@@ -20,8 +125,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <AuthProvider>
+          <AuthenticatedLayout />
+        </AuthProvider>
         <Toaster />
-        <Router />
       </TooltipProvider>
     </QueryClientProvider>
   );
