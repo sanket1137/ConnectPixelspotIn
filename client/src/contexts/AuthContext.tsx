@@ -9,7 +9,7 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   user: User | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (role?: "screen_owner" | "advertiser") => Promise<void>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isScreenOwner: boolean;
@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   const signInMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (role?: "screen_owner" | "advertiser") => {
       const result = await signInWithPopup(auth, googleProvider);
       const token = await result.user.getIdToken();
       
@@ -47,6 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         token,
         email: result.user.email,
         name: result.user.displayName,
+        role: role || undefined,
       });
       
       return response;
@@ -70,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     firebaseUser,
     user: user || null,
     loading: loading || signInMutation.isPending,
-    signInWithGoogle: () => signInMutation.mutateAsync(),
+    signInWithGoogle: (role?: "screen_owner" | "advertiser") => signInMutation.mutateAsync(role),
     signOut: () => signOutMutation.mutateAsync(),
     isAdmin: user?.role === "admin",
     isScreenOwner: user?.role === "screen_owner",

@@ -63,7 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sign in / Sign up
   app.post("/api/auth/signin", async (req, res) => {
     try {
-      const { token, email, name } = req.body;
+      const { token, email, name, role } = req.body;
 
       if (!token || !email || !name) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -79,13 +79,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let user = await storage.getUserByFirebaseUid(decodedToken.uid);
 
       if (!user) {
-        // Create new user with default role as advertiser
+        // Create new user with selected role (or default to advertiser)
+        const userRole = role && (role === "screen_owner" || role === "advertiser") 
+          ? role 
+          : "advertiser";
+        
         user = await storage.createUser({
           firebaseUid: decodedToken.uid,
           email,
           name,
           phone: null,
-          role: "advertiser",
+          role: userRole,
           status: "active",
         });
       }
