@@ -291,6 +291,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all bookings (admin)
+  app.get("/api/admin/bookings", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const bookings = await storage.getAllBookings();
+      res.json(bookings);
+    } catch (error) {
+      console.error("Get all bookings error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ========== SCREEN OWNER ROUTES ==========
   
   // Owner dashboard stats

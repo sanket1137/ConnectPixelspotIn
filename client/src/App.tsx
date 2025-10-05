@@ -10,6 +10,11 @@ import { AppSidebar } from "@/components/AppSidebar";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
+import ManageUsers from "@/pages/admin/ManageUsers";
+import ManageScreens from "@/pages/admin/ManageScreens";
+import ManageBookings from "@/pages/admin/ManageBookings";
+import Analytics from "@/pages/admin/Analytics";
+import Settings from "@/pages/admin/Settings";
 import OwnerDashboard from "@/pages/owner/OwnerDashboard";
 import ScreensList from "@/pages/owner/ScreensList";
 import AddScreen from "@/pages/owner/AddScreen";
@@ -49,6 +54,31 @@ function Router() {
       <Route path="/admin">
         <AuthGuard allowedRoles={["admin"]}>
           <AdminDashboard />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/users">
+        <AuthGuard allowedRoles={["admin"]}>
+          <ManageUsers />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/screens">
+        <AuthGuard allowedRoles={["admin"]}>
+          <ManageScreens />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/bookings">
+        <AuthGuard allowedRoles={["admin"]}>
+          <ManageBookings />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/analytics">
+        <AuthGuard allowedRoles={["admin"]}>
+          <Analytics />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/settings">
+        <AuthGuard allowedRoles={["admin"]}>
+          <Settings />
         </AuthGuard>
       </Route>
       
