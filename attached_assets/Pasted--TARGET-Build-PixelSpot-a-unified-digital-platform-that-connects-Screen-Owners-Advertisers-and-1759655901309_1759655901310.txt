@@ -1,0 +1,181 @@
+🅣 TARGET
+
+Build PixelSpot, a unified digital platform that connects Screen Owners, Advertisers, and Admins to manage, discover, and book digital advertising screens across India.
+
+The goal is to make outdoor advertising discoverable, bookable, and measurable — just like online ads — through a seamless map-based interface.
+
+🅐 ACTION
+
+Develop a web portal (and future mobile app) that allows:
+
+Screen Owners to list and manage their digital screens with all relevant details (location, pricing, schedule, size, media formats, etc.)
+
+Advertisers to discover available screens across India, create campaigns, request bookings, and track campaign progress.
+
+Admins to manage users, screens, and bookings — and also add their own (admin-owned) screens to the marketplace.
+
+🅒 CONTEXT
+1. User Roles
+Role	Description	Core Capabilities
+🧑‍💼 Admin	Platform owner & operator	Manage users, campaigns, payments, reports, and can add/edit/delete screens (including admin-owned inventory).
+🧑‍💻 Screen Owner	Businesses owning physical digital screens	CRUD screens, set prices, manage availability, accept/reject booking requests.
+👨‍🎨 Advertiser	Agencies or brands running ads	Search screens, build campaigns, send requests, make payments, and track live bookings.
+2. Core Platform Features
+🟣 Admin Portal
+
+Dashboard with KPIs (screens, campaigns, revenue, users)
+
+Manage all users (approve, deactivate, reset passwords)
+
+Add/Edit/Delete screens (assign to owner or admin-owned)
+
+Approve pending screens and campaigns
+
+Booking oversight (manual override or final confirmation)
+
+Financial dashboard (commission, tax, invoices)
+
+Analytics and reporting by location, user, and screen
+
+🟢 Screen Owner Portal
+
+Dashboard (earnings, requests, screen performance)
+
+Manage screens (CRUD):
+
+Screen name, type, size, lat/long, city, pincode
+
+Pricing rules (per day/week/month, dynamic rates)
+
+Availability calendar
+
+Operational hours
+
+Upload images/videos
+
+View and respond to booking requests
+
+Reports and payout summaries
+
+🔵 Advertiser Portal
+
+Map-based screen discovery (Google Maps / Mapbox)
+
+Advanced filters (city, pincode, type, price, availability, screen size)
+
+Campaign builder wizard:
+
+Objective → Location → Duration → Budget → Upload creative
+
+View available screens instantly
+
+Request booking (one or multiple screens)
+
+Payment & invoicing via Razorpay/Stripe
+
+Track campaign status (pending, live, completed)
+
+3. Data Architecture (Simplified)
+
+Users Table: id, name, email, phone, role, status
+Screens Table: id, name, owner_id (nullable), owned_by_admin (bool), location, lat, long, price, min_booking_days, operational_hours, status
+Campaigns Table: id, advertiser_id, name, objective, start_date, end_date, budget, creative_url, status
+Bookings Table: id, screen_id, campaign_id, price, status, approved_by_admin
+Payments Table: id, booking_id, amount, status, method
+
+4. Site Map
+
+Public Pages
+
+Home
+
+About PixelSpot
+
+How It Works
+
+Contact
+
+Login / Register
+
+Advertiser Portal
+
+Dashboard
+
+Find Screens (Map View + List View)
+
+Campaign Builder
+
+My Campaigns
+
+Payments & Invoices
+
+Profile / Settings
+
+Screen Owner Portal
+
+Dashboard
+
+My Screens
+
+Add/Edit Screen
+
+Booking Requests
+
+Pricing Rules
+
+Reports
+
+Profile
+
+Admin Portal
+
+Dashboard
+
+Add/Edit Screens (including Admin-owned)
+
+Manage Users (Owners, Advertisers)
+
+Manage Campaigns & Bookings
+
+Reports & Analytics
+
+System Settings
+
+🅞 OUTCOME
+
+Deliver a production-ready, scalable, and intuitive DOOH marketplace that allows easy discovery, management, and monetization of digital screens across India.
+
+Success Criteria:
+✅ Screens from multiple owners visible via map & filters
+✅ Admin can add and manage screens directly
+✅ Advertisers can create and pay for campaigns
+✅ Real-time request and approval workflow between all roles
+✅ Data-driven reports for Admin & Owners
+
+🧱 TECH STACK RECOMMENDATION
+Layer	Technology
+Frontend	React.js + Next.js + Mapbox/Google Maps API
+Backend	Node.js + Express.js (or NestJS)
+Database	PostgreSQL
+Storage	AWS S3 (for screen media & creatives)
+Authentication	JWT / OAuth2
+Payments	Razorpay or Stripe
+Hosting	AWS / GCP
+Admin Dashboard	React Admin or custom interface
+APIs	REST + OpenAPI (Swagger docs)
+📈 FUTURE ROADMAP (Phase 2+)
+
+Real-time availability API (for IoT-connected screens)
+
+AI-based screen recommendation (based on campaign goals & audience)
+
+Dynamic pricing engine
+
+Automated invoicing & payouts
+
+Mobile app for on-the-go management
+
+🧩 SAMPLE TAGLINE
+
+PixelSpot — India’s Smartest Outdoor Advertising Network
+Find, Book & Run Digital Ads Anywhere.
