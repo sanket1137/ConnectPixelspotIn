@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { verifyToken } from "./firebaseAdmin";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { User } from "@shared/schema";
 
 // Extend Express Request to include user
@@ -104,6 +105,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sign out
   app.post("/api/auth/signout", (req, res) => {
     res.json({ success: true });
+  });
+
+  // ========== OBJECT STORAGE ROUTES ==========
+  
+  // Get upload URL for file uploads
+  app.post("/api/objects/upload", authenticate, async (req, res) => {
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Get upload URL error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Update entity with uploaded file (for screens and campaigns)
+  app.put("/api/objects/entity", authenticate, async (req, res) => {
+    try {
+      const { fileURL, entityType } = req.body;
+
+      if (!fileURL || !entityType) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        fileURL,
+        {
+          owner: req.user!.id.toString(),
+          // Public visibility for screen images and campaign creatives
+          visibility: "public",
+        },
+      );
+
+      res.json({ objectPath });
+    } catch (error) {
+      console.error("Set entity file error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Serve public objects (no authentication required)
+  app.get("/public-objects/:filePath(*)", async (req, res) => {
+    try {
+      const filePath = req.params.filePath;
+      const objectStorageService = new ObjectStorageService();
+      const file = await objectStorageService.searchPublicObject(filePath);
+      
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      
+      objectStorageService.downloadObject(file, res);
+    } catch (error) {
+      console.error("Error serving public object:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Serve private objects (with ACL check)
+  app.get("/objects/:objectPath(*)", authenticate, async (req, res) => {
+    try {
+      const userId = req.user!.id.toString();
+      const objectStorageService = new ObjectStorageService();
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      
+      const canAccess = await objectStorageService.canAccessObjectEntity({
+        objectFile,
+        userId,
+      });
+      
+      if (!canAccess) {
+        return res.sendStatus(401);
+      }
+      
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error accessing object:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
   });
 
   // ========== ADMIN ROUTES ==========
@@ -364,10 +449,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all active screens (for discovery)
+  // Get all active screens (for discovery) with filtering
   app.get("/api/screens", authenticate, async (req, res) => {
     try {
-      const screens = await storage.getActiveScreens();
+      const { city, type, minPrice, maxPrice, pincode } = req.query;
+      
+      let screens = await storage.getActiveScreens();
+      
+      // Apply filters
+      if (city) {
+        screens = screens.filter(s => 
+          s.city.toLowerCase().includes((city as string).toLowerCase())
+        );
+      }
+      
+      if (type) {
+        screens = screens.filter(s => s.type === type);
+      }
+      
+      if (minPrice) {
+        const min = parseInt(minPrice as string);
+        screens = screens.filter(s => s.pricePerDay >= min);
+      }
+      
+      if (maxPrice) {
+        const max = parseInt(maxPrice as string);
+        screens = screens.filter(s => s.pricePerDay <= max);
+      }
+      
+      if (pincode) {
+        screens = screens.filter(s => s.pincode === pincode);
+      }
+      
       res.json(screens);
     } catch (error) {
       console.error("Get screens error:", error);

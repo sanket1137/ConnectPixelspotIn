@@ -164,3 +164,19 @@ PixelSpot is a comprehensive Digital Out-of-Home (DOOH) advertising marketplace 
 - Set up Mapbox integration for screen discovery
 - Fixed critical query client bug that prevented data fetching
 - Configured Object Storage and Stripe integrations
+- **NEW: Implemented complete file upload system using Object Storage**
+  - Created ObjectUploader component with Uppy integration
+  - Added server-side object storage routes with ACL policies
+  - Integrated file uploads in AddScreen and CreateCampaign forms
+  - Screen images and campaign creatives now upload to cloud storage
+- **NEW: Implemented server-side filtering for screen discovery**
+  - Added query parameter support (city, type, minPrice, maxPrice, pincode)
+  - Backend filters screens based on advertiser search criteria
+  - Combined server-side and client-side filtering for optimal performance
+
+## Known Limitations
+- VITE_MAPBOX_TOKEN required for map visualization (currently not set)
+- Booking workflow partially implemented (campaign/booking creation needs screen selection UI)
+- Stripe payment integration pending (API routes ready, frontend integration needed)
+- Availability calendar not yet implemented
+- Admin approval workflow exists in backend but needs frontend integration

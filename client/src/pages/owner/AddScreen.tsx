@@ -12,7 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, MapPin, Upload } from "lucide-react";
+import { ObjectUploader } from "@/components/ObjectUploader";
+import type { UploadResult } from "@uppy/core";
+import { ArrowLeft, MapPin, Upload, Check } from "lucide-react";
 
 const addScreenSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters"),
@@ -34,6 +36,7 @@ export default function AddScreen() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [uploadedImageURL, setUploadedImageURL] = useState<string | null>(null);
 
   const form = useForm<AddScreenForm>({
     resolver: zodResolver(addScreenSchema),
@@ -60,6 +63,7 @@ export default function AddScreen() {
         minBookingDays: parseInt(data.minBookingDays),
         latitude: data.latitude,
         longitude: data.longitude,
+        imageUrl: uploadedImageURL || null,
       });
     },
     onSuccess: () => {
@@ -78,6 +82,34 @@ export default function AddScreen() {
       });
     },
   });
+
+  const handleGetUploadParameters = async () => {
+    const response = await apiRequest("POST", "/api/objects/upload", {});
+    const data = await response.json();
+    return {
+      method: "PUT" as const,
+      url: data.uploadURL,
+    };
+  };
+
+  const handleUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    if (result.successful && result.successful.length > 0) {
+      const uploadedFile = result.successful[0];
+      const fileURL = uploadedFile.uploadURL;
+
+      const response = await apiRequest("PUT", "/api/objects/entity", {
+        fileURL,
+        entityType: "screen",
+      });
+      const data = await response.json();
+      setUploadedImageURL(data.objectPath);
+
+      toast({
+        title: "Image Uploaded",
+        description: "Screen image has been uploaded successfully.",
+      });
+    }
+  };
 
   const onSubmit = (data: AddScreenForm) => {
     createScreenMutation.mutate(data);
@@ -294,6 +326,39 @@ export default function AddScreen() {
                   </FormItem>
                 )}
               />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Screen Image
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                <ObjectUploader
+                  maxNumberOfFiles={1}
+                  maxFileSize={10485760}
+                  allowedFileTypes={["image/*"]}
+                  onGetUploadParameters={handleGetUploadParameters}
+                  onComplete={handleUploadComplete}
+                  buttonVariant="outline"
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Screen Image
+                </ObjectUploader>
+                {uploadedImageURL && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <Check className="h-4 w-4" />
+                    Image uploaded successfully
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Supported formats: JPG, PNG (Max 10MB)
+              </p>
             </CardContent>
           </Card>
 

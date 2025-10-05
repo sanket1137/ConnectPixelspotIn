@@ -11,7 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, ArrowRight, Calendar, Target, DollarSign, Upload } from "lucide-react";
+import { ObjectUploader } from "@/components/ObjectUploader";
+import type { UploadResult } from "@uppy/core";
+import { ArrowLeft, ArrowRight, Calendar, Target, DollarSign, Upload, Check } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
 const createCampaignSchema = z.object({
@@ -36,6 +38,7 @@ export default function CreateCampaign() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [uploadedCreativeURL, setUploadedCreativeURL] = useState<string | null>(null);
 
   const form = useForm<CreateCampaignForm>({
     resolver: zodResolver(createCampaignSchema),
@@ -55,6 +58,7 @@ export default function CreateCampaign() {
         budget: parseInt(data.budget),
         startDate: new Date(data.startDate).toISOString(),
         endDate: new Date(data.endDate).toISOString(),
+        creativeUrl: uploadedCreativeURL || null,
       });
     },
     onSuccess: () => {
@@ -73,6 +77,34 @@ export default function CreateCampaign() {
       });
     },
   });
+
+  const handleGetUploadParameters = async () => {
+    const response = await apiRequest("POST", "/api/objects/upload", {});
+    const data = await response.json();
+    return {
+      method: "PUT" as const,
+      url: data.uploadURL,
+    };
+  };
+
+  const handleUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    if (result.successful && result.successful.length > 0) {
+      const uploadedFile = result.successful[0];
+      const fileURL = uploadedFile.uploadURL;
+
+      const response = await apiRequest("PUT", "/api/objects/entity", {
+        fileURL,
+        entityType: "campaign",
+      });
+      const data = await response.json();
+      setUploadedCreativeURL(data.objectPath);
+
+      toast({
+        title: "Creative Uploaded",
+        description: "Campaign creative has been uploaded successfully.",
+      });
+    }
+  };
 
   const onSubmit = (data: CreateCampaignForm) => {
     createCampaignMutation.mutate(data);
@@ -283,17 +315,28 @@ export default function CreateCampaign() {
                   Upload Creative
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="border-2 border-dashed border-border rounded-lg p-12 text-center hover-elevate cursor-pointer">
-                  <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-foreground font-medium mb-1">Upload your campaign creative</p>
-                  <p className="text-sm text-muted-foreground">
-                    Drag and drop or click to browse
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Supported formats: JPG, PNG, MP4 (Max 10MB)
-                  </p>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-center gap-4 py-8">
+                  <ObjectUploader
+                    maxNumberOfFiles={1}
+                    maxFileSize={10485760}
+                    allowedFileTypes={["image/*", "video/mp4"]}
+                    onGetUploadParameters={handleGetUploadParameters}
+                    onComplete={handleUploadComplete}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Campaign Creative
+                  </ObjectUploader>
+                  {uploadedCreativeURL && (
+                    <div className="flex items-center gap-2 text-sm text-green-600">
+                      <Check className="h-4 w-4" />
+                      Creative uploaded successfully
+                    </div>
+                  )}
                 </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  Supported formats: JPG, PNG, MP4 (Max 10MB)
+                </p>
               </CardContent>
             </Card>
           )}
