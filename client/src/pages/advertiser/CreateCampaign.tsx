@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
-import { ArrowLeft, ArrowRight, Calendar, Target, DollarSign, Upload, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Calendar, Target, DollarSign, Upload, Check, Monitor, Trash2, AlertCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import type { Screen } from "@shared/schema";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+const SELECTED_SCREENS_KEY = "selectedScreenIds";
 
 const createCampaignSchema = z.object({
   name: z.string().min(3, "Campaign name must be at least 3 characters"),
@@ -27,9 +31,9 @@ const createCampaignSchema = z.object({
 type CreateCampaignForm = z.infer<typeof createCampaignSchema>;
 
 const steps = [
-  { id: 1, name: "Objective", icon: Target },
-  { id: 2, name: "Duration", icon: Calendar },
-  { id: 3, name: "Budget", icon: DollarSign },
+  { id: 1, name: "Screens", icon: Monitor },
+  { id: 2, name: "Details", icon: Target },
+  { id: 3, name: "Duration", icon: Calendar },
   { id: 4, name: "Creative", icon: Upload },
 ];
 
@@ -39,6 +43,20 @@ export default function CreateCampaign() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [uploadedCreativeURL, setUploadedCreativeURL] = useState<string | null>(null);
+  const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>([]);
+
+  const { data: allScreens = [] } = useQuery<Screen[]>({
+    queryKey: ["/api/screens"],
+  });
+
+  useEffect(() => {
+    const saved = localStorage.getItem(SELECTED_SCREENS_KEY);
+    if (saved) {
+      setSelectedScreenIds(JSON.parse(saved));
+    }
+  }, []);
+
+  const selectedScreens = allScreens.filter(s => selectedScreenIds.includes(s.id));
 
   const form = useForm<CreateCampaignForm>({
     resolver: zodResolver(createCampaignSchema),
@@ -53,26 +71,61 @@ export default function CreateCampaign() {
 
   const createCampaignMutation = useMutation({
     mutationFn: async (data: CreateCampaignForm) => {
-      return apiRequest("POST", "/api/advertiser/campaigns", {
+      // Validate all selected screens are available
+      const missingScreens = selectedScreenIds.filter(id => !allScreens.find(s => s.id === id));
+      if (missingScreens.length > 0) {
+        throw new Error(`Some selected screens are no longer available. Please refresh your screen selection.`);
+      }
+
+      // First create the campaign
+      const campaignResponse = await apiRequest("POST", "/api/advertiser/campaigns", {
         ...data,
         budget: parseInt(data.budget),
         startDate: new Date(data.startDate).toISOString(),
         endDate: new Date(data.endDate).toISOString(),
         creativeUrl: uploadedCreativeURL || null,
       });
+      const campaign = await campaignResponse.json();
+
+      // Then create bookings for each selected screen
+      const bookingPromises = selectedScreenIds.map(screenId => {
+        const screen = allScreens.find(s => s.id === screenId);
+        if (!screen) {
+          throw new Error(`Screen ${screenId} not found. Please refresh your selection.`);
+        }
+
+        // Calculate days - ensure at least 1 day is billed (inclusive date range)
+        const days = Math.max(1, Math.ceil(
+          (new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / 
+          (1000 * 60 * 60 * 24)
+        ) + 1);
+        const price = screen.pricePerDay * days;
+
+        return apiRequest("POST", "/api/advertiser/bookings", {
+          screenId,
+          campaignId: campaign.id,
+          price,
+          startDate: new Date(data.startDate).toISOString(),
+          endDate: new Date(data.endDate).toISOString(),
+        });
+      });
+
+      await Promise.all(bookingPromises);
+      return campaign;
     },
     onSuccess: () => {
       toast({
         title: "Campaign Created",
-        description: "Your campaign has been created successfully.",
+        description: `Campaign created with ${selectedScreenIds.length} booking requests.`,
       });
+      localStorage.removeItem(SELECTED_SCREENS_KEY);
       queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       setLocation("/advertiser/campaigns");
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to create campaign. Please try again.",
+        description: error.message || "Failed to create campaign. Please try again.",
         variant: "destructive",
       });
     },
@@ -106,11 +159,33 @@ export default function CreateCampaign() {
     }
   };
 
+  const removeScreen = (screenId: string) => {
+    const newIds = selectedScreenIds.filter(id => id !== screenId);
+    setSelectedScreenIds(newIds);
+    localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(newIds));
+  };
+
   const onSubmit = (data: CreateCampaignForm) => {
+    if (selectedScreenIds.length === 0) {
+      toast({
+        title: "No Screens Selected",
+        description: "Please select at least one screen for your campaign.",
+        variant: "destructive",
+      });
+      return;
+    }
     createCampaignMutation.mutate(data);
   };
 
   const nextStep = () => {
+    if (currentStep === 1 && selectedScreenIds.length === 0) {
+      toast({
+        title: "No Screens Selected",
+        description: "Please select at least one screen from the Discover page.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (currentStep < steps.length) setCurrentStep(currentStep + 1);
   };
 
@@ -120,263 +195,278 @@ export default function CreateCampaign() {
 
   const progress = (currentStep / steps.length) * 100;
 
+  const totalCost = selectedScreens.reduce((sum, screen) => {
+    if (!form.watch("startDate") || !form.watch("endDate")) return sum;
+    // Calculate days - ensure at least 1 day is billed (inclusive date range)
+    const days = Math.max(1, Math.ceil(
+      (new Date(form.watch("endDate")).getTime() - new Date(form.watch("startDate")).getTime()) / 
+      (1000 * 60 * 60 * 24)
+    ) + 1);
+    return sum + (screen.pricePerDay * days);
+  }, 0);
+
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
       <div>
-        <Button
-          variant="ghost"
-          onClick={() => setLocation("/advertiser/campaigns")}
-          className="mb-4"
-          data-testid="button-back"
-        >
+        <Button variant="ghost" onClick={() => setLocation("/advertiser/discover")} data-testid="button-back">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Campaigns
+          Back to Discover
         </Button>
-        <h1 className="text-4xl font-bold text-foreground font-serif mb-2">Create Campaign</h1>
-        <p className="text-muted-foreground">Follow the wizard to create your advertising campaign</p>
+        <h1 className="text-3xl font-bold text-foreground font-serif mt-4">Create Campaign</h1>
+        <p className="text-muted-foreground mt-1">Set up your advertising campaign</p>
       </div>
 
-      {/* Progress Bar */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              {steps.map((step, index) => (
-                <div key={step.id} className="flex items-center flex-1">
-                  <div className="flex flex-col items-center flex-1">
-                    <div
-                      className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-                        currentStep >= step.id
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      <step.icon className="h-6 w-6" />
-                    </div>
-                    <p className="text-sm font-medium mt-2 text-center">{step.name}</p>
+        <CardHeader>
+          <Progress value={progress} className="mb-4" />
+          <div className="flex justify-between">
+            {steps.map((step) => {
+              const Icon = step.icon;
+              return (
+                <div
+                  key={step.id}
+                  className={`flex items-center gap-2 ${
+                    currentStep >= step.id ? "text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  <div
+                    className={`p-2 rounded-lg ${
+                      currentStep >= step.id ? "bg-primary/10" : "bg-muted"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
                   </div>
-                  {index < steps.length - 1 && (
-                    <div className={`h-1 flex-1 ${currentStep > step.id ? "bg-primary" : "bg-muted"}`} />
+                  <span className="text-sm font-medium hidden sm:inline">{step.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* Step 1: Screens */}
+              {currentStep === 1 && (
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold">Selected Screens ({selectedScreens.length})</h2>
+                  {selectedScreens.length === 0 ? (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        No screens selected. Go to the <Button variant="link" className="p-0 h-auto" onClick={() => setLocation("/advertiser/discover")}>Discover Screens</Button> page to select screens for your campaign.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {selectedScreens.map((screen) => (
+                        <Card key={screen.id} data-testid={`card-selected-screen-${screen.id}`}>
+                          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-3">
+                            <div className="flex-1">
+                              <CardTitle className="text-base">{screen.name}</CardTitle>
+                              <p className="text-sm text-muted-foreground mt-1">{screen.city}</p>
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => removeScreen(screen.id)}
+                              data-testid={`button-remove-screen-${screen.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Type:</span>
+                                <span className="font-medium">{screen.type}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Price:</span>
+                                <span className="font-semibold text-primary">₹{screen.pricePerDay}/day</span>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
                   )}
                 </div>
-              ))}
-            </div>
-            <Progress value={progress} className="h-2" />
-          </div>
+              )}
+
+              {/* Step 2: Campaign Details */}
+              {currentStep === 2 && (
+                <div className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Campaign Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Summer Sale 2024" {...field} data-testid="input-campaign-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="objective"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Objective</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-objective">
+                              <SelectValue placeholder="Select campaign objective" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="brand_awareness">Brand Awareness</SelectItem>
+                            <SelectItem value="product_launch">Product Launch</SelectItem>
+                            <SelectItem value="event_promotion">Event Promotion</SelectItem>
+                            <SelectItem value="seasonal_campaign">Seasonal Campaign</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="budget"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Budget (₹)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="50000" {...field} data-testid="input-budget" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+
+              {/* Step 3: Duration */}
+              {currentStep === 3 && (
+                <div className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="startDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Start Date</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} data-testid="input-start-date" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="endDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>End Date</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} data-testid="input-end-date" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {totalCost > 0 && (
+                    <Alert>
+                      <DollarSign className="h-4 w-4" />
+                      <AlertDescription>
+                        <strong>Estimated Total Cost:</strong> ₹{totalCost.toLocaleString()}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+
+              {/* Step 4: Creative Upload */}
+              {currentStep === 4 && (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-semibold mb-2">Upload Campaign Creative</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Upload your ad creative (image or video) for the campaign
+                    </p>
+                    <ObjectUploader
+                      maxNumberOfFiles={1}
+                      maxFileSize={52428800}
+                      allowedFileTypes={["image/*", "video/*"]}
+                      onGetUploadParameters={handleGetUploadParameters}
+                      onComplete={handleUploadComplete}
+                      buttonVariant="outline"
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      {uploadedCreativeURL ? "Change Creative" : "Upload Creative"}
+                    </ObjectUploader>
+                    {uploadedCreativeURL && (
+                      <div className="mt-3 flex items-center gap-2 text-sm text-green-600">
+                        <Check className="h-4 w-4" />
+                        Creative uploaded successfully
+                      </div>
+                    )}
+                  </div>
+
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>Summary:</strong> You're about to create a campaign for {selectedScreens.length} screen(s). 
+                      Booking requests will be sent to screen owners for approval.
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
+
+              {/* Navigation Buttons */}
+              <div className="flex justify-between pt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={currentStep === 1 || createCampaignMutation.isPending}
+                  data-testid="button-previous"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Previous
+                </Button>
+
+                {currentStep < steps.length ? (
+                  <Button
+                    type="button"
+                    onClick={nextStep}
+                    disabled={createCampaignMutation.isPending}
+                    data-testid="button-next"
+                  >
+                    Next
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    disabled={createCampaignMutation.isPending}
+                    data-testid="button-submit"
+                  >
+                    {createCampaignMutation.isPending ? "Creating..." : "Create Campaign"}
+                    <Check className="ml-2 h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </form>
+          </Form>
         </CardContent>
       </Card>
-
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* Step 1: Objective */}
-          {currentStep === 1 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="h-5 w-5" />
-                  Campaign Objective
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Campaign Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., Summer Sale 2024" {...field} data-testid="input-campaign-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="objective"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Campaign Objective</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-objective">
-                            <SelectValue placeholder="Select objective" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="brand_awareness">Brand Awareness</SelectItem>
-                          <SelectItem value="product_launch">Product Launch</SelectItem>
-                          <SelectItem value="event_promotion">Event Promotion</SelectItem>
-                          <SelectItem value="sales_boost">Sales Boost</SelectItem>
-                          <SelectItem value="app_install">App Install</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 2: Duration */}
-          {currentStep === 2 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Campaign Duration
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="startDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Start Date</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} data-testid="input-start-date" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="endDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>End Date</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} data-testid="input-end-date" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 3: Budget */}
-          {currentStep === 3 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  Campaign Budget
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="budget"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Total Budget (₹)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="e.g., 50000" {...field} data-testid="input-budget" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="p-4 bg-muted rounded-lg">
-                  <h4 className="font-semibold text-foreground mb-2">Budget Breakdown</h4>
-                  <div className="space-y-1 text-sm text-muted-foreground">
-                    <div className="flex justify-between">
-                      <span>Estimated Screen Cost:</span>
-                      <span className="font-medium text-foreground">
-                        ₹{form.watch("budget") ? (parseInt(form.watch("budget")) * 0.85).toLocaleString() : "0"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Platform Fee (15%):</span>
-                      <span className="font-medium text-foreground">
-                        ₹{form.watch("budget") ? (parseInt(form.watch("budget")) * 0.15).toLocaleString() : "0"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 4: Creative */}
-          {currentStep === 4 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  Upload Creative
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-center gap-4 py-8">
-                  <ObjectUploader
-                    maxNumberOfFiles={1}
-                    maxFileSize={10485760}
-                    allowedFileTypes={["image/*", "video/mp4"]}
-                    onGetUploadParameters={handleGetUploadParameters}
-                    onComplete={handleUploadComplete}
-                  >
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Campaign Creative
-                  </ObjectUploader>
-                  {uploadedCreativeURL && (
-                    <div className="flex items-center gap-2 text-sm text-green-600">
-                      <Check className="h-4 w-4" />
-                      Creative uploaded successfully
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground text-center">
-                  Supported formats: JPG, PNG, MP4 (Max 10MB)
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Navigation Buttons */}
-          <div className="flex gap-4 justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={prevStep}
-              disabled={currentStep === 1}
-              data-testid="button-previous"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Previous
-            </Button>
-
-            <div className="flex gap-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setLocation("/advertiser/campaigns")}
-              >
-                Cancel
-              </Button>
-
-              {currentStep < steps.length ? (
-                <Button type="button" onClick={nextStep} data-testid="button-next">
-                  Next
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              ) : (
-                <Button type="submit" disabled={createCampaignMutation.isPending} data-testid="button-submit">
-                  {createCampaignMutation.isPending ? "Creating..." : "Create Campaign"}
-                </Button>
-              )}
-            </div>
-          </div>
-        </form>
-      </Form>
     </div>
   );
 }

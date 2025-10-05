@@ -46,7 +46,9 @@ export interface IStorage {
   createBooking(booking: InsertBooking): Promise<Booking>;
   updateBookingStatus(id: string, status: string): Promise<Booking | undefined>;
   approveBookingByOwner(id: string): Promise<Booking | undefined>;
+  rejectBookingByOwner(id: string, reason: string, alternativeDates?: { startDate: string; endDate: string }): Promise<Booking | undefined>;
   approveBookingByAdmin(id: string): Promise<Booking | undefined>;
+  rejectBookingByAdmin(id: string, notes: string): Promise<Booking | undefined>;
   
   // Payment methods
   getPayment(id: string): Promise<Payment | undefined>;
@@ -167,18 +169,33 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(bookings).where(eq(bookings.campaignId, campaignId));
   }
 
-  async getPendingBookingsForOwner(ownerId: string): Promise<Booking[]> {
+  async getPendingBookingsForOwner(ownerId: string): Promise<any[]> {
     const ownerScreens = await this.getScreensByOwner(ownerId);
     const screenIds = ownerScreens.map(s => s.id);
     
     if (screenIds.length === 0) return [];
     
-    return await db.select().from(bookings).where(
+    const bookingsList = await db.select().from(bookings).where(
       and(
-        eq(bookings.status, "pending"),
+        eq(bookings.status, "pending_owner"),
         or(...screenIds.map(id => eq(bookings.screenId, id)))
       )
     );
+
+    // Fetch screen and campaign details for each booking
+    const enrichedBookings = await Promise.all(
+      bookingsList.map(async (booking) => {
+        const screen = await this.getScreen(booking.screenId);
+        const campaign = await this.getCampaign(booking.campaignId);
+        return {
+          ...booking,
+          screen,
+          campaign,
+        };
+      })
+    );
+
+    return enrichedBookings;
   }
 
   async getAllBookings(): Promise<Booking[]> {
@@ -196,12 +213,44 @@ export class DatabaseStorage implements IStorage {
   }
 
   async approveBookingByOwner(id: string): Promise<Booking | undefined> {
-    const [booking] = await db.update(bookings).set({ ownerApproved: true }).where(eq(bookings.id, id)).returning();
+    const [booking] = await db.update(bookings).set({ 
+      ownerApproved: true,
+      status: "owner_approved"
+    }).where(eq(bookings.id, id)).returning();
+    return booking || undefined;
+  }
+
+  async rejectBookingByOwner(id: string, reason: string, alternativeDates?: { startDate: string; endDate: string }): Promise<Booking | undefined> {
+    const updateData: any = {
+      ownerApproved: false,
+      status: "owner_rejected",
+      ownerResponse: reason,
+      ownerRespondedAt: new Date().toISOString(),
+    };
+
+    if (alternativeDates) {
+      updateData.alternativeStartDate = alternativeDates.startDate;
+      updateData.alternativeEndDate = alternativeDates.endDate;
+    }
+
+    const [booking] = await db.update(bookings).set(updateData).where(eq(bookings.id, id)).returning();
     return booking || undefined;
   }
 
   async approveBookingByAdmin(id: string): Promise<Booking | undefined> {
-    const [booking] = await db.update(bookings).set({ approvedByAdmin: true, status: "approved" }).where(eq(bookings.id, id)).returning();
+    const [booking] = await db.update(bookings).set({ 
+      approvedByAdmin: true, 
+      status: "approved" 
+    }).where(eq(bookings.id, id)).returning();
+    return booking || undefined;
+  }
+
+  async rejectBookingByAdmin(id: string, notes: string): Promise<Booking | undefined> {
+    const [booking] = await db.update(bookings).set({ 
+      approvedByAdmin: false,
+      status: "rejected",
+      adminNotes: notes
+    }).where(eq(bookings.id, id)).returning();
     return booking || undefined;
   }
 

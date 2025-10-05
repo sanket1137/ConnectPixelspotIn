@@ -291,13 +291,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all bookings (admin)
+  // Get all bookings with details (admin)
   app.get("/api/admin/bookings", authenticate, requireRole("admin"), async (req, res) => {
     try {
       const bookings = await storage.getAllBookings();
-      res.json(bookings);
+      
+      // Enrich with screen and campaign details
+      const enrichedBookings = await Promise.all(
+        bookings.map(async (booking) => {
+          const screen = await storage.getScreen(booking.screenId);
+          const campaign = await storage.getCampaign(booking.campaignId);
+          return {
+            ...booking,
+            screen,
+            campaign,
+          };
+        })
+      );
+
+      res.json(enrichedBookings);
     } catch (error) {
       console.error("Get all bookings error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Approve booking (admin)
+  app.patch("/api/admin/bookings/:id/approve", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const booking = await storage.approveBookingByAdmin(id);
+      
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      res.json(booking);
+    } catch (error) {
+      console.error("Admin approve booking error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Reject booking (admin)
+  app.patch("/api/admin/bookings/:id/reject", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { notes } = req.body;
+      
+      const booking = await storage.rejectBookingByAdmin(id, notes);
+      
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      res.json(booking);
+    } catch (error) {
+      console.error("Admin reject booking error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -415,6 +465,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get booking requests with screen and campaign details (owner)
+  app.get("/api/owner/booking-requests", authenticate, requireRole("screen_owner"), async (req, res) => {
+    try {
+      const bookings = await storage.getPendingBookingsForOwner(req.user!.id);
+      res.json(bookings);
+    } catch (error) {
+      console.error("Get booking requests error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Approve booking request (owner)
   app.patch("/api/owner/bookings/:id/approve", authenticate, requireRole("screen_owner"), async (req, res) => {
     try {
@@ -428,6 +489,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(booking);
     } catch (error) {
       console.error("Approve booking error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Reject booking request (owner)
+  app.patch("/api/owner/bookings/:id/reject", authenticate, requireRole("screen_owner"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason, alternativeDates } = req.body;
+      
+      const booking = await storage.rejectBookingByOwner(id, reason, alternativeDates);
+      
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      res.json(booking);
+    } catch (error) {
+      console.error("Reject booking error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -536,7 +616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const booking = await storage.createBooking({
         ...req.body,
-        status: "pending",
+        status: "pending_owner",
         ownerApproved: false,
         approvedByAdmin: false,
       });
@@ -544,6 +624,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(booking);
     } catch (error) {
       console.error("Create booking error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get all bookings for advertiser (with screen and campaign details)
+  app.get("/api/advertiser/bookings", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const campaigns = await storage.getCampaignsByAdvertiser(req.user!.id);
+      const campaignIds = campaigns.map(c => c.id);
+      
+      if (campaignIds.length === 0) {
+        return res.json([]);
+      }
+
+      const allBookings = (await Promise.all(
+        campaignIds.map(id => storage.getBookingsByCampaign(id))
+      )).flat();
+
+      // Enrich with screen and campaign details
+      const enrichedBookings = await Promise.all(
+        allBookings.map(async (booking) => {
+          const screen = await storage.getScreen(booking.screenId);
+          const campaign = await storage.getCampaign(booking.campaignId);
+          return {
+            ...booking,
+            screen,
+            campaign,
+          };
+        })
+      );
+
+      res.json(enrichedBookings);
+    } catch (error) {
+      console.error("Get advertiser bookings error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });

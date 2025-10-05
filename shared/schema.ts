@@ -57,9 +57,14 @@ export const bookings = pgTable("bookings", {
   screenId: varchar("screen_id").notNull(),
   campaignId: varchar("campaign_id").notNull(),
   price: integer("price").notNull(),
-  status: text("status").notNull().default("pending"), // pending, approved, rejected, live, completed
+  status: text("status").notNull().default("pending_owner"), // pending_owner, owner_approved, owner_rejected, pending_admin, admin_approved, admin_rejected, active, completed
   approvedByAdmin: boolean("approved_by_admin").notNull().default(false),
   ownerApproved: boolean("owner_approved").notNull().default(false),
+  ownerResponse: text("owner_response"), // Owner's message/feedback
+  ownerRespondedAt: timestamp("owner_responded_at"),
+  alternativeDates: jsonb("alternative_dates").$type<{startDate: string; endDate: string}>(), // If owner suggests alternate dates
+  adminNotes: text("admin_notes"), // Admin's notes for approval/rejection
+  adminRespondedAt: timestamp("admin_responded_at"),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

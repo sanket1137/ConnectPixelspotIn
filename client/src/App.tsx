@@ -18,10 +18,12 @@ import Settings from "@/pages/admin/Settings";
 import OwnerDashboard from "@/pages/owner/OwnerDashboard";
 import ScreensList from "@/pages/owner/ScreensList";
 import AddScreen from "@/pages/owner/AddScreen";
+import BookingRequests from "@/pages/owner/BookingRequests";
 import AdvertiserDashboard from "@/pages/advertiser/AdvertiserDashboard";
 import DiscoverScreens from "@/pages/advertiser/DiscoverScreens";
 import CampaignsList from "@/pages/advertiser/CampaignsList";
 import CreateCampaign from "@/pages/advertiser/CreateCampaign";
+import BookingManagement from "@/pages/advertiser/BookingManagement";
 
 function RedirectToDashboard() {
   const { user, loading } = useAuth();
@@ -98,6 +100,11 @@ function Router() {
           <AddScreen />
         </AuthGuard>
       </Route>
+      <Route path="/owner/bookings">
+        <AuthGuard allowedRoles={["screen_owner"]}>
+          <BookingRequests />
+        </AuthGuard>
+      </Route>
       
       {/* Advertiser Routes */}
       <Route path="/advertiser">
@@ -118,6 +125,11 @@ function Router() {
       <Route path="/advertiser/campaigns/new">
         <AuthGuard allowedRoles={["advertiser"]}>
           <CreateCampaign />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/bookings">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <BookingManagement />
         </AuthGuard>
       </Route>
       
