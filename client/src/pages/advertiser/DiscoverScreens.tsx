@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import Map, { Marker, Popup } from "react-map-gl";
+import { GoogleMap, LoadScript, Marker, InfoWindow } from "@react-google-maps/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,10 +11,19 @@ import { MapPin, Search, Filter, X, Eye, Plus, Check, ShoppingCart, Trash2 } fro
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { Screen } from "@shared/schema";
-import "mapbox-gl/dist/mapbox-gl.css";
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || "";
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
+
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%'
+};
+
+const defaultCenter = {
+  lat: 12.9716,
+  lng: 77.5946
+};
 
 export default function DiscoverScreens() {
   const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
@@ -30,11 +39,8 @@ export default function DiscoverScreens() {
     maxPrice: "",
   });
 
-  const [viewState, setViewState] = useState({
-    longitude: 77.5946,
-    latitude: 12.9716,
-    zoom: 11,
-  });
+  const [center, setCenter] = useState(defaultCenter);
+  const [zoom, setZoom] = useState(11);
 
   // Load selected screens from localStorage
   useEffect(() => {
@@ -127,87 +133,118 @@ export default function DiscoverScreens() {
             <div>
               <Label htmlFor="screen-type">Screen Type</Label>
               <Select value={filters.type} onValueChange={(value) => setFilters({ ...filters, type: value })}>
-                <SelectTrigger className="mt-2" data-testid="select-screen-type">
+                <SelectTrigger id="screen-type" className="mt-2" data-testid="select-screen-type">
                   <SelectValue placeholder="All types" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All types</SelectItem>
+                  <SelectItem value=" ">All types</SelectItem>
                   <SelectItem value="billboard">Billboard</SelectItem>
-                  <SelectItem value="digital_display">Digital Display</SelectItem>
-                  <SelectItem value="led_screen">LED Screen</SelectItem>
-                  <SelectItem value="video_wall">Video Wall</SelectItem>
+                  <SelectItem value="digital">Digital Screen</SelectItem>
+                  <SelectItem value="transit">Transit</SelectItem>
+                  <SelectItem value="retail">Retail</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label>Price Range (per day)</Label>
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                <Input
-                  type="number"
-                  placeholder="Min"
-                  value={filters.minPrice}
-                  onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
-                  data-testid="input-min-price"
-                />
-                <Input
-                  type="number"
-                  placeholder="Max"
-                  value={filters.maxPrice}
-                  onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
-                  data-testid="input-max-price"
-                />
+              <Label>Price Range (₹/day)</Label>
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <div>
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    value={filters.minPrice}
+                    onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
+                    data-testid="input-min-price"
+                  />
+                </div>
+                <div>
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    value={filters.maxPrice}
+                    onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
+                    data-testid="input-max-price"
+                  />
+                </div>
               </div>
             </div>
 
-            {selectedScreens.length > 0 && (
-              <>
-                <div className="border-t border-border pt-6">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setFilters({ city: "", type: "", minPrice: "", maxPrice: "" })}
+              data-testid="button-clear-filters"
+            >
+              Clear Filters
+            </Button>
+
+            {/* Selected Screens Summary */}
+            {selectedScreenIds.size > 0 && (
+              <Card className="mt-6">
+                <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-foreground">Selected Screens ({selectedScreens.length})</h3>
-                    <Button 
-                      size="sm" 
-                      onClick={proceedToCreateCampaign}
-                      data-testid="button-create-campaign"
-                    >
-                      <ShoppingCart className="mr-2 h-4 w-4" />
-                      Create Campaign
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <ShoppingCart className="h-5 w-5 text-primary" />
+                      <span className="font-semibold">Selected Screens</span>
+                      <Badge variant="secondary" data-testid="badge-selected-count">{selectedScreenIds.size}</Badge>
+                    </div>
                   </div>
+
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {selectedScreens.map((screen) => (
-                      <Card key={screen.id} className="p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{screen.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{screen.city}</p>
-                            <p className="text-xs font-semibold text-primary mt-1">₹{screen.pricePerDay}/day</p>
-                          </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            className="h-8 w-8 shrink-0"
-                            onClick={() => removeScreen(screen.id)}
-                            data-testid={`button-remove-${screen.id}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                      <div key={screen.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{screen.name}</p>
+                          <p className="text-xs text-muted-foreground">{screen.city}</p>
                         </div>
-                      </Card>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() => removeScreen(screen.id)}
+                          data-testid={`button-remove-screen-${screen.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     ))}
                   </div>
-                </div>
-              </>
+
+                  <Button
+                    className="w-full mt-4"
+                    onClick={proceedToCreateCampaign}
+                    data-testid="button-proceed-campaign"
+                  >
+                    Create Campaign
+                  </Button>
+                </CardContent>
+              </Card>
             )}
+          </div>
+
+          <div className="mt-6 pt-6 border-t border-border">
+            <div className="flex items-start gap-3 text-sm text-muted-foreground">
+              <MapPin className="h-5 w-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-foreground mb-1">How it works</p>
+                <ol className="list-decimal list-inside space-y-1 text-xs">
+                  <li>Browse screens on the map</li>
+                  <li>Click markers to view details</li>
+                  <li>Add screens to your campaign</li>
+                  <li>Proceed to create campaign</li>
+                </ol>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Map View */}
+      {/* Map Area */}
       <div className="flex-1 relative">
         {!showFilters && (
           <Button
-            variant="outline"
+            variant="secondary"
             size="icon"
             className="absolute top-4 left-4 z-10 shadow-lg"
             onClick={() => setShowFilters(true)}
@@ -217,98 +254,107 @@ export default function DiscoverScreens() {
           </Button>
         )}
 
-        {selectedScreenIds.size > 0 && (
-          <div className="absolute top-4 right-4 z-10">
-            <Card className="p-3 shadow-lg">
-              <div className="flex items-center gap-2">
-                <ShoppingCart className="h-5 w-5 text-primary" />
-                <span className="font-semibold">{selectedScreenIds.size} selected</span>
-              </div>
-            </Card>
-          </div>
-        )}
+        {/* Results count */}
+        <div className="absolute top-4 right-4 z-10 bg-card rounded-lg shadow-lg px-4 py-2 border border-border">
+          <p className="text-sm font-medium" data-testid="text-results-count">
+            {filteredScreens.length} screens found
+          </p>
+        </div>
 
-        <Map
-          {...viewState}
-          onMove={(evt) => setViewState(evt.viewState)}
-          mapStyle="mapbox://styles/mapbox/streets-v12"
-          mapboxAccessToken={MAPBOX_TOKEN}
-          style={{ width: "100%", height: "100%" }}
-        >
-          {filteredScreens.map((screen) => (
-            <Marker
-              key={screen.id}
-              longitude={parseFloat(screen.longitude)}
-              latitude={parseFloat(screen.latitude)}
-              onClick={(e) => {
-                e.originalEvent.stopPropagation();
-                setSelectedScreen(screen);
-              }}
-            >
-              <div
-                className={`cursor-pointer transition-transform hover:scale-110 ${
-                  selectedScreenIds.has(screen.id) ? "opacity-100" : "opacity-80"
-                }`}
+        <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY}>
+          <GoogleMap
+            mapContainerStyle={mapContainerStyle}
+            center={center}
+            zoom={zoom}
+            onCenterChanged={() => {}}
+            onZoomChanged={() => {}}
+            options={{
+              zoomControl: true,
+              streetViewControl: false,
+              mapTypeControl: false,
+              fullscreenControl: true,
+            }}
+          >
+            {filteredScreens.map((screen) => (
+              <Marker
+                key={screen.id}
+                position={{ lat: screen.latitude, lng: screen.longitude }}
+                onClick={() => setSelectedScreen(screen)}
+                icon={{
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: selectedScreenIds.has(screen.id) ? 12 : 8,
+                  fillColor: selectedScreenIds.has(screen.id) ? "#10b981" : "#3b82f6",
+                  fillOpacity: 1,
+                  strokeColor: "#ffffff",
+                  strokeWeight: 2,
+                }}
+              />
+            ))}
+
+            {selectedScreen && (
+              <InfoWindow
+                position={{ lat: selectedScreen.latitude, lng: selectedScreen.longitude }}
+                onCloseClick={() => setSelectedScreen(null)}
               >
-                <MapPin
-                  className={`h-8 w-8 ${
-                    selectedScreenIds.has(screen.id) ? "text-green-500 fill-green-500" : "text-primary fill-primary"
-                  }`}
-                />
-              </div>
-            </Marker>
-          ))}
+                <Card className="border-0 shadow-none max-w-sm">
+                  <CardContent className="p-4">
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="font-bold text-lg mb-1">{selectedScreen.name}</h3>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <MapPin className="h-4 w-4" />
+                          <span>{selectedScreen.address}, {selectedScreen.city}</span>
+                        </div>
+                      </div>
 
-          {selectedScreen && (
-            <Popup
-              longitude={parseFloat(selectedScreen.longitude)}
-              latitude={parseFloat(selectedScreen.latitude)}
-              onClose={() => setSelectedScreen(null)}
-              closeOnClick={false}
-              className="min-w-[300px]"
-            >
-              <div className="p-4">
-                <h3 className="font-bold text-lg mb-2">{selectedScreen.name}</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  {selectedScreen.location}, {selectedScreen.city}
-                </p>
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Type:</span>
-                    <span className="font-medium">{selectedScreen.type}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Size:</span>
-                    <span className="font-medium">{selectedScreen.size}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Price:</span>
-                    <span className="font-bold text-primary">₹{selectedScreen.pricePerDay}/day</span>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={() => toggleScreenSelection(selectedScreen)}
-                  variant={selectedScreenIds.has(selectedScreen.id) ? "secondary" : "default"}
-                  data-testid="button-toggle-screen"
-                >
-                  {selectedScreenIds.has(selectedScreen.id) ? (
-                    <>
-                      <Check className="mr-2 h-4 w-4" />
-                      Selected
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add to Campaign
-                    </>
-                  )}
-                </Button>
-              </div>
-            </Popup>
-          )}
-        </Map>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="secondary">{selectedScreen.type}</Badge>
+                        <Badge variant="outline">{selectedScreen.size}</Badge>
+                        {selectedScreen.isDigital && <Badge>Digital</Badge>}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Daily Views</p>
+                          <p className="font-semibold">{selectedScreen.dailyViews.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Price/Day</p>
+                          <p className="font-semibold text-primary">₹{selectedScreen.pricePerDay.toLocaleString()}</p>
+                        </div>
+                      </div>
+
+                      {selectedScreen.description && (
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {selectedScreen.description}
+                        </p>
+                      )}
+
+                      <Button
+                        className="w-full"
+                        variant={selectedScreenIds.has(selectedScreen.id) ? "secondary" : "default"}
+                        onClick={() => toggleScreenSelection(selectedScreen)}
+                        data-testid={`button-toggle-screen-${selectedScreen.id}`}
+                      >
+                        {selectedScreenIds.has(selectedScreen.id) ? (
+                          <>
+                            <Check className="h-4 w-4 mr-2" />
+                            Selected
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add to Campaign
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </InfoWindow>
+            )}
+          </GoogleMap>
+        </LoadScript>
       </div>
     </div>
   );
