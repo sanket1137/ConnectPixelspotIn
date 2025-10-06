@@ -352,6 +352,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create screen on behalf of owner (admin)
+  app.post("/api/admin/screens/create", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { ownerId, ...screenData } = req.body;
+      
+      const screen = await storage.createScreen({
+        ...screenData,
+        ownerId,
+        ownedByAdmin: true,
+        status: "active", // Admin-created screens are automatically active
+      });
+      
+      res.status(201).json(screen);
+    } catch (error) {
+      console.error("Admin create screen error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ========== SCREEN OWNER ROUTES ==========
   
   // Owner dashboard stats

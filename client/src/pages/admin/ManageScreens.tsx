@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Monitor, DollarSign } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MapPin, Monitor, Plus } from "lucide-react";
 import type { Screen } from "@shared/schema";
 
 export default function ManageScreens() {
+  const [, setLocation] = useLocation();
   const { data: screens = [], isLoading } = useQuery<Screen[]>({
     queryKey: ["/api/admin/screens"],
   });
@@ -17,9 +20,15 @@ export default function ManageScreens() {
 
   return (
     <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground font-serif">Manage Screens</h1>
-        <p className="text-muted-foreground mt-1">View and manage all screens on the platform</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground font-serif">Manage Screens</h1>
+          <p className="text-muted-foreground mt-1">View and manage all screens on the platform</p>
+        </div>
+        <Button onClick={() => setLocation("/admin/screens/new")} data-testid="button-add-screen">
+          <Plus className="h-4 w-4 mr-2" />
+          Add Screen for Owner
+        </Button>
       </div>
 
       {isLoading ? (
