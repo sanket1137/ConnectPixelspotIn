@@ -51,9 +51,9 @@ export const screens = pgTable("screens", {
   interestSegments: text("interest_segments").array(), // Fitness, Coffee, Tech, Luxury Cars, Fashion, Foodies
   
   // Commercial & Campaign Data
-  networkType: text("network_type").notNull(), // Single Location / Multi-location Chain / Programmatic Network
+  isMultiScreen: boolean("is_multi_screen").notNull().default(false),
+  numberOfScreens: integer("number_of_screens"), // Required if isMultiScreen is true
   pricePerDay: integer("price_per_day").notNull(),
-  dynamicPricing: boolean("dynamic_pricing").notNull().default(false),
   minBookingDays: integer("min_booking_days").notNull().default(1),
   playbackSlotsPerHour: integer("playback_slots_per_hour").notNull(),
   contentTypesSupported: text("content_types_supported").array(), // Static Image / Video / Interactive / HTML5
