@@ -53,9 +53,9 @@ const addScreenSchema = z.object({
   interestSegments: z.string().optional(),
   
   // Commercial & Campaign Data
-  networkType: z.string().min(1, "Network type is required"),
+  isMultiScreen: z.boolean(),
+  numberOfScreens: z.string().optional(),
   pricePerDay: z.string().min(1, "Price per day is required"),
-  dynamicPricing: z.boolean(),
   minBookingDays: z.string().min(1, "Minimum booking days required"),
   playbackSlotsPerHour: z.string().min(1, "Playback slots per hour is required"),
   contentTypesSupported: z.array(z.string()).min(1, "Select at least one content type"),
@@ -102,9 +102,9 @@ export default function AddScreenForOwner() {
       occupationMix: [],
       avgDwellTime: "",
       interestSegments: "",
-      networkType: "",
+      isMultiScreen: false,
+      numberOfScreens: "",
       pricePerDay: "",
-      dynamicPricing: false,
       minBookingDays: "1",
       playbackSlotsPerHour: "",
       contentTypesSupported: [],
@@ -131,6 +131,7 @@ export default function AddScreenForOwner() {
         avgDailyFootfall: parseInt(data.avgDailyFootfall),
         avgDwellTime: parseInt(data.avgDwellTime),
         playbackSlotsPerHour: parseInt(data.playbackSlotsPerHour),
+        numberOfScreens: data.numberOfScreens ? parseInt(data.numberOfScreens) : null,
         genderSplit: { male: data.genderMale, female: data.genderFemale },
         nearbyLandmarks: data.nearbyLandmarks ? data.nearbyLandmarks.split(',').map(s => s.trim()) : [],
         interestSegments: data.interestSegments ? data.interestSegments.split(',').map(s => s.trim()) : [],
@@ -807,26 +808,42 @@ export default function AddScreenForOwner() {
             <CardContent className="space-y-4">
               <FormField
                 control={form.control}
-                name="networkType"
+                name="isMultiScreen"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Screen Network Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-network-type">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Single Location">Single Location</SelectItem>
-                        <SelectItem value="Multi-location Chain">Multi-location Chain</SelectItem>
-                        <SelectItem value="Programmatic Network">Programmatic Network</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
+                  <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Multi-Screen Listing</FormLabel>
+                      <FormDescription>
+                        Does this listing have multiple screens?
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-multi-screen"
+                      />
+                    </FormControl>
                   </FormItem>
                 )}
               />
+
+              {form.watch("isMultiScreen") && (
+                <FormField
+                  control={form.control}
+                  name="numberOfScreens"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Number of Screens</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 5" {...field} data-testid="input-number-screens" />
+                      </FormControl>
+                      <FormDescription>Total number of screens in this listing</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <div className="grid md:grid-cols-3 gap-4">
                 <FormField
@@ -871,28 +888,6 @@ export default function AddScreenForOwner() {
                   )}
                 />
               </div>
-
-              <FormField
-                control={form.control}
-                name="dynamicPricing"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">Dynamic Pricing</FormLabel>
-                      <FormDescription>
-                        Enable automatic rate adjustment based on demand
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                        data-testid="switch-dynamic-pricing"
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
 
               <FormField
                 control={form.control}
