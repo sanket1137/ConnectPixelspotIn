@@ -291,6 +291,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Reject screen (admin only)
+  app.patch("/api/admin/screens/:id/reject", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const screen = await storage.updateScreenStatus(id, "inactive");
+      
+      if (!screen) {
+        return res.status(404).json({ error: "Screen not found" });
+      }
+
+      res.json(screen);
+    } catch (error) {
+      console.error("Reject screen error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get all bookings with details (admin)
   app.get("/api/admin/bookings", authenticate, requireRole("admin"), async (req, res) => {
     try {

@@ -1,15 +1,62 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Monitor, Plus } from "lucide-react";
+import { MapPin, Monitor, Plus, Check, X } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import type { Screen } from "@shared/schema";
 
 export default function ManageScreens() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
   const { data: screens = [], isLoading } = useQuery<Screen[]>({
     queryKey: ["/api/admin/screens"],
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async (screenId: string) => {
+      const response = await apiRequest("PATCH", `/api/admin/screens/${screenId}/approve`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/screens"] });
+      toast({
+        title: "Screen Approved",
+        description: "The screen has been activated successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to approve screen. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async (screenId: string) => {
+      const response = await apiRequest("PATCH", `/api/admin/screens/${screenId}/reject`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/screens"] });
+      toast({
+        title: "Screen Rejected",
+        description: "The screen has been rejected and marked as inactive.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reject screen. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const getStatusBadgeVariant = (status: string) => {
@@ -65,6 +112,32 @@ export default function ManageScreens() {
                   <span className="text-sm text-muted-foreground">Price:</span>
                   <span className="font-bold text-primary">₹{screen.pricePerDay}/day</span>
                 </div>
+                
+                {screen.status === "pending" && (
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      onClick={() => approveMutation.mutate(screen.id)}
+                      disabled={approveMutation.isPending || rejectMutation.isPending}
+                      className="flex-1"
+                      data-testid={`button-approve-${screen.id}`}
+                    >
+                      <Check className="h-4 w-4 mr-1" />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => rejectMutation.mutate(screen.id)}
+                      disabled={approveMutation.isPending || rejectMutation.isPending}
+                      className="flex-1"
+                      data-testid={`button-reject-${screen.id}`}
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Reject
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
