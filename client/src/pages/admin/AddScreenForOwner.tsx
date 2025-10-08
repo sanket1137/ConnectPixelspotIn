@@ -440,6 +440,9 @@ export default function AddScreenForOwner() {
                           <SelectItem value="Hospital">Hospital</SelectItem>
                           <SelectItem value="College">College</SelectItem>
                           <SelectItem value="Corporate Park">Corporate Park</SelectItem>
+                          <SelectItem value="Highway">Highway</SelectItem>
+                          <SelectItem value="Road Side">Road Side</SelectItem>
+                          <SelectItem value="Flyover">Flyover</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
