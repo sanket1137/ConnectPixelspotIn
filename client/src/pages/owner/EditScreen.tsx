@@ -78,12 +78,7 @@ export default function EditScreen() {
   const screenId = params?.id;
 
   const { data: screen, isLoading } = useQuery<Screen>({
-    queryKey: ["/api/owner/screens", screenId],
-    queryFn: async () => {
-      const response = await fetch(`/api/owner/screens/${screenId}`);
-      if (!response.ok) throw new Error("Failed to fetch screen");
-      return response.json();
-    },
+    queryKey: [`/api/owner/screens/${screenId}`],
     enabled: !!screenId,
   });
 
@@ -189,7 +184,7 @@ export default function EditScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/owner/screens"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/owner/screens", screenId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/owner/screens/${screenId}`] });
       toast({
         title: "Screen Updated",
         description: "Your screen has been updated successfully",
