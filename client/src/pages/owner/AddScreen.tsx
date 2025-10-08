@@ -58,8 +58,8 @@ const addScreenSchema = z.object({
   playbackSlotsPerHour: z.string().min(1, "Playback slots per hour is required"),
   contentTypesSupported: z.array(z.string()).min(1, "Select at least one content type"),
   
-  // Legacy fields
-  type: z.string().min(1),
+  // Legacy fields (auto-populated from other fields)
+  type: z.string().optional(),
   size: z.string().optional(),
   operationalHours: z.string().optional(),
 });
