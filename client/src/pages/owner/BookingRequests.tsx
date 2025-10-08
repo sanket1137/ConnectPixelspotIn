@@ -8,6 +8,7 @@ import { Calendar, Check, X, Monitor, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useState } from "react";
 import {
   Dialog,
@@ -124,78 +125,136 @@ export default function BookingRequests() {
   };
 
   const pendingBookings = bookings.filter(b => b.status === "pending_owner");
+  const approvedBookings = bookings.filter(b => b.status === "owner_approved" || b.status === "approved");
+  const rejectedBookings = bookings.filter(b => b.status === "rejected");
+
+  const renderBookingCard = (booking: BookingRequest, showActions: boolean = false) => (
+    <Card key={booking.id} data-testid={`card-booking-${booking.id}`}>
+      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-4">
+        <div className="flex items-start gap-4 flex-1">
+          <div className="p-3 bg-primary/10 rounded-lg">
+            <Monitor className="w-5 h-5 text-primary" />
+          </div>
+          <div className="flex-1">
+            <CardTitle className="text-lg">{booking.screen.name}</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              {booking.screen.location}, {booking.screen.city}
+            </p>
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Campaign:</span>
+                <span className="font-medium">{booking.campaign.name}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span>{formatDate(booking.startDate)} - {formatDate(booking.endDate)}</span>
+                <Badge variant="secondary">{calculateDuration(booking.startDate, booking.endDate)} days</Badge>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Revenue:</span>
+                <span className="font-bold text-primary text-base">₹{booking.price.toLocaleString()}</span>
+              </div>
+              {booking.status === "owner_approved" && (
+                <Badge variant="outline" className="mt-2">Awaiting Admin Approval</Badge>
+              )}
+              {booking.status === "approved" && (
+                <Badge className="mt-2">Fully Approved</Badge>
+              )}
+            </div>
+          </div>
+        </div>
+        {showActions && (
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleRejectClick(booking)}
+              disabled={approveMutation.isPending || rejectMutation.isPending}
+              data-testid={`button-reject-${booking.id}`}
+            >
+              <X className="mr-2 h-4 w-4" />
+              Reject
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleApprove(booking)}
+              disabled={approveMutation.isPending || rejectMutation.isPending}
+              data-testid={`button-approve-${booking.id}`}
+            >
+              <Check className="mr-2 h-4 w-4" />
+              Approve
+            </Button>
+          </div>
+        )}
+      </CardHeader>
+    </Card>
+  );
 
   return (
     <div className="p-8 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-foreground font-serif">Booking Requests</h1>
-        <p className="text-muted-foreground mt-1">Review and approve booking requests for your screens</p>
+        <h1 className="text-3xl font-bold text-foreground font-serif">Booking Management</h1>
+        <p className="text-muted-foreground mt-1">Review and manage all booking requests for your screens</p>
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12">Loading booking requests...</div>
-      ) : pendingBookings.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No pending booking requests
-          </CardContent>
-        </Card>
+        <div className="text-center py-12">Loading bookings...</div>
       ) : (
-        <div className="grid gap-4">
-          {pendingBookings.map((booking) => (
-            <Card key={booking.id} data-testid={`card-booking-${booking.id}`}>
-              <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-4">
-                <div className="flex items-start gap-4 flex-1">
-                  <div className="p-3 bg-primary/10 rounded-lg">
-                    <Monitor className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-lg">{booking.screen.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {booking.screen.location}, {booking.screen.city}
-                    </p>
-                    <div className="mt-3 space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">Campaign:</span>
-                        <span className="font-medium">{booking.campaign.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span>{formatDate(booking.startDate)} - {formatDate(booking.endDate)}</span>
-                        <Badge variant="secondary">{calculateDuration(booking.startDate, booking.endDate)} days</Badge>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">Revenue:</span>
-                        <span className="font-bold text-primary text-base">₹{booking.price.toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleRejectClick(booking)}
-                    disabled={approveMutation.isPending || rejectMutation.isPending}
-                    data-testid={`button-reject-${booking.id}`}
-                  >
-                    <X className="mr-2 h-4 w-4" />
-                    Reject
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => handleApprove(booking)}
-                    disabled={approveMutation.isPending || rejectMutation.isPending}
-                    data-testid={`button-approve-${booking.id}`}
-                  >
-                    <Check className="mr-2 h-4 w-4" />
-                    Approve
-                  </Button>
-                </div>
-              </CardHeader>
-            </Card>
-          ))}
-        </div>
+        <Tabs defaultValue="pending" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="pending" data-testid="tab-pending">
+              Pending ({pendingBookings.length})
+            </TabsTrigger>
+            <TabsTrigger value="approved" data-testid="tab-approved">
+              Approved ({approvedBookings.length})
+            </TabsTrigger>
+            <TabsTrigger value="rejected" data-testid="tab-rejected">
+              Rejected ({rejectedBookings.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pending" className="space-y-4">
+            {pendingBookings.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  No pending booking requests
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {pendingBookings.map((booking) => renderBookingCard(booking, true))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="approved" className="space-y-4">
+            {approvedBookings.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  No approved bookings
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {approvedBookings.map((booking) => renderBookingCard(booking, false))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="rejected" className="space-y-4">
+            {rejectedBookings.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  No rejected bookings
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {rejectedBookings.map((booking) => renderBookingCard(booking, false))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       )}
 
       {/* Reject Dialog */}
