@@ -20,16 +20,47 @@ export const users = pgTable("users", {
 export const screens = pgTable("screens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   ownerId: varchar("owner_id"), // nullable for admin-owned screens
+  
+  // SECTION 1 — Screen Identity
   name: text("name").notNull(),
-  type: text("type").notNull(), // billboard, digital_display, led_screen, etc.
-  size: text("size").notNull(), // dimensions like "10x20 ft"
-  location: text("location").notNull(),
+  category: text("category").notNull(), // Digital Display / LED Video Wall / Kiosk / Mall LED / Lift Display / Transit Display
+  displayFormat: text("display_format").notNull(), // Portrait / Landscape / Square
+  resolution: text("resolution").notNull(), // e.g., "1920x1080"
+  durationPerSlot: integer("duration_per_slot").notNull(), // seconds
+  
+  // SECTION 2 — Location & Context
+  venueName: text("venue_name").notNull(),
+  location: text("location").notNull(), // address
   city: text("city").notNull(),
   pincode: text("pincode").notNull(),
   latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
   longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
+  venueCategory: text("venue_category").notNull(), // Café / Mall / Apartment / Gym / Co-working / Airport / Metro / Salon / Cinema / Hospital / College / Corporate Park
+  avgDailyFootfall: integer("avg_daily_footfall").notNull(),
+  trafficType: text("traffic_type").notNull(), // Pedestrian / Seated Audience / Transit / Mixed
+  timeOfDayActivity: text("time_of_day_activity").array(), // Morning Rush / Lunch Hours / Evening Leisure / Late Night
+  environmentType: text("environment_type").notNull(), // Indoor / Semi-Outdoor / Outdoor Digital
+  nearbyLandmarks: text("nearby_landmarks").array(),
+  
+  // SECTION 3 — Audience Demographics
+  primaryAgeGroups: text("primary_age_groups").array(), // 18-25 / 25-40 / 40-60
+  genderSplit: jsonb("gender_split").$type<{ male: number; female: number }>(), // percentages
+  affluenceLevel: text("affluence_level").notNull(), // Premium / Mid / Budget
+  occupationMix: text("occupation_mix").array(), // Students / Working Professionals / Business Owners / Homemakers
+  avgDwellTime: integer("avg_dwell_time").notNull(), // minutes
+  interestSegments: text("interest_segments").array(), // Fitness, Coffee, Tech, Luxury Cars, Fashion, Foodies
+  
+  // Commercial & Campaign Data
+  networkType: text("network_type").notNull(), // Single Location / Multi-location Chain / Programmatic Network
   pricePerDay: integer("price_per_day").notNull(),
+  dynamicPricing: boolean("dynamic_pricing").notNull().default(false),
   minBookingDays: integer("min_booking_days").notNull().default(1),
+  playbackSlotsPerHour: integer("playback_slots_per_hour").notNull(),
+  contentTypesSupported: text("content_types_supported").array(), // Static Image / Video / Interactive / HTML5
+  
+  // Legacy/Support fields
+  type: text("type").notNull(), // backward compatibility - will map to category
+  size: text("size").notNull(), // dimensions like "10x20 ft" - can be derived from resolution
   operationalHours: text("operational_hours"), // JSON string: {"start": "06:00", "end": "22:00"}
   images: text("images").array(), // array of image URLs from object storage
   status: text("status").notNull().default("pending"), // pending, active, inactive
