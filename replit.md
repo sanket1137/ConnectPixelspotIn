@@ -62,15 +62,51 @@ PixelSpot is a comprehensive Digital Out-of-Home (DOOH) advertising marketplace 
 - `status` (active | inactive)
 
 ### Screens
-- `id` (serial, primary key)
-- `ownerId` (foreign key to users)
-- `name`, `location`, `city`, `state`
-- `latitude`, `longitude` (for map display)
-- `type` (billboard | led_screen | digital_kiosk | transit_display)
-- `width`, `height` (dimensions in feet)
-- `pricePerDay` (in INR)
-- `imageUrl` (screen photo)
-- `status` (pending | active | inactive)
+Comprehensive screen data organized into 4 sections for better targeting:
+
+**Section 1 - Screen Identity**
+- `id` (varchar UUID, primary key)
+- `ownerId` (foreign key to users, nullable for admin-owned)
+- `name` - Unique screen identifier
+- `category` - Digital Display | LED Video Wall | Kiosk | Mall LED | Lift Display | Transit Display
+- `displayFormat` - Portrait | Landscape | Square
+- `resolution` - Technical specs (e.g., "1920x1080")
+- `durationPerSlot` - Ad slot duration in seconds
+
+**Section 2 - Location & Context**
+- `venueName` - Venue identifier (e.g., "Phoenix Mall – Food Court")
+- `location`, `city`, `pincode` - Address details
+- `latitude`, `longitude` - GPS coordinates for map display
+- `venueCategory` - Café | Mall | Apartment | Gym | Co-working | Airport | Metro | Salon | Cinema | Hospital | College | Corporate Park
+- `avgDailyFootfall` - Estimated daily audience exposure
+- `trafficType` - Pedestrian | Seated Audience | Transit | Mixed
+- `timeOfDayActivity` - Array: Morning Rush | Lunch Hours | Evening Leisure | Late Night
+- `environmentType` - Indoor | Semi-Outdoor | Outdoor Digital
+- `nearbyLandmarks` - Array of landmark tags for proximity targeting
+
+**Section 3 - Audience Demographics**
+- `primaryAgeGroups` - Array: 18-25 | 25-40 | 40-60 | 60+
+- `genderSplit` - JSON: {male: %, female: %}
+- `affluenceLevel` - Premium | Mid | Budget
+- `occupationMix` - Array: Students | Working Professionals | Business Owners | Homemakers
+- `avgDwellTime` - Average viewing time in minutes
+- `interestSegments` - Array of audience interest tags (Fitness, Coffee, Tech, etc.)
+
+**Commercial & Campaign Data**
+- `networkType` - Single Location | Multi-location Chain | Programmatic Network
+- `pricePerDay` - Base rate in INR
+- `dynamicPricing` - Boolean for demand-based pricing
+- `minBookingDays` - Minimum campaign duration
+- `playbackSlotsPerHour` - For impression estimation
+- `contentTypesSupported` - Array: Static Image | Video | Interactive | HTML5
+
+**Legacy/Support Fields**
+- `type` - Backward compatibility (maps to category)
+- `size` - Display dimensions (derived from resolution)
+- `operationalHours` - JSON operating schedule
+- `images` - Array of screen photo URLs from object storage
+- `status` - pending | active | inactive
+- `ownedByAdmin` - Boolean flag for admin-created screens
 
 ### Campaigns
 - `id` (serial, primary key)
@@ -202,6 +238,15 @@ PixelSpot is a comprehensive Digital Out-of-Home (DOOH) advertising marketplace 
   - Screen owner selection from dropdown
   - Admin-created screens automatically set to "active" status
   - Route: `/admin/screens/new`
+- **NEW: Enhanced Screen Data Model** (October 8, 2025)
+  - Comprehensive screen form with 4 organized sections
+  - **Section 1 - Screen Identity**: Technical specs (category, format, resolution, slot duration)
+  - **Section 2 - Location & Context**: Venue details, footfall, traffic type, time-of-day activity, environment type
+  - **Section 3 - Audience Demographics**: Age groups, gender split, affluence level, occupation mix, dwell time, interest segments
+  - **Commercial Data**: Network type, dynamic pricing, playback slots, content types supported
+  - Applied to both owner and admin screen creation forms
+  - Enhanced targeting capabilities for advertisers
+  - Schema updated with all new fields for campaign optimization
 
 ## Known Limitations
 - Stripe payment integration pending (API routes ready, frontend integration needed)
