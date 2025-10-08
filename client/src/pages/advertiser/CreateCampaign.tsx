@@ -166,6 +166,8 @@ export default function CreateCampaign() {
   };
 
   const onSubmit = (data: CreateCampaignForm) => {
+    console.log(`onSubmit called at step ${currentStep}`, data);
+    
     if (selectedScreenIds.length === 0) {
       toast({
         title: "No Screens Selected",
@@ -178,6 +180,8 @@ export default function CreateCampaign() {
   };
 
   const nextStep = async () => {
+    console.log(`NextStep called, current step: ${currentStep}`);
+    
     if (currentStep === 1 && selectedScreenIds.length === 0) {
       toast({
         title: "No Screens Selected",
@@ -224,7 +228,10 @@ export default function CreateCampaign() {
       }
     }
 
-    if (currentStep < steps.length) setCurrentStep(currentStep + 1);
+    if (currentStep < steps.length) {
+      console.log(`Moving to step ${currentStep + 1}`);
+      setCurrentStep(currentStep + 1);
+    }
   };
 
   const prevStep = () => {
@@ -282,7 +289,15 @@ export default function CreateCampaign() {
         </CardHeader>
         <CardContent className="space-y-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form 
+              onSubmit={form.handleSubmit(onSubmit)} 
+              className="space-y-6"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && currentStep < steps.length) {
+                  e.preventDefault();
+                }
+              }}
+            >
               {/* Step 1: Screens */}
               {currentStep === 1 && (
                 <div className="space-y-4">
