@@ -669,6 +669,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         advertiserId: req.user!.id,
         status: "pending",
+        startDate: new Date(req.body.startDate),
+        endDate: new Date(req.body.endDate),
       };
 
       const campaign = await storage.createCampaign(campaignData);
@@ -687,6 +689,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "pending_owner",
         ownerApproved: false,
         approvedByAdmin: false,
+        startDate: new Date(req.body.startDate),
+        endDate: new Date(req.body.endDate),
       });
 
       res.status(201).json(booking);
