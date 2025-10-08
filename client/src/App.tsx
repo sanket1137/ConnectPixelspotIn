@@ -1,3 +1,4 @@
+import React from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -30,16 +31,18 @@ function RedirectToDashboard() {
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
 
-  if (loading) return null;
+  React.useEffect(() => {
+    if (loading) return;
 
-  if (!user) {
-    setLocation("/login");
-    return null;
-  }
+    if (!user) {
+      setLocation("/login");
+      return;
+    }
 
-  if (user.role === "admin") setLocation("/admin");
-  else if (user.role === "screen_owner") setLocation("/owner");
-  else setLocation("/advertiser");
+    if (user.role === "admin") setLocation("/admin");
+    else if (user.role === "screen_owner") setLocation("/owner");
+    else setLocation("/advertiser");
+  }, [user, loading, setLocation]);
 
   return null;
 }
