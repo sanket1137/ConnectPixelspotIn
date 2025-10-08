@@ -166,11 +166,8 @@ export default function CreateCampaign() {
   };
 
   const onSubmit = (data: CreateCampaignForm) => {
-    console.log(`onSubmit called at step ${currentStep}`, data);
-    
     // Prevent submission if not on final step
     if (currentStep < steps.length) {
-      console.log("Prevented submission - not on final step");
       return;
     }
     
@@ -186,8 +183,6 @@ export default function CreateCampaign() {
   };
 
   const nextStep = async () => {
-    console.log(`NextStep called, current step: ${currentStep}`);
-    
     if (currentStep === 1 && selectedScreenIds.length === 0) {
       toast({
         title: "No Screens Selected",
@@ -235,7 +230,6 @@ export default function CreateCampaign() {
     }
 
     if (currentStep < steps.length) {
-      console.log(`Moving to step ${currentStep + 1}`);
       setCurrentStep(currentStep + 1);
     }
   };
