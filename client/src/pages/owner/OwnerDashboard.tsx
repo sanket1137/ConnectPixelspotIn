@@ -102,53 +102,6 @@ export default function OwnerDashboard() {
         </Card>
       </div>
 
-      {/* Screen Performance */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Screen Performance</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg hover-elevate">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <Monitor className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">Digital Billboard - MG Road</h3>
-                  <p className="text-sm text-muted-foreground">Bangalore • 10x20 ft</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-foreground">₹45,000</p>
-                <p className="text-sm text-muted-foreground">This month</p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg hover-elevate">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <Monitor className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">LED Display - Connaught Place</h3>
-                  <p className="text-sm text-muted-foreground">Delhi • 8x12 ft</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-foreground">₹38,000</p>
-                <p className="text-sm text-muted-foreground">This month</p>
-              </div>
-            </div>
-          </div>
-
-          <Button variant="outline" className="w-full mt-6" onClick={() => setLocation("/owner/screens")}>
-            <Eye className="mr-2 h-4 w-4" />
-            View All Screens
-          </Button>
-        </CardContent>
-      </Card>
-
       {/* Recent Requests */}
       <Card>
         <CardHeader>
