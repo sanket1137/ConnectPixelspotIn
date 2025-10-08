@@ -1,16 +1,49 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Monitor, MapPin, Edit, Trash2, Eye, Plus } from "lucide-react";
 import { useLocation } from "wouter";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import type { Screen } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ScreensList() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
+  const [screenToDelete, setScreenToDelete] = useState<string | null>(null);
+  
   const { data: screens = [], isLoading } = useQuery<Screen[]>({
     queryKey: ["/api/owner/screens"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (screenId: string) => {
+      const response = await apiRequest("DELETE", `/api/owner/screens/${screenId}`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/owner/screens"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/owner/stats"] });
+      toast({
+        title: "Screen Deleted",
+        description: "The screen has been deleted successfully.",
+      });
+      setScreenToDelete(null);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete screen. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   if (isLoading) {
@@ -102,13 +135,33 @@ export default function ScreensList() {
                     <p className="font-bold text-foreground">₹{screen.pricePerDay}/day</p>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="icon" data-testid={`button-view-${screen.id}`}>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      onClick={() => setSelectedScreen(screen)}
+                      data-testid={`button-view-${screen.id}`}
+                    >
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" size="icon" data-testid={`button-edit-${screen.id}`}>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      onClick={() => {
+                        toast({
+                          title: "Coming Soon",
+                          description: "Screen editing functionality will be available soon. For now, you can delete and recreate screens.",
+                        });
+                      }}
+                      data-testid={`button-edit-${screen.id}`}
+                    >
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" size="icon" data-testid={`button-delete-${screen.id}`}>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      onClick={() => setScreenToDelete(screen.id)}
+                      data-testid={`button-delete-${screen.id}`}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -118,6 +171,166 @@ export default function ScreensList() {
           ))}
         </div>
       )}
+
+      {/* View Details Dialog */}
+      <Dialog open={!!selectedScreen} onOpenChange={(open) => !open && setSelectedScreen(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedScreen?.name}</DialogTitle>
+            <DialogDescription>Complete screen information and specifications</DialogDescription>
+          </DialogHeader>
+          
+          {selectedScreen && (
+            <div className="space-y-6">
+              {/* Section 1 - Screen Identity */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg">Screen Identity</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Category:</span>
+                    <p className="font-medium">{selectedScreen.category || selectedScreen.type}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Display Format:</span>
+                    <p className="font-medium">{selectedScreen.displayFormat}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Resolution:</span>
+                    <p className="font-medium">{selectedScreen.resolution}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Duration Per Slot:</span>
+                    <p className="font-medium">{selectedScreen.durationPerSlot} seconds</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2 - Location & Context */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg">Location & Context</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Venue Name:</span>
+                    <p className="font-medium">{selectedScreen.venueName}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Location:</span>
+                    <p className="font-medium">{selectedScreen.location}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">City:</span>
+                    <p className="font-medium">{selectedScreen.city}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Pincode:</span>
+                    <p className="font-medium">{selectedScreen.pincode}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Venue Category:</span>
+                    <p className="font-medium">{selectedScreen.venueCategory}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Traffic Type:</span>
+                    <p className="font-medium">{selectedScreen.trafficType}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3 - Audience Demographics */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg">Audience Demographics</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Primary Age Groups:</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {selectedScreen.primaryAgeGroups?.map((age) => (
+                        <Badge key={age} variant="secondary" className="text-xs">{age}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Gender Split:</span>
+                    <p className="font-medium">
+                      Male: {selectedScreen.genderSplit?.male}% | Female: {selectedScreen.genderSplit?.female}%
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Affluence Level:</span>
+                    <p className="font-medium">{selectedScreen.affluenceLevel}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Avg Dwell Time:</span>
+                    <p className="font-medium">{selectedScreen.avgDwellTime} minutes</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Commercial Data */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg">Commercial Data</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  {selectedScreen.isMultiScreen && (
+                    <div>
+                      <span className="text-muted-foreground">Number of Screens:</span>
+                      <p className="font-medium">{selectedScreen.numberOfScreens}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground">Price Per Day:</span>
+                    <p className="font-bold text-primary">₹{selectedScreen.pricePerDay}/day</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Min Booking Days:</span>
+                    <p className="font-medium">{selectedScreen.minBookingDays} days</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Playback Slots Per Hour:</span>
+                    <p className="font-medium">{selectedScreen.playbackSlotsPerHour}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Content Types Supported:</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {selectedScreen.contentTypesSupported?.map((type) => (
+                        <Badge key={type} variant="secondary" className="text-xs">{type}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="pt-4 border-t">
+                <span className="text-sm text-muted-foreground">Status:</span>
+                <Badge variant={selectedScreen.status === "active" ? "default" : "secondary"} className="ml-2">
+                  {selectedScreen.status}
+                </Badge>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!screenToDelete} onOpenChange={(open) => !open && setScreenToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Screen</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this screen? This action cannot be undone and will remove the screen from your listings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => screenToDelete && deleteMutation.mutate(screenToDelete)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="confirm-delete-screen"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
