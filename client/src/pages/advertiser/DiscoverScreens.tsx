@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { GoogleMap, LoadScript, Marker, InfoWindow } from "@react-google-maps/api";
+import { GoogleMap, useLoadScript, Marker, InfoWindow } from "@react-google-maps/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,10 @@ const defaultCenter = {
 type ViewMode = "list" | "map";
 
 export default function DiscoverScreens() {
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+  });
+
   const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
   const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -394,7 +398,11 @@ export default function DiscoverScreens() {
           </div>
         ) : (
           <div className="h-full">
-            <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY}>
+            {!isLoaded ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-muted-foreground">Loading map...</p>
+              </div>
+            ) : (
               <GoogleMap
                 mapContainerStyle={mapContainerStyle}
                 center={center}
@@ -480,7 +488,7 @@ export default function DiscoverScreens() {
                   </InfoWindow>
                 )}
               </GoogleMap>
-            </LoadScript>
+            )}
           </div>
         )}
       </div>
