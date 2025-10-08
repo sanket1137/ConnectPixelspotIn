@@ -168,6 +168,12 @@ export default function CreateCampaign() {
   const onSubmit = (data: CreateCampaignForm) => {
     console.log(`onSubmit called at step ${currentStep}`, data);
     
+    // Prevent submission if not on final step
+    if (currentStep < steps.length) {
+      console.log("Prevented submission - not on final step");
+      return;
+    }
+    
     if (selectedScreenIds.length === 0) {
       toast({
         title: "No Screens Selected",
