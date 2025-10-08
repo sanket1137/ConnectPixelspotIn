@@ -169,16 +169,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Serve private objects (with ACL check)
-  app.get("/objects/:objectPath(*)", authenticate, async (req, res) => {
+  // Serve objects (public or private with ACL check)
+  app.get("/objects/:objectPath(*)", async (req, res) => {
     try {
-      const userId = req.user!.id.toString();
       const objectStorageService = new ObjectStorageService();
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
       
+      // Check if object is public first
+      const isPublic = await objectStorageService.canAccessObjectEntity({
+        objectFile,
+        userId: undefined,
+      });
+      
+      if (isPublic) {
+        // Object is public, serve it
+        return objectStorageService.downloadObject(objectFile, res);
+      }
+      
+      // Object is private, check authentication
+      if (!req.user) {
+        return res.sendStatus(401);
+      }
+      
       const canAccess = await objectStorageService.canAccessObjectEntity({
         objectFile,
-        userId,
+        userId: req.user.id.toString(),
       });
       
       if (!canAccess) {
