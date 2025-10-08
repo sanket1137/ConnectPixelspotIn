@@ -177,7 +177,7 @@ export default function CreateCampaign() {
     createCampaignMutation.mutate(data);
   };
 
-  const nextStep = () => {
+  const nextStep = async () => {
     if (currentStep === 1 && selectedScreenIds.length === 0) {
       toast({
         title: "No Screens Selected",
@@ -186,6 +186,44 @@ export default function CreateCampaign() {
       });
       return;
     }
+
+    // Validate current step fields before proceeding
+    if (currentStep === 2) {
+      const isValid = await form.trigger(["name", "objective", "budget"]);
+      if (!isValid) {
+        toast({
+          title: "Incomplete Details",
+          description: "Please fill in all campaign details before proceeding.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    if (currentStep === 3) {
+      const isValid = await form.trigger(["startDate", "endDate"]);
+      if (!isValid) {
+        toast({
+          title: "Invalid Dates",
+          description: "Please select valid start and end dates.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Validate date range
+      const startDate = new Date(form.getValues("startDate"));
+      const endDate = new Date(form.getValues("endDate"));
+      if (endDate < startDate) {
+        toast({
+          title: "Invalid Date Range",
+          description: "End date must be after start date.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     if (currentStep < steps.length) setCurrentStep(currentStep + 1);
   };
 
@@ -253,7 +291,7 @@ export default function CreateCampaign() {
                     <Alert>
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        No screens selected. Go to the <Button variant="link" className="p-0 h-auto" onClick={() => setLocation("/advertiser/discover")}>Discover Screens</Button> page to select screens for your campaign.
+                        No screens selected. Go to the <Button variant="ghost" className="p-0 h-auto underline" onClick={() => setLocation("/advertiser/discover")}>Discover Screens</Button> page to select screens for your campaign.
                       </AlertDescription>
                     </Alert>
                   ) : (
