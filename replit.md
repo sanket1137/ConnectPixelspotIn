@@ -93,9 +93,9 @@ Comprehensive screen data organized into 4 sections for better targeting:
 - `interestSegments` - Array of audience interest tags (Fitness, Coffee, Tech, etc.)
 
 **Commercial & Campaign Data**
-- `networkType` - Single Location | Multi-location Chain | Programmatic Network
+- `isMultiScreen` - Boolean indicating if listing has multiple screens
+- `numberOfScreens` - Number of screens (required if isMultiScreen is true)
 - `pricePerDay` - Base rate in INR
-- `dynamicPricing` - Boolean for demand-based pricing
 - `minBookingDays` - Minimum campaign duration
 - `playbackSlotsPerHour` - For impression estimation
 - `contentTypesSupported` - Array: Static Image | Video | Interactive | HTML5
@@ -243,7 +243,8 @@ Comprehensive screen data organized into 4 sections for better targeting:
   - **Section 1 - Screen Identity**: Technical specs (category, format, resolution, slot duration)
   - **Section 2 - Location & Context**: Venue details, footfall, traffic type, time-of-day activity, environment type
   - **Section 3 - Audience Demographics**: Age groups, gender split, affluence level, occupation mix, dwell time, interest segments
-  - **Commercial Data**: Network type, dynamic pricing, playback slots, content types supported
+  - **Commercial Data**: Multi-screen support with screen count, playback slots, content types supported
+  - Multi-screen listing feature: Toggle to indicate if listing has multiple screens with number input
   - Applied to both owner and admin screen creation forms
   - Enhanced targeting capabilities for advertisers
   - Schema updated with all new fields for campaign optimization
