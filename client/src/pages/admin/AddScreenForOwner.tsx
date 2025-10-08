@@ -949,6 +949,7 @@ export default function AddScreenForOwner() {
                   onGetUploadParameters={handleGetUploadParameters}
                   onComplete={handleUploadComplete}
                   buttonVariant="outline"
+                  buttonTestId="button-upload-screen-image"
                 >
                   <Upload className="mr-2 h-4 w-4" />
                   Upload Screen Image

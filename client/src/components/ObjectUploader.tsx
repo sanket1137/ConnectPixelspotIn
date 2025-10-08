@@ -20,6 +20,7 @@ interface ObjectUploaderProps {
   ) => void;
   buttonClassName?: string;
   buttonVariant?: "default" | "outline" | "secondary" | "ghost" | "destructive";
+  buttonTestId?: string;
   children: ReactNode;
 }
 
@@ -31,6 +32,7 @@ export function ObjectUploader({
   onComplete,
   buttonClassName,
   buttonVariant = "default",
+  buttonTestId,
   children,
 }: ObjectUploaderProps) {
   const [showModal, setShowModal] = useState(false);
@@ -48,8 +50,15 @@ export function ObjectUploader({
         getUploadParameters: onGetUploadParameters,
       })
       .on("complete", (result) => {
+        console.log("Upload complete:", result);
         onComplete?.(result);
         setShowModal(false);
+      })
+      .on("error", (error) => {
+        console.error("Upload error:", error);
+      })
+      .on("upload-error", (file, error) => {
+        console.error("Upload error for file:", file, error);
       })
   );
 
@@ -60,6 +69,7 @@ export function ObjectUploader({
         variant={buttonVariant}
         onClick={() => setShowModal(true)} 
         className={buttonClassName}
+        data-testid={buttonTestId}
       >
         {children}
       </Button>
