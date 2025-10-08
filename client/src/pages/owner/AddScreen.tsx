@@ -6,27 +6,61 @@ import { useLocation } from "wouter";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
-import { ArrowLeft, MapPin, Upload, Check } from "lucide-react";
+import { ArrowLeft, MapPin, Upload, Check, Users, DollarSign, Monitor, Crosshair } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 
 const addScreenSchema = z.object({
-  name: z.string().min(3, "Name must be at least 3 characters"),
-  type: z.string().min(1, "Screen type is required"),
-  size: z.string().min(1, "Size is required"),
-  location: z.string().min(3, "Location is required"),
+  // Section 1 - Screen Identity
+  name: z.string().min(3, "Screen name must be at least 3 characters"),
+  category: z.string().min(1, "Screen category is required"),
+  displayFormat: z.string().min(1, "Display format is required"),
+  resolution: z.string().min(1, "Resolution is required"),
+  durationPerSlot: z.string().min(1, "Duration per slot is required"),
+  
+  // Section 2 - Location & Context
+  venueName: z.string().min(3, "Venue name is required"),
+  location: z.string().min(3, "Address is required"),
   city: z.string().min(2, "City is required"),
   pincode: z.string().regex(/^\d{6}$/, "Pincode must be 6 digits"),
   latitude: z.string().min(1, "Latitude is required"),
   longitude: z.string().min(1, "Longitude is required"),
-  pricePerDay: z.string().min(1, "Price is required"),
+  venueCategory: z.string().min(1, "Venue category is required"),
+  avgDailyFootfall: z.string().min(1, "Average daily footfall is required"),
+  trafficType: z.string().min(1, "Traffic type is required"),
+  timeOfDayActivity: z.array(z.string()).min(1, "Select at least one time slot"),
+  environmentType: z.string().min(1, "Environment type is required"),
+  nearbyLandmarks: z.string().optional(),
+  
+  // Section 3 - Audience Demographics
+  primaryAgeGroups: z.array(z.string()).min(1, "Select at least one age group"),
+  genderMale: z.number().min(0).max(100),
+  genderFemale: z.number().min(0).max(100),
+  affluenceLevel: z.string().min(1, "Affluence level is required"),
+  occupationMix: z.array(z.string()).min(1, "Select at least one occupation"),
+  avgDwellTime: z.string().min(1, "Average dwell time is required"),
+  interestSegments: z.string().optional(),
+  
+  // Commercial & Campaign Data
+  networkType: z.string().min(1, "Network type is required"),
+  pricePerDay: z.string().min(1, "Price per day is required"),
+  dynamicPricing: z.boolean(),
   minBookingDays: z.string().min(1, "Minimum booking days required"),
+  playbackSlotsPerHour: z.string().min(1, "Playback slots per hour is required"),
+  contentTypesSupported: z.array(z.string()).min(1, "Select at least one content type"),
+  
+  // Legacy fields
+  type: z.string().min(1),
+  size: z.string().optional(),
   operationalHours: z.string().optional(),
 });
 
@@ -42,15 +76,37 @@ export default function AddScreen() {
     resolver: zodResolver(addScreenSchema),
     defaultValues: {
       name: "",
-      type: "",
-      size: "",
+      category: "",
+      displayFormat: "",
+      resolution: "",
+      durationPerSlot: "",
+      venueName: "",
       location: "",
       city: "",
       pincode: "",
       latitude: "",
       longitude: "",
+      venueCategory: "",
+      avgDailyFootfall: "",
+      trafficType: "",
+      timeOfDayActivity: [],
+      environmentType: "",
+      nearbyLandmarks: "",
+      primaryAgeGroups: [],
+      genderMale: 50,
+      genderFemale: 50,
+      affluenceLevel: "",
+      occupationMix: [],
+      avgDwellTime: "",
+      interestSegments: "",
+      networkType: "",
       pricePerDay: "",
+      dynamicPricing: false,
       minBookingDays: "1",
+      playbackSlotsPerHour: "",
+      contentTypesSupported: [],
+      type: "",
+      size: "",
       operationalHours: "",
     },
   });
@@ -61,8 +117,15 @@ export default function AddScreen() {
         ...data,
         pricePerDay: parseInt(data.pricePerDay),
         minBookingDays: parseInt(data.minBookingDays),
-        latitude: data.latitude,
-        longitude: data.longitude,
+        durationPerSlot: parseInt(data.durationPerSlot),
+        avgDailyFootfall: parseInt(data.avgDailyFootfall),
+        avgDwellTime: parseInt(data.avgDwellTime),
+        playbackSlotsPerHour: parseInt(data.playbackSlotsPerHour),
+        genderSplit: { male: data.genderMale, female: data.genderFemale },
+        nearbyLandmarks: data.nearbyLandmarks ? data.nearbyLandmarks.split(',').map(s => s.trim()) : [],
+        interestSegments: data.interestSegments ? data.interestSegments.split(',').map(s => s.trim()) : [],
+        type: data.category,
+        size: data.resolution,
         imageUrl: uploadedImageURL || null,
       });
     },
@@ -115,8 +178,13 @@ export default function AddScreen() {
     createScreenMutation.mutate(data);
   };
 
+  const timeSlots = ["Morning Rush", "Lunch Hours", "Evening Leisure", "Late Night"];
+  const ageGroups = ["18-25", "25-40", "40-60", "60+"];
+  const occupations = ["Students", "Working Professionals", "Business Owners", "Homemakers"];
+  const contentTypes = ["Static Image", "Video", "Interactive", "HTML5"];
+
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-8 max-w-6xl mx-auto space-y-6">
       <div>
         <Button
           variant="ghost"
@@ -128,14 +196,19 @@ export default function AddScreen() {
           Back to Screens
         </Button>
         <h1 className="text-4xl font-bold text-foreground font-serif mb-2">Add New Screen</h1>
-        <p className="text-muted-foreground">Fill in the details to list your digital advertising screen</p>
+        <p className="text-muted-foreground">Comprehensive screen details for better targeting and campaign planning</p>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          {/* SECTION 1 - Screen Identity */}
           <Card>
             <CardHeader>
-              <CardTitle>Basic Information</CardTitle>
+              <div className="flex items-center gap-2">
+                <Monitor className="h-5 w-5 text-primary" />
+                <CardTitle>Section 1 — Screen Identity</CardTitle>
+              </div>
+              <CardDescription>Basic technical specifications of your screen</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <FormField
@@ -145,7 +218,7 @@ export default function AddScreen() {
                   <FormItem>
                     <FormLabel>Screen Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Digital Billboard - MG Road" {...field} data-testid="input-screen-name" />
+                      <Input placeholder="e.g., Café Coffee Day – Indiranagar 1" {...field} data-testid="input-screen-name" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -155,21 +228,23 @@ export default function AddScreen() {
               <div className="grid md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="type"
+                  name="category"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Screen Type</FormLabel>
+                      <FormLabel>Screen Category</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger data-testid="select-screen-type">
-                            <SelectValue placeholder="Select type" />
+                          <SelectTrigger data-testid="select-category">
+                            <SelectValue placeholder="Select category" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="billboard">Billboard</SelectItem>
-                          <SelectItem value="digital_display">Digital Display</SelectItem>
-                          <SelectItem value="led_screen">LED Screen</SelectItem>
-                          <SelectItem value="video_wall">Video Wall</SelectItem>
+                          <SelectItem value="Digital Display">Digital Display</SelectItem>
+                          <SelectItem value="LED Video Wall">LED Video Wall</SelectItem>
+                          <SelectItem value="Kiosk">Kiosk</SelectItem>
+                          <SelectItem value="Mall LED">Mall LED</SelectItem>
+                          <SelectItem value="Lift Display">Lift Display</SelectItem>
+                          <SelectItem value="Transit Display">Transit Display</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -179,12 +254,51 @@ export default function AddScreen() {
 
                 <FormField
                   control={form.control}
-                  name="size"
+                  name="displayFormat"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Screen Size</FormLabel>
+                      <FormLabel>Display Format</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-format">
+                            <SelectValue placeholder="Select format" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Portrait">Portrait</SelectItem>
+                          <SelectItem value="Landscape">Landscape</SelectItem>
+                          <SelectItem value="Square">Square</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="resolution"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Resolution (px)</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., 10x20 ft" {...field} data-testid="input-screen-size" />
+                        <Input placeholder="e.g., 1920x1080" {...field} data-testid="input-resolution" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="durationPerSlot"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Duration per Slot (seconds)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 10" {...field} data-testid="input-duration" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -194,20 +308,36 @@ export default function AddScreen() {
             </CardContent>
           </Card>
 
+          {/* SECTION 2 - Location & Context */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Location Details
-              </CardTitle>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                <CardTitle>Section 2 — Location & Context</CardTitle>
+              </div>
+              <CardDescription>Venue details and geographic information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="venueName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Venue Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Phoenix Mall – Food Court" {...field} data-testid="input-venue-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="location"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Address / Location</FormLabel>
+                    <FormLabel>Address</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g., Near Metro Station, MG Road" {...field} data-testid="input-location" />
                     </FormControl>
@@ -216,7 +346,7 @@ export default function AddScreen() {
                 )}
               />
 
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid md:grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
                   name="city"
@@ -240,6 +370,38 @@ export default function AddScreen() {
                       <FormControl>
                         <Input placeholder="e.g., 560001" {...field} data-testid="input-pincode" />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="venueCategory"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Venue Category</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-venue-category">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Café">Café</SelectItem>
+                          <SelectItem value="Mall">Mall</SelectItem>
+                          <SelectItem value="Apartment">Apartment</SelectItem>
+                          <SelectItem value="Gym">Gym</SelectItem>
+                          <SelectItem value="Co-working">Co-working</SelectItem>
+                          <SelectItem value="Airport">Airport</SelectItem>
+                          <SelectItem value="Metro">Metro</SelectItem>
+                          <SelectItem value="Salon">Salon</SelectItem>
+                          <SelectItem value="Cinema">Cinema</SelectItem>
+                          <SelectItem value="Hospital">Hospital</SelectItem>
+                          <SelectItem value="College">College</SelectItem>
+                          <SelectItem value="Corporate Park">Corporate Park</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -275,15 +437,359 @@ export default function AddScreen() {
                   )}
                 />
               </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="avgDailyFootfall"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Average Daily Footfall</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 5000" {...field} data-testid="input-footfall" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="trafficType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Traffic Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-traffic-type">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Pedestrian">Pedestrian</SelectItem>
+                          <SelectItem value="Seated Audience">Seated Audience</SelectItem>
+                          <SelectItem value="Transit">Transit</SelectItem>
+                          <SelectItem value="Mixed">Mixed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="timeOfDayActivity"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Time-of-Day Activity</FormLabel>
+                    <div className="flex flex-wrap gap-4">
+                      {timeSlots.map((slot) => (
+                        <FormField
+                          key={slot}
+                          control={form.control}
+                          name="timeOfDayActivity"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(slot)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, slot])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== slot)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-time-${slot.toLowerCase().replace(/\s/g, '-')}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{slot}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="environmentType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Environment Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-environment">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Indoor">Indoor</SelectItem>
+                          <SelectItem value="Semi-Outdoor">Semi-Outdoor</SelectItem>
+                          <SelectItem value="Outdoor Digital">Outdoor Digital</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nearbyLandmarks"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nearby Landmarks (comma-separated)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Metro Station, Starbucks" {...field} data-testid="input-landmarks" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </CardContent>
           </Card>
 
+          {/* SECTION 3 - Audience Demographics */}
           <Card>
             <CardHeader>
-              <CardTitle>Pricing & Availability</CardTitle>
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                <CardTitle>Section 3 — Audience Demographics</CardTitle>
+              </div>
+              <CardDescription>Target audience characteristics for precise campaign targeting</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="primaryAgeGroups"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Primary Audience Age Groups</FormLabel>
+                    <div className="flex flex-wrap gap-4">
+                      {ageGroups.map((age) => (
+                        <FormField
+                          key={age}
+                          control={form.control}
+                          name="primaryAgeGroups"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(age)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, age])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== age)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-age-${age}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{age}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div>
+                <FormLabel>Gender Split (%)</FormLabel>
+                <div className="grid md:grid-cols-2 gap-4 mt-2">
+                  <FormField
+                    control={form.control}
+                    name="genderMale"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center justify-between">
+                          <FormLabel className="text-sm font-normal">Male</FormLabel>
+                          <span className="text-sm font-semibold">{field.value}%</span>
+                        </div>
+                        <FormControl>
+                          <Slider
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={[field.value]}
+                            onValueChange={(vals) => {
+                              field.onChange(vals[0]);
+                              form.setValue("genderFemale", 100 - vals[0]);
+                            }}
+                            data-testid="slider-male"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="genderFemale"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center justify-between">
+                          <FormLabel className="text-sm font-normal">Female</FormLabel>
+                          <span className="text-sm font-semibold">{field.value}%</span>
+                        </div>
+                        <FormControl>
+                          <Slider
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={[field.value]}
+                            onValueChange={(vals) => {
+                              field.onChange(vals[0]);
+                              form.setValue("genderMale", 100 - vals[0]);
+                            }}
+                            data-testid="slider-female"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
               <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="affluenceLevel"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Audience Affluence Level</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-affluence">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Premium">Premium</SelectItem>
+                          <SelectItem value="Mid">Mid</SelectItem>
+                          <SelectItem value="Budget">Budget</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="avgDwellTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Avg. Dwell Time (minutes)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 15" {...field} data-testid="input-dwell-time" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="occupationMix"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Occupation Mix</FormLabel>
+                    <div className="flex flex-wrap gap-4">
+                      {occupations.map((occupation) => (
+                        <FormField
+                          key={occupation}
+                          control={form.control}
+                          name="occupationMix"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(occupation)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, occupation])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== occupation)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-occupation-${occupation.toLowerCase().replace(/\s/g, '-')}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{occupation}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="interestSegments"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Audience Interest Segments (comma-separated)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Fitness, Coffee, Tech, Luxury Cars" {...field} data-testid="input-interests" />
+                    </FormControl>
+                    <FormDescription>Tags for targeting specific audience interests</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Commercial & Campaign Data */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                <CardTitle>Commercial & Campaign Data</CardTitle>
+              </div>
+              <CardDescription>Pricing and campaign specifications</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="networkType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Screen Network Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-network-type">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Single Location">Single Location</SelectItem>
+                        <SelectItem value="Multi-location Chain">Multi-location Chain</SelectItem>
+                        <SelectItem value="Programmatic Network">Programmatic Network</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid md:grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
                   name="pricePerDay"
@@ -303,9 +809,23 @@ export default function AddScreen() {
                   name="minBookingDays"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Minimum Booking Days</FormLabel>
+                      <FormLabel>Minimum Booking Duration (days)</FormLabel>
                       <FormControl>
                         <Input type="number" placeholder="e.g., 1" {...field} data-testid="input-min-days" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="playbackSlotsPerHour"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Playback Slots per Hour</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 6" {...field} data-testid="input-slots" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -315,13 +835,59 @@ export default function AddScreen() {
 
               <FormField
                 control={form.control}
-                name="operationalHours"
+                name="dynamicPricing"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Operational Hours (Optional)</FormLabel>
+                  <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Dynamic Pricing</FormLabel>
+                      <FormDescription>
+                        Enable automatic rate adjustment based on demand and time
+                      </FormDescription>
+                    </div>
                     <FormControl>
-                      <Input placeholder="e.g., 06:00 - 22:00" {...field} data-testid="input-hours" />
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-dynamic-pricing"
+                      />
                     </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="contentTypesSupported"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Content Types Supported</FormLabel>
+                    <div className="flex flex-wrap gap-4">
+                      {contentTypes.map((type) => (
+                        <FormField
+                          key={type}
+                          control={form.control}
+                          name="contentTypesSupported"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(type)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, type])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== type)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-content-${type.toLowerCase().replace(/\s/g, '-')}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{type}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -329,12 +895,13 @@ export default function AddScreen() {
             </CardContent>
           </Card>
 
+          {/* Screen Image Upload */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
-                Screen Image
-              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Upload className="h-5 w-5 text-primary" />
+                <CardTitle>Screen Image</CardTitle>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-4">
