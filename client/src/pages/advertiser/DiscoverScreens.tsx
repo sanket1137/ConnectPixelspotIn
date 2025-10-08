@@ -2,18 +2,19 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { GoogleMap, LoadScript, Marker, InfoWindow } from "@react-google-maps/api";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Search, Filter, X, Eye, Plus, Check, ShoppingCart, Trash2 } from "lucide-react";
+import { MapPin, Search, Filter, X, Plus, Check, ShoppingCart, Trash2, List, Map as MapIcon, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { Screen } from "@shared/schema";
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
+const VIEW_PREFERENCE_KEY = "screenViewPreference";
 
 const mapContainerStyle = {
   width: '100%',
@@ -25,10 +26,15 @@ const defaultCenter = {
   lng: 77.5946
 };
 
+type ViewMode = "list" | "map";
+
 export default function DiscoverScreens() {
   const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
   const [showFilters, setShowFilters] = useState(true);
   const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   
@@ -40,15 +46,25 @@ export default function DiscoverScreens() {
   });
 
   const [center, setCenter] = useState(defaultCenter);
-  const [zoom, setZoom] = useState(11);
 
-  // Load selected screens from localStorage
+  // Load selected screens and view preference from localStorage
   useEffect(() => {
     const saved = localStorage.getItem(SELECTED_SCREENS_KEY);
     if (saved) {
       setSelectedScreenIds(new Set(JSON.parse(saved)));
     }
+
+    const savedView = localStorage.getItem(VIEW_PREFERENCE_KEY);
+    if (savedView === "map" || savedView === "list") {
+      setViewMode(savedView);
+    }
   }, []);
+
+  // Save view preference
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_PREFERENCE_KEY, mode);
+  };
 
   const { data: screens = [] } = useQuery<Screen[]>({
     queryKey: ["/api/screens", filters],
@@ -63,6 +79,13 @@ export default function DiscoverScreens() {
   });
 
   const selectedScreens = screens.filter(s => selectedScreenIds.has(s.id));
+
+  // Pagination for list view
+  const totalPages = Math.ceil(filteredScreens.length / itemsPerPage);
+  const paginatedScreens = filteredScreens.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   const toggleScreenSelection = (screen: Screen) => {
     const newSet = new Set(selectedScreenIds);
@@ -229,8 +252,8 @@ export default function DiscoverScreens() {
               <div>
                 <p className="font-medium text-foreground mb-1">How it works</p>
                 <ol className="list-decimal list-inside space-y-1 text-xs">
-                  <li>Browse screens on the map</li>
-                  <li>Click markers to view details</li>
+                  <li>Browse screens in list or map view</li>
+                  <li>Apply filters to find screens</li>
                   <li>Add screens to your campaign</li>
                   <li>Proceed to create campaign</li>
                 </ol>
@@ -240,121 +263,260 @@ export default function DiscoverScreens() {
         </div>
       )}
 
-      {/* Map Area */}
-      <div className="flex-1 relative">
-        {!showFilters && (
-          <Button
-            variant="secondary"
-            size="icon"
-            className="absolute top-4 left-4 z-10 shadow-lg"
-            onClick={() => setShowFilters(true)}
-            data-testid="button-show-filters"
-          >
-            <Filter className="h-5 w-5" />
-          </Button>
-        )}
+      {/* Main Content Area */}
+      <div className="flex-1 relative flex flex-col">
+        {/* Top Bar with View Toggle and Filters */}
+        <div className="border-b border-border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {!showFilters && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowFilters(true)}
+                  data-testid="button-show-filters"
+                >
+                  <Filter className="h-5 w-5" />
+                </Button>
+              )}
+              
+              {/* View Toggle */}
+              <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+                <Button
+                  variant={viewMode === "list" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => handleViewModeChange("list")}
+                  data-testid="button-list-view"
+                  className="gap-2"
+                >
+                  <List className="h-4 w-4" />
+                  List
+                </Button>
+                <Button
+                  variant={viewMode === "map" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => handleViewModeChange("map")}
+                  data-testid="button-map-view"
+                  className="gap-2"
+                >
+                  <MapIcon className="h-4 w-4" />
+                  Map
+                </Button>
+              </div>
+            </div>
 
-        {/* Results count */}
-        <div className="absolute top-4 right-4 z-10 bg-card rounded-lg shadow-lg px-4 py-2 border border-border">
-          <p className="text-sm font-medium" data-testid="text-results-count">
-            {filteredScreens.length} screens found
-          </p>
+            {/* Results count */}
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium" data-testid="text-results-count">
+                {filteredScreens.length} screens found
+              </p>
+            </div>
+          </div>
         </div>
 
-        <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY}>
-          <GoogleMap
-            mapContainerStyle={mapContainerStyle}
-            center={center}
-            zoom={zoom}
-            onCenterChanged={() => {}}
-            onZoomChanged={() => {}}
-            options={{
-              zoomControl: true,
-              streetViewControl: false,
-              mapTypeControl: false,
-              fullscreenControl: true,
-            }}
-          >
-            {filteredScreens.map((screen) => (
-              <Marker
-                key={screen.id}
-                position={{ lat: screen.latitude, lng: screen.longitude }}
-                onClick={() => setSelectedScreen(screen)}
-                icon={{
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: selectedScreenIds.has(screen.id) ? 12 : 8,
-                  fillColor: selectedScreenIds.has(screen.id) ? "#10b981" : "#3b82f6",
-                  fillOpacity: 1,
-                  strokeColor: "#ffffff",
-                  strokeWeight: 2,
-                }}
-              />
-            ))}
-
-            {selectedScreen && (
-              <InfoWindow
-                position={{ lat: selectedScreen.latitude, lng: selectedScreen.longitude }}
-                onCloseClick={() => setSelectedScreen(null)}
-              >
-                <Card className="border-0 shadow-none max-w-sm">
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
-                      <div>
-                        <h3 className="font-bold text-lg mb-1">{selectedScreen.name}</h3>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <MapPin className="h-4 w-4" />
-                          <span>{selectedScreen.address}, {selectedScreen.city}</span>
+        {/* Content - List or Map View */}
+        <div className="flex-1 overflow-hidden">
+          {viewMode === "list" ? (
+            <div className="h-full overflow-y-auto p-6">
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {paginatedScreens.map((screen) => (
+                  <Card key={screen.id} className="hover-elevate" data-testid={`card-screen-${screen.id}`}>
+                    <CardHeader className="gap-2 space-y-0 pb-4">
+                      <div className="flex items-start justify-between">
+                        <div className="p-3 bg-primary/10 rounded-lg">
+                          <MapPin className="w-5 h-5 text-primary" />
                         </div>
+                        <Badge variant="secondary">{screen.type}</Badge>
                       </div>
-
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant="secondary">{selectedScreen.type}</Badge>
-                        <Badge variant="outline">{selectedScreen.size}</Badge>
-                        {selectedScreen.isDigital && <Badge>Digital</Badge>}
+                      <CardTitle className="text-lg">{screen.name}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <MapPin className="w-4 h-4" />
+                        <span className="truncate">{screen.location}, {screen.city}</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{screen.size}</Badge>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
                           <p className="text-muted-foreground">Daily Views</p>
-                          <p className="font-semibold">{selectedScreen.dailyViews.toLocaleString()}</p>
+                          <p className="font-semibold">{screen.dailyViews?.toLocaleString() || "N/A"}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Price/Day</p>
-                          <p className="font-semibold text-primary">₹{selectedScreen.pricePerDay.toLocaleString()}</p>
+                          <p className="font-semibold text-primary">₹{screen.pricePerDay.toLocaleString()}</p>
                         </div>
                       </div>
 
-                      {selectedScreen.description && (
+                      {screen.description && (
                         <p className="text-sm text-muted-foreground line-clamp-2">
-                          {selectedScreen.description}
+                          {screen.description}
                         </p>
                       )}
 
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          className="flex-1"
+                          variant={selectedScreenIds.has(screen.id) ? "secondary" : "default"}
+                          onClick={() => toggleScreenSelection(screen)}
+                          data-testid={`button-toggle-screen-${screen.id}`}
+                        >
+                          {selectedScreenIds.has(screen.id) ? (
+                            <>
+                              <Check className="h-4 w-4 mr-2" />
+                              Selected
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-8">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    data-testid="button-prev-page"
+                  >
+                    Previous
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                       <Button
-                        className="w-full"
-                        variant={selectedScreenIds.has(selectedScreen.id) ? "secondary" : "default"}
-                        onClick={() => toggleScreenSelection(selectedScreen)}
-                        data-testid={`button-toggle-screen-${selectedScreen.id}`}
+                        key={page}
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(page)}
+                        data-testid={`button-page-${page}`}
                       >
-                        {selectedScreenIds.has(selectedScreen.id) ? (
-                          <>
-                            <Check className="h-4 w-4 mr-2" />
-                            Selected
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add to Campaign
-                          </>
-                        )}
+                        {page}
                       </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </InfoWindow>
-            )}
-          </GoogleMap>
-        </LoadScript>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    data-testid="button-next-page"
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="h-full">
+              <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY}>
+                <GoogleMap
+                  mapContainerStyle={mapContainerStyle}
+                  center={center}
+                  zoom={11}
+                  onCenterChanged={() => {}}
+                  onZoomChanged={() => {}}
+                  options={{
+                    zoomControl: true,
+                    streetViewControl: false,
+                    mapTypeControl: false,
+                    fullscreenControl: true,
+                  }}
+                >
+                  {filteredScreens.map((screen) => (
+                    <Marker
+                      key={screen.id}
+                      position={{ lat: parseFloat(screen.latitude.toString()), lng: parseFloat(screen.longitude.toString()) }}
+                      onClick={() => setSelectedScreen(screen)}
+                      icon={{
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: selectedScreenIds.has(screen.id) ? 12 : 8,
+                        fillColor: selectedScreenIds.has(screen.id) ? "#10b981" : "#3b82f6",
+                        fillOpacity: 1,
+                        strokeColor: "#ffffff",
+                        strokeWeight: 2,
+                      }}
+                    />
+                  ))}
+
+                  {selectedScreen && (
+                    <InfoWindow
+                      position={{ lat: parseFloat(selectedScreen.latitude.toString()), lng: parseFloat(selectedScreen.longitude.toString()) }}
+                      onCloseClick={() => setSelectedScreen(null)}
+                    >
+                      <Card className="border-0 shadow-none max-w-sm">
+                        <CardContent className="p-4">
+                          <div className="space-y-3">
+                            <div>
+                              <h3 className="font-bold text-lg mb-1">{selectedScreen.name}</h3>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <MapPin className="h-4 w-4" />
+                                <span>{selectedScreen.location}, {selectedScreen.city}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="secondary">{selectedScreen.type}</Badge>
+                              <Badge variant="outline">{selectedScreen.size}</Badge>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <p className="text-muted-foreground">Daily Views</p>
+                                <p className="font-semibold">{selectedScreen.dailyViews?.toLocaleString() || "N/A"}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Price/Day</p>
+                                <p className="font-semibold text-primary">₹{selectedScreen.pricePerDay.toLocaleString()}</p>
+                              </div>
+                            </div>
+
+                            {selectedScreen.description && (
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {selectedScreen.description}
+                              </p>
+                            )}
+
+                            <Button
+                              className="w-full"
+                              variant={selectedScreenIds.has(selectedScreen.id) ? "secondary" : "default"}
+                              onClick={() => toggleScreenSelection(selectedScreen)}
+                              data-testid={`button-toggle-screen-${selectedScreen.id}`}
+                            >
+                              {selectedScreenIds.has(selectedScreen.id) ? (
+                                <>
+                                  <Check className="h-4 w-4 mr-2" />
+                                  Selected
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Add to Campaign
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </InfoWindow>
+                  )}
+                </GoogleMap>
+              </LoadScript>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

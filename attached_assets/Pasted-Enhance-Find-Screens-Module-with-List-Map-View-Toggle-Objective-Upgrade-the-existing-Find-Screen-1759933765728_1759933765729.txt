@@ -1,0 +1,87 @@
+Enhance Find Screens Module with List + Map View Toggle
+
+Objective:
+Upgrade the existing Find Screens functionality in the PixelSpot Advertiser Portal to allow users to toggle between List View (default) and Map View for discovering advertising screens.
+The flow should be smooth and UI-consistent with the rest of the portal.
+
+Tasks
+
+Add View Toggle Controls
+
+Create a toggle at the top of the “Find Screens” section:
+
+Option 1️⃣ List View (default)
+
+Option 2️⃣ Map View
+
+Use icons or tabs:
+
+List icon = table or card-style layout
+
+Map icon = map pin layout (Google Maps)
+
+Default Behavior
+
+On page load → show List View by default.
+
+When user clicks Map View, switch the right panel to display the map (as seen currently).
+
+List View
+
+Display screens in card format or table:
+
+┌─────────────────────────────────────────────┐
+│ Screen Name: MG Road LED                    │
+│ City: Bengaluru                             │
+│ Price: ₹2500/day                            │
+│ Type: Outdoor Billboard                     │
+│ [View Details] [Add to Campaign]            │
+└─────────────────────────────────────────────┘
+
+
+Support:
+
+Pagination (10–20 per page)
+
+Filters (City, Screen Type, Price Range)
+
+“Add to Campaign” button same as map markers.
+
+Map View
+
+Use existing Google Map integration (no change in layout).
+
+Apply the same filters to map results dynamically.
+
+When user clicks on a pin → open screen details popup.
+
+Filter Integration
+
+Both views should share the same filter logic:
+
+City / Location
+
+Screen Type
+
+Price Range
+
+Changing filters refreshes both views simultaneously.
+
+State Persistence
+
+Remember the last selected view (list or map) using session/local storage.
+
+If user reloads the page, retain their preferred view.
+
+Optional Enhancement (Later)
+
+Add “Grid View” for quick thumbnails.
+
+Show screen counts dynamically (e.g., “42 screens found”).
+
+Outcome
+
+✅ Default view: List View with all filters.
+✅ User can toggle to Map View seamlessly.
+✅ Filters and results remain synced across both modes.
+✅ Modern, intuitive UX for advertisers browsing screens
