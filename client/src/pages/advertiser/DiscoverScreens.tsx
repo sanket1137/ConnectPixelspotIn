@@ -449,54 +449,70 @@ export default function DiscoverScreens() {
                     position={{ lat: parseFloat(selectedScreen.latitude.toString()), lng: parseFloat(selectedScreen.longitude.toString()) }}
                     onCloseClick={() => setSelectedScreen(null)}
                   >
-                    <Card className="border-0 shadow-none max-w-sm">
-                      <CardContent className="p-4">
-                        <div className="space-y-3">
-                          <div>
-                            <h3 className="font-bold text-lg mb-1">{selectedScreen.name}</h3>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <MapPin className="h-4 w-4" />
-                              <span>{selectedScreen.location}, {selectedScreen.city}</span>
-                            </div>
+                    <div className="max-w-sm">
+                      {/* Screen Image */}
+                      <div className="relative h-40 bg-muted overflow-hidden rounded-t-md mb-3">
+                        {selectedScreen.images && selectedScreen.images.length > 0 ? (
+                          <img
+                            src={selectedScreen.images[0]}
+                            alt={selectedScreen.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = 'https://placehold.co/400x250/1a1a1a/666?text=No+Image';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-muted">
+                            <MapPin className="w-10 h-10 text-muted-foreground/50" />
                           </div>
+                        )}
+                        <Badge className="absolute top-2 right-2" variant="secondary">{selectedScreen.type}</Badge>
+                      </div>
 
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="secondary">{selectedScreen.type}</Badge>
-                            <Badge variant="outline">{selectedScreen.size}</Badge>
+                      <div className="space-y-3 px-1">
+                        <div>
+                          <h3 className="font-bold text-lg mb-1">{selectedScreen.name}</h3>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <MapPin className="h-4 w-4" />
+                            <span>{selectedScreen.location}, {selectedScreen.city}</span>
                           </div>
-
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between text-sm">
-                              <p className="text-muted-foreground">Price/Day</p>
-                              <p className="font-semibold text-primary">₹{selectedScreen.pricePerDay.toLocaleString()}</p>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                              <p className="text-muted-foreground">Min Booking</p>
-                              <p className="font-semibold">{selectedScreen.minBookingDays} days</p>
-                            </div>
-                          </div>
-
-                          <Button
-                            className="w-full"
-                            variant={selectedScreenIds.has(selectedScreen.id) ? "secondary" : "default"}
-                            onClick={() => toggleScreenSelection(selectedScreen)}
-                            data-testid={`button-toggle-screen-${selectedScreen.id}`}
-                          >
-                            {selectedScreenIds.has(selectedScreen.id) ? (
-                              <>
-                                <Check className="h-4 w-4 mr-2" />
-                                Selected
-                              </>
-                            ) : (
-                              <>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Add to Campaign
-                              </>
-                            )}
-                          </Button>
                         </div>
-                      </CardContent>
-                    </Card>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline">{selectedScreen.size}</Badge>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <p className="text-muted-foreground">Price/Day</p>
+                            <p className="font-semibold text-primary">₹{selectedScreen.pricePerDay.toLocaleString()}</p>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <p className="text-muted-foreground">Min Booking</p>
+                            <p className="font-semibold">{selectedScreen.minBookingDays} days</p>
+                          </div>
+                        </div>
+
+                        <Button
+                          className="w-full"
+                          variant={selectedScreenIds.has(selectedScreen.id) ? "secondary" : "default"}
+                          onClick={() => toggleScreenSelection(selectedScreen)}
+                          data-testid={`button-toggle-screen-${selectedScreen.id}`}
+                        >
+                          {selectedScreenIds.has(selectedScreen.id) ? (
+                            <>
+                              <Check className="h-4 w-4 mr-2" />
+                              Selected
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add to Campaign
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
                   </InfoWindow>
                 )}
               </GoogleMap>
