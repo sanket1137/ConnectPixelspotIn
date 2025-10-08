@@ -146,12 +146,7 @@ export default function ScreensList() {
                     <Button 
                       variant="outline" 
                       size="icon" 
-                      onClick={() => {
-                        toast({
-                          title: "Coming Soon",
-                          description: "Screen editing functionality will be available soon. For now, you can delete and recreate screens.",
-                        });
-                      }}
+                      onClick={() => setLocation(`/owner/screens/edit/${screen.id}`)}
                       data-testid={`button-edit-${screen.id}`}
                     >
                       <Edit className="h-4 w-4" />

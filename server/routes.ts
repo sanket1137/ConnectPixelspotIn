@@ -436,6 +436,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get single screen by ID (owner)
+  app.get("/api/owner/screens/:id", authenticate, requireRole("screen_owner"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const screen = await storage.getScreen(id);
+
+      if (!screen || screen.ownerId !== req.user!.id) {
+        return res.status(404).json({ error: "Screen not found" });
+      }
+
+      res.json(screen);
+    } catch (error) {
+      console.error("Get screen error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Create screen (owner)
   app.post("/api/owner/screens", authenticate, requireRole("screen_owner"), async (req, res) => {
     try {

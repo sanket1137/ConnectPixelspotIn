@@ -20,6 +20,7 @@ import Settings from "@/pages/admin/Settings";
 import OwnerDashboard from "@/pages/owner/OwnerDashboard";
 import ScreensList from "@/pages/owner/ScreensList";
 import AddScreen from "@/pages/owner/AddScreen";
+import EditScreen from "@/pages/owner/EditScreen";
 import BookingRequests from "@/pages/owner/BookingRequests";
 import AdvertiserDashboard from "@/pages/advertiser/AdvertiserDashboard";
 import DiscoverScreens from "@/pages/advertiser/DiscoverScreens";
@@ -107,6 +108,11 @@ function Router() {
       <Route path="/owner/screens/new">
         <AuthGuard allowedRoles={["screen_owner"]}>
           <AddScreen />
+        </AuthGuard>
+      </Route>
+      <Route path="/owner/screens/edit/:id">
+        <AuthGuard allowedRoles={["screen_owner"]}>
+          <EditScreen />
         </AuthGuard>
       </Route>
       <Route path="/owner/bookings">
