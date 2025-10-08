@@ -1,0 +1,102 @@
+Fix Screen Visibility & Add Images in Advertiser Portal (Map + List View)
+
+Objective:
+Improve the Advertiser Portal experience by ensuring that:
+1️⃣ Each screen’s image/thumbnail is visible in both List View and Map View.
+2️⃣ Advertisers can view essential screen details only — not full admin data — ensuring clean, limited access.
+
+Tasks
+1. Show Screen Image in Both Views
+
+List View:
+
+For each screen card, display the primary image thumbnail (use screen_image or first item from media_gallery).
+
+Layout example:
+
+┌───────────────────────────────┐
+│ 🖼️  [Screen Image Thumbnail]  │
+│ Screen Name: MG Road LED      │
+│ Venue: Indiranagar, BLR       │
+│ Price: ₹2500/day              │
+│ Type: LED Video Wall          │
+│ [View Details] [Add to Campaign]
+└───────────────────────────────┘
+
+
+Map View:
+
+When clicking a map marker, the popup should show:
+
+Screen image thumbnail
+
+Screen name + location
+
+Price per day
+
+Button: “View More / Add to Campaign”
+
+Example popup:
+
+🖼️  [Image]
+MG Road LED
+₹2500/day • Indiranagar
+[Add to Campaign]
+
+
+Fallback Logic:
+
+If image missing → show default placeholder banner: /assets/img/no-screen-image.png
+
+2. Restrict Screen Detail Visibility for Advertisers
+
+Advertisers should not see internal fields like:
+
+Owner info
+
+Internal IDs
+
+Maintenance, Booking, or Revenue data
+
+Dynamic Pricing toggles or backend metadata
+
+Allowed fields for advertiser view:
+
+Field	Description
+Screen Name	Display name
+Venue Name	Mall / Café / Apartment name
+City	City or area
+Screen Type	LED / Digital Display
+Price per Day	Public rate
+Size	Dimensions
+Footfall / Reach (optional)	Read-only estimate
+Image / Video	Preview asset
+“Add to Campaign” Button	Trigger for booking flow
+
+Ensure permission-level separation:
+
+Admin / Owner Portal: full details (edit, price, manage)
+
+Advertiser Portal: view-only public subset (read, add to campaign)
+
+3. Performance & Sync
+
+Optimize image loading:
+
+Use compressed thumbnails (webp) for list/map previews.
+
+Lazy-load images in list view.
+
+Cache API calls for map markers to avoid redundant fetch.
+
+4. Testing Criteria
+
+✅ Images show correctly in both list and map view.
+
+✅ No full-detail leakage to advertisers.
+
+✅ Clicking on marker or card opens lightweight preview modal, not full admin detail.
+
+✅ Missing image gracefully handled with placeholder.
+
+✅ Works across desktop + mobile responsive layouts.

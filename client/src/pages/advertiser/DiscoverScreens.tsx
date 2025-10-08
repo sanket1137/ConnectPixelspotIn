@@ -291,22 +291,34 @@ export default function DiscoverScreens() {
           <div className="h-full overflow-y-auto p-6">
             <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {paginatedScreens.map((screen) => (
-                <Card key={screen.id} className="hover-elevate" data-testid={`card-screen-${screen.id}`}>
-                  <CardHeader className="gap-2 space-y-0 pb-4">
-                    <div className="flex items-start justify-between">
-                      <div className="p-3 bg-primary/10 rounded-lg">
-                        <MapPin className="w-5 h-5 text-primary" />
+                <Card key={screen.id} className="hover-elevate overflow-hidden" data-testid={`card-screen-${screen.id}`}>
+                  {/* Screen Image */}
+                  <div className="relative h-48 bg-muted overflow-hidden">
+                    {screen.images && screen.images.length > 0 ? (
+                      <img
+                        src={screen.images[0]}
+                        alt={screen.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://placehold.co/400x300/1a1a1a/666?text=No+Image';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted">
+                        <MapPin className="w-12 h-12 text-muted-foreground/50" />
                       </div>
-                      <Badge variant="secondary">{screen.type}</Badge>
-                    </div>
+                    )}
+                    <Badge className="absolute top-2 right-2" variant="secondary">{screen.type}</Badge>
+                  </div>
+
+                  <CardHeader className="gap-2 space-y-0 pb-4">
                     <CardTitle className="text-lg">{screen.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <MapPin className="w-4 h-4" />
                       <span className="truncate">{screen.location}, {screen.city}</span>
                     </div>
-                    
+                  </CardHeader>
+                  <CardContent className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{screen.size}</Badge>
                     </div>
