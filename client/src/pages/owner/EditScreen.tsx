@@ -225,29 +225,61 @@ export default function EditScreen() {
   };
 
   const handleGetUploadParameters = async () => {
-    const response = await apiRequest("POST", "/api/objects/upload", {});
-    const data = await response.json();
-    return {
-      method: "PUT" as const,
-      url: data.uploadURL,
-    };
+    try {
+      console.log("Getting upload parameters...");
+      const response = await apiRequest("POST", "/api/objects/upload", {});
+      const data = await response.json();
+      console.log("Upload parameters received:", data);
+      return {
+        method: "PUT" as const,
+        url: data.uploadURL,
+      };
+    } catch (error) {
+      console.error("Error getting upload parameters:", error);
+      toast({
+        title: "Upload Error",
+        description: "Failed to initialize upload. Please try again.",
+        variant: "destructive",
+      });
+      throw error;
+    }
   };
 
   const handleUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
-    if (result.successful && result.successful.length > 0) {
-      const uploadedFile = result.successful[0];
-      const fileURL = uploadedFile.uploadURL;
+    try {
+      console.log("Upload complete result:", result);
+      
+      if (result.successful && result.successful.length > 0) {
+        const uploadedFile = result.successful[0];
+        const fileURL = uploadedFile.uploadURL;
+        console.log("File uploaded to:", fileURL);
 
-      const response = await apiRequest("PUT", "/api/objects/entity", {
-        fileURL,
-        entityType: "screen",
-      });
-      const data = await response.json();
-      setUploadedImageURL(data.objectPath);
+        const response = await apiRequest("PUT", "/api/objects/entity", {
+          fileURL,
+          entityType: "screen",
+        });
+        const data = await response.json();
+        console.log("Entity response:", data);
+        setUploadedImageURL(data.objectPath);
 
+        toast({
+          title: "Image Uploaded",
+          description: "Screen image uploaded successfully",
+        });
+      } else if (result.failed && result.failed.length > 0) {
+        console.error("Upload failed:", result.failed);
+        toast({
+          title: "Upload Failed",
+          description: "Failed to upload image. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error in upload complete handler:", error);
       toast({
-        title: "Image Uploaded",
-        description: "Screen image uploaded successfully",
+        title: "Upload Error",
+        description: "An error occurred while processing the upload.",
+        variant: "destructive",
       });
     }
   };
@@ -988,7 +1020,18 @@ export default function EditScreen() {
                 </div>
                 <CardDescription>Upload images of your screen (optional)</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {(screen?.images && screen.images.length > 0) && !uploadedImageURL && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Current Image:</p>
+                    <img 
+                      src={screen.images[0]} 
+                      alt="Screen" 
+                      className="w-32 h-32 object-cover rounded-lg border border-border"
+                    />
+                  </div>
+                )}
+                
                 <div className="flex items-center gap-4">
                   <ObjectUploader
                     maxNumberOfFiles={1}
@@ -1000,16 +1043,16 @@ export default function EditScreen() {
                     buttonTestId="button-upload-screen-image"
                   >
                     <Upload className="mr-2 h-4 w-4" />
-                    Upload Screen Image
+                    {uploadedImageURL || (screen?.images && screen.images.length > 0) ? "Replace Image" : "Upload Screen Image"}
                   </ObjectUploader>
                   {uploadedImageURL && (
                     <div className="flex items-center gap-2 text-sm text-chart-2">
                       <Check className="h-4 w-4" />
-                      <span>Image uploaded successfully</span>
+                      <span>New image uploaded successfully</span>
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
+                <p className="text-xs text-muted-foreground">
                   Supported formats: JPG, PNG (Max 10MB)
                 </p>
               </CardContent>
