@@ -64,6 +64,14 @@ const editScreenSchema = z.object({
   type: z.string().optional(),
   size: z.string().optional(),
   operationalHours: z.string().optional(),
+}).refine((data) => {
+  if (data.isMultiScreen && !data.numberOfScreens) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Number of screens is required when multi-screen is enabled",
+  path: ["numberOfScreens"],
 });
 
 type EditScreenForm = z.infer<typeof editScreenSchema>;
@@ -164,7 +172,7 @@ export default function EditScreen() {
 
   const updateScreenMutation = useMutation({
     mutationFn: async (data: EditScreenForm) => {
-      return apiRequest("PATCH", `/api/owner/screens/${screenId}`, {
+      const payload = {
         ...data,
         pricePerDay: parseInt(data.pricePerDay),
         minBookingDays: parseInt(data.minBookingDays),
@@ -172,15 +180,17 @@ export default function EditScreen() {
         avgDailyFootfall: parseInt(data.avgDailyFootfall),
         avgDwellTime: parseInt(data.avgDwellTime),
         playbackSlotsPerHour: parseInt(data.playbackSlotsPerHour),
-        numberOfScreens: data.numberOfScreens ? parseInt(data.numberOfScreens) : null,
+        numberOfScreens: data.numberOfScreens && data.numberOfScreens.trim() ? parseInt(data.numberOfScreens) : null,
         genderSplit: { male: data.genderMale, female: data.genderFemale },
-        nearbyLandmarks: data.nearbyLandmarks ? data.nearbyLandmarks.split(",").map(l => l.trim()) : [],
-        interestSegments: data.interestSegments ? data.interestSegments.split(",").map(s => s.trim()) : [],
+        nearbyLandmarks: data.nearbyLandmarks ? data.nearbyLandmarks.split(",").map(l => l.trim()).filter(l => l) : [],
+        interestSegments: data.interestSegments ? data.interestSegments.split(",").map(s => s.trim()).filter(s => s) : [],
         images: uploadedImageURL ? [uploadedImageURL] : (screen?.images || []),
         type: data.category,
         size: `${data.resolution}`,
         operationalHours: JSON.stringify({ start: "08:00", end: "22:00" }),
-      });
+      };
+      console.log("Sending update payload:", payload);
+      return apiRequest("PATCH", `/api/owner/screens/${screenId}`, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/owner/screens"] });
@@ -201,7 +211,17 @@ export default function EditScreen() {
   });
 
   const onSubmit = (data: EditScreenForm) => {
+    console.log("Form submitted with data:", data);
     updateScreenMutation.mutate(data);
+  };
+
+  const handleFormError = (errors: any) => {
+    console.log("Form validation errors:", errors);
+    toast({
+      title: "Validation Error",
+      description: "Please check all required fields and fix any errors.",
+      variant: "destructive",
+    });
   };
 
   const handleGetUploadParameters = async () => {
@@ -268,7 +288,7 @@ export default function EditScreen() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit, handleFormError)} className="space-y-6">
             
             {/* Section 1 - Screen Identity */}
             <Card>
