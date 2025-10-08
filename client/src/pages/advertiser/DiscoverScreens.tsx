@@ -340,22 +340,16 @@ export default function DiscoverScreens() {
                         <Badge variant="outline">{screen.size}</Badge>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <p className="text-muted-foreground">Daily Views</p>
-                          <p className="font-semibold">{screen.dailyViews?.toLocaleString() || "N/A"}</p>
-                        </div>
-                        <div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
                           <p className="text-muted-foreground">Price/Day</p>
                           <p className="font-semibold text-primary">₹{screen.pricePerDay.toLocaleString()}</p>
                         </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <p className="text-muted-foreground">Min Booking</p>
+                          <p className="font-semibold">{screen.minBookingDays} days</p>
+                        </div>
                       </div>
-
-                      {screen.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {screen.description}
-                        </p>
-                      )}
 
                       <div className="flex gap-2 pt-2">
                         <Button
@@ -472,22 +466,16 @@ export default function DiscoverScreens() {
                               <Badge variant="outline">{selectedScreen.size}</Badge>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3 text-sm">
-                              <div>
-                                <p className="text-muted-foreground">Daily Views</p>
-                                <p className="font-semibold">{selectedScreen.dailyViews?.toLocaleString() || "N/A"}</p>
-                              </div>
-                              <div>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-sm">
                                 <p className="text-muted-foreground">Price/Day</p>
                                 <p className="font-semibold text-primary">₹{selectedScreen.pricePerDay.toLocaleString()}</p>
                               </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <p className="text-muted-foreground">Min Booking</p>
+                                <p className="font-semibold">{selectedScreen.minBookingDays} days</p>
+                              </div>
                             </div>
-
-                            {selectedScreen.description && (
-                              <p className="text-sm text-muted-foreground line-clamp-2">
-                                {selectedScreen.description}
-                              </p>
-                            )}
 
                             <Button
                               className="w-full"
