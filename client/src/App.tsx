@@ -115,7 +115,7 @@ function Router() {
           <EditScreen />
         </AuthGuard>
       </Route>
-      <Route path="/owner/bookings">
+      <Route path="/owner/requests">
         <AuthGuard allowedRoles={["screen_owner"]}>
           <BookingRequests />
         </AuthGuard>
