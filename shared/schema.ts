@@ -50,6 +50,10 @@ export const screens = pgTable("screens", {
   avgDwellTime: integer("avg_dwell_time").notNull(), // minutes
   interestSegments: text("interest_segments").array(), // Fitness, Coffee, Tech, Luxury Cars, Fashion, Foodies
   
+  // User Intent & Mood (for campaign targeting)
+  userIntent: text("user_intent").array(), // Shopping, Commuting, Dining, Fitness, Entertainment, Work, Education
+  userMood: text("user_mood").array(), // Relaxed, Rushed, Social, Focused, Leisure
+  
   // Commercial & Campaign Data
   isMultiScreen: boolean("is_multi_screen").notNull().default(false),
   numberOfScreens: integer("number_of_screens"), // Required if isMultiScreen is true
