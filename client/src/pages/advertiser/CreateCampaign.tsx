@@ -148,16 +148,18 @@ export default function CreateCampaign() {
     }
 
     // Intent filtering (match with userIntent)
+    // Include screens without userIntent data (backward compatibility)
     if (formData.targetIntent && formData.targetIntent.length > 0) {
       filtered = filtered.filter(s => 
-        s.userIntent && s.userIntent.some(intent => formData.targetIntent.includes(intent))
+        !s.userIntent || s.userIntent.length === 0 || s.userIntent.some(intent => formData.targetIntent.includes(intent))
       );
     }
 
     // Mood filtering (match with userMood)
+    // Include screens without userMood data (backward compatibility)
     if (formData.targetMood && formData.targetMood.length > 0) {
       filtered = filtered.filter(s => 
-        s.userMood && s.userMood.some(mood => formData.targetMood.includes(mood))
+        !s.userMood || s.userMood.length === 0 || s.userMood.some(mood => formData.targetMood.includes(mood))
       );
     }
 
