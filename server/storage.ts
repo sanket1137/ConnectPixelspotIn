@@ -49,6 +49,8 @@ export interface IStorage {
   rejectBookingByOwner(id: string, reason: string, alternativeDates?: { startDate: string; endDate: string }): Promise<Booking | undefined>;
   approveBookingByAdmin(id: string): Promise<Booking | undefined>;
   rejectBookingByAdmin(id: string, notes: string): Promise<Booking | undefined>;
+  acceptAlternativeDates(id: string): Promise<Booking | undefined>;
+  updateBookingDates(id: string, startDate: string, endDate: string, adminNotes?: string): Promise<Booking | undefined>;
   
   // Payment methods
   getPayment(id: string): Promise<Payment | undefined>;
@@ -251,6 +253,35 @@ export class DatabaseStorage implements IStorage {
       status: "rejected",
       adminNotes: notes
     }).where(eq(bookings.id, id)).returning();
+    return booking || undefined;
+  }
+
+  async acceptAlternativeDates(id: string): Promise<Booking | undefined> {
+    const booking = await this.getBooking(id);
+    if (!booking || !booking.alternativeDates) {
+      return undefined;
+    }
+
+    const altDates = booking.alternativeDates as { startDate: string; endDate: string };
+    const [updatedBooking] = await db.update(bookings).set({
+      startDate: new Date(altDates.startDate),
+      endDate: new Date(altDates.endDate),
+      status: "pending_owner",
+      ownerResponse: null,
+      alternativeDates: null,
+      ownerRespondedAt: null,
+    }).where(eq(bookings.id, id)).returning();
+    return updatedBooking || undefined;
+  }
+
+  async updateBookingDates(id: string, startDate: string, endDate: string, adminNotes?: string): Promise<Booking | undefined> {
+    const updateData: any = {
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      adminNotes: adminNotes || null,
+    };
+
+    const [booking] = await db.update(bookings).set(updateData).where(eq(bookings.id, id)).returning();
     return booking || undefined;
   }
 

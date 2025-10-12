@@ -4,6 +4,9 @@ import { storage } from "./storage";
 import { verifyToken } from "./firebaseAdmin";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { User } from "@shared/schema";
+import { db } from "./db";
+import { bookings } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 // Extend Express Request to include user
 declare global {
@@ -384,6 +387,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update booking dates (admin)
+  app.patch("/api/admin/bookings/:id/update-dates", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { startDate, endDate, notes } = req.body;
+      
+      const booking = await storage.updateBookingDates(id, startDate, endDate, notes);
+      
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      res.json(booking);
+    } catch (error) {
+      console.error("Admin update booking dates error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Create screen on behalf of owner (admin)
   app.post("/api/admin/screens/create", authenticate, requireRole("admin"), async (req, res) => {
     try {
@@ -730,6 +752,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(enrichedBookings);
     } catch (error) {
       console.error("Get advertiser bookings error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get specific campaign with all bookings (advertiser)
+  app.get("/api/advertiser/campaigns/:id", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const campaign = await storage.getCampaign(id);
+      
+      if (!campaign || campaign.advertiserId !== req.user!.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      const campaignBookings = await storage.getBookingsByCampaign(id);
+      
+      // Enrich bookings with screen details
+      const enrichedBookings = await Promise.all(
+        campaignBookings.map(async (booking) => {
+          const screen = await storage.getScreen(booking.screenId);
+          return {
+            ...booking,
+            screen,
+          };
+        })
+      );
+
+      res.json({
+        ...campaign,
+        bookings: enrichedBookings,
+      });
+    } catch (error) {
+      console.error("Get campaign details error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Accept alternative dates proposed by screen owner
+  app.patch("/api/advertiser/bookings/:id/accept-alternative", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Verify ownership
+      const booking = await storage.getBooking(id);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      const campaign = await storage.getCampaign(booking.campaignId);
+      if (!campaign || campaign.advertiserId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const updatedBooking = await storage.acceptAlternativeDates(id);
+      res.json(updatedBooking);
+    } catch (error) {
+      console.error("Accept alternative dates error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Reject alternative dates and keep booking as rejected
+  app.patch("/api/advertiser/bookings/:id/reject-alternative", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Verify ownership
+      const booking = await storage.getBooking(id);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      
+      const campaign = await storage.getCampaign(booking.campaignId);
+      if (!campaign || campaign.advertiserId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Keep status as owner_rejected but clear alternative dates
+      const [updatedBooking] = await db.update(bookings).set({
+        alternativeDates: null,
+      }).where(eq(bookings.id, id)).returning();
+      
+      res.json(updatedBooking);
+    } catch (error) {
+      console.error("Reject alternative dates error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
