@@ -116,7 +116,7 @@ export default function CreateCampaign() {
       filtered = filtered.filter(s => formData.targetCities?.includes(s.city));
     } else if (formData.targetLocationType === "state" && formData.targetState) {
       // Filter by state (you'd need state info in screens - for now we'll match by city)
-      filtered = filtered.filter(s => s.city.toLowerCase().includes(formData.targetState.toLowerCase()));
+      filtered = filtered.filter(s => s.city.toLowerCase().includes((formData.targetState || '').toLowerCase()));
     } else if (formData.targetLocationType === "pincodes" && formData.targetPincodes && formData.targetPincodes.length > 0) {
       filtered = filtered.filter(s => formData.targetPincodes?.includes(s.pincode));
     }
