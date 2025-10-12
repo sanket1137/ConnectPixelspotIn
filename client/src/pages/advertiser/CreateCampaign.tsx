@@ -295,7 +295,10 @@ export default function CreateCampaign() {
   };
 
   const onSubmit = (data: CreateCampaignForm) => {
-    if (currentStep < steps.length) return;
+    // Prevent accidental submission - only allow from final step with explicit button click
+    if (currentStep !== steps.length) {
+      return;
+    }
     
     if (selectedScreenIds.length === 0) {
       toast({
@@ -306,6 +309,11 @@ export default function CreateCampaign() {
       return;
     }
     createCampaignMutation.mutate(data);
+  };
+
+  const handleCreateCampaign = () => {
+    // Explicitly trigger form submission only when Create Campaign button is clicked
+    form.handleSubmit(onSubmit)();
   };
 
   const nextStep = async () => {
@@ -479,7 +487,12 @@ export default function CreateCampaign() {
         </CardHeader>
         <CardContent className="space-y-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault(); // Prevent form submission unless explicitly triggered
+              }} 
+              className="space-y-6"
+            >
               {/* Step 1: Objective & Location */}
               {currentStep === 1 && (
                 <div className="space-y-4">
@@ -1117,7 +1130,8 @@ export default function CreateCampaign() {
                   </Button>
                 ) : (
                   <Button
-                    type="submit"
+                    type="button"
+                    onClick={handleCreateCampaign}
                     disabled={createCampaignMutation.isPending || selectedScreenIds.length === 0}
                     data-testid="button-submit"
                   >
