@@ -93,7 +93,17 @@ export default function CampaignsList() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-6 pt-3 border-t border-border">
+                    <div className="grid grid-cols-4 gap-6 pt-3 border-t border-border">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Created</p>
+                          <p className="text-sm font-medium text-foreground">
+                            {format(new Date(campaign.createdAt), "MMM d, yyyy")}
+                          </p>
+                        </div>
+                      </div>
+
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         <div>
