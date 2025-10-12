@@ -74,9 +74,30 @@ export const campaigns = pgTable("campaigns", {
   advertiserId: varchar("advertiser_id").notNull(),
   name: text("name").notNull(),
   objective: text("objective").notNull(), // brand_awareness, product_launch, event_promotion, etc.
+  
+  // Targeting criteria
+  targetLocationType: text("target_location_type"), // city, state, india, pincodes
+  targetCities: text("target_cities").array(), // Array of city names
+  targetState: text("target_state"), // State name for state-level targeting
+  targetPincodes: text("target_pincodes").array(), // Array of pincodes
+  
+  // Demographics & Persona
+  targetAgeGroups: text("target_age_groups").array(), // 18-25, 25-40, 40-60, 60+
+  targetGender: text("target_gender"), // male, female, all
+  targetAffluence: text("target_affluence").array(), // Premium, Mid, Budget
+  targetOccupations: text("target_occupations").array(), // Students, Working Professionals, etc.
+  
+  // Intent & Mood
+  targetIntent: text("target_intent").array(), // Shopping, Commuting, Dining, Fitness, Entertainment
+  targetMood: text("target_mood").array(), // Relaxed, Rushed, Social, Focused
+  
+  // Venue type filters (optional)
+  venueTypeFilters: text("venue_type_filters").array(), // Apartment, Road Junction, Highway, Restaurant, Shopping Complex
+  
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
   budget: integer("budget").notNull(),
+  estimatedBudget: integer("estimated_budget"), // AI-calculated budget based on recommended screens
   creativeUrl: text("creative_url"), // URL to uploaded creative from object storage
   status: text("status").notNull().default("pending"), // pending, approved, live, completed, rejected
   createdAt: timestamp("created_at").defaultNow().notNull(),
