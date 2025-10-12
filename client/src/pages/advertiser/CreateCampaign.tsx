@@ -147,12 +147,17 @@ export default function CreateCampaign() {
       );
     }
 
-    // Intent filtering (match with interest segments)
+    // Intent filtering (match with userIntent)
     if (formData.targetIntent && formData.targetIntent.length > 0) {
       filtered = filtered.filter(s => 
-        s.interestSegments && s.interestSegments.some(interest => 
-          formData.targetIntent.some(intent => interest.toLowerCase().includes(intent.toLowerCase()))
-        )
+        s.userIntent && s.userIntent.some(intent => formData.targetIntent.includes(intent))
+      );
+    }
+
+    // Mood filtering (match with userMood)
+    if (formData.targetMood && formData.targetMood.length > 0) {
+      filtered = filtered.filter(s => 
+        s.userMood && s.userMood.some(mood => formData.targetMood.includes(mood))
       );
     }
 
