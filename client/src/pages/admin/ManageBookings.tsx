@@ -4,10 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, DollarSign, Check, X, Monitor, AlertCircle, CheckCircle } from "lucide-react";
+import { Calendar, DollarSign, Check, X, Monitor, AlertCircle, CheckCircle, Edit } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import {
   Dialog,
@@ -42,8 +43,12 @@ interface BookingWithDetails {
 export default function ManageBookings() {
   const { toast } = useToast();
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [editDatesDialogOpen, setEditDatesDialogOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingWithDetails | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
+  const [editStartDate, setEditStartDate] = useState("");
+  const [editEndDate, setEditEndDate] = useState("");
+  const [editNotes, setEditNotes] = useState("");
 
   const { data: bookings = [], isLoading } = useQuery<BookingWithDetails[]>({
     queryKey: ["/api/admin/bookings"],
@@ -80,6 +85,33 @@ export default function ManageBookings() {
     },
   });
 
+  const updateDatesMutation = useMutation({
+    mutationFn: async ({ bookingId, startDate, endDate, notes }: { 
+      bookingId: string; 
+      startDate: string; 
+      endDate: string;
+      notes?: string;
+    }) => {
+      return apiRequest("PATCH", `/api/admin/bookings/${bookingId}/update-dates`, {
+        startDate,
+        endDate,
+        notes,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setEditDatesDialogOpen(false);
+      setEditStartDate("");
+      setEditEndDate("");
+      setEditNotes("");
+      toast({
+        title: "Dates Updated",
+        description: "The booking dates have been updated successfully.",
+      });
+    },
+  });
+
   const handleApprove = (booking: BookingWithDetails) => {
     approveMutation.mutate(booking.id);
   };
@@ -94,6 +126,24 @@ export default function ManageBookings() {
     rejectMutation.mutate({
       bookingId: selectedBooking.id,
       notes: adminNotes || "No notes provided",
+    });
+  };
+
+  const handleEditDatesClick = (booking: BookingWithDetails) => {
+    setSelectedBooking(booking);
+    setEditStartDate(booking.startDate.split('T')[0]);
+    setEditEndDate(booking.endDate.split('T')[0]);
+    setEditNotes("");
+    setEditDatesDialogOpen(true);
+  };
+
+  const handleUpdateDatesConfirm = () => {
+    if (!selectedBooking || !editStartDate || !editEndDate) return;
+    updateDatesMutation.mutate({
+      bookingId: selectedBooking.id,
+      startDate: new Date(editStartDate).toISOString(),
+      endDate: new Date(editEndDate).toISOString(),
+      notes: editNotes || undefined,
     });
   };
 
@@ -158,29 +208,41 @@ export default function ManageBookings() {
             <span className="font-bold text-primary">₹{booking.price.toLocaleString()}</span>
           </div>
 
-          {showApprovalActions && (
-            <div className="flex gap-2 pt-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleRejectClick(booking)}
-                disabled={approveMutation.isPending || rejectMutation.isPending}
-                data-testid={`button-reject-${booking.id}`}
-              >
-                <X className="mr-2 h-4 w-4" />
-                Reject
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => handleApprove(booking)}
-                disabled={approveMutation.isPending || rejectMutation.isPending}
-                data-testid={`button-approve-${booking.id}`}
-              >
-                <Check className="mr-2 h-4 w-4" />
-                Approve
-              </Button>
-            </div>
-          )}
+          <div className="flex gap-2 pt-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleEditDatesClick(booking)}
+              disabled={approveMutation.isPending || rejectMutation.isPending || updateDatesMutation.isPending}
+              data-testid={`button-edit-dates-${booking.id}`}
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Dates
+            </Button>
+            {showApprovalActions && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleRejectClick(booking)}
+                  disabled={approveMutation.isPending || rejectMutation.isPending}
+                  data-testid={`button-reject-${booking.id}`}
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Reject
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleApprove(booking)}
+                  disabled={approveMutation.isPending || rejectMutation.isPending}
+                  data-testid={`button-approve-${booking.id}`}
+                >
+                  <Check className="mr-2 h-4 w-4" />
+                  Approve
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -301,6 +363,73 @@ export default function ManageBookings() {
               data-testid="button-confirm-reject"
             >
               {rejectMutation.isPending ? "Rejecting..." : "Reject Booking"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dates Dialog */}
+      <Dialog open={editDatesDialogOpen} onOpenChange={setEditDatesDialogOpen}>
+        <DialogContent data-testid="dialog-edit-dates">
+          <DialogHeader>
+            <DialogTitle>Edit Booking Dates</DialogTitle>
+            <DialogDescription>
+              {selectedBooking && (
+                <>
+                  Modify the booking dates for <strong>{selectedBooking.screen.name}</strong>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            <div>
+              <Label htmlFor="edit-start-date">Start Date</Label>
+              <Input
+                id="edit-start-date"
+                type="date"
+                value={editStartDate}
+                onChange={(e) => setEditStartDate(e.target.value)}
+                className="mt-2"
+                data-testid="input-edit-start-date"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-end-date">End Date</Label>
+              <Input
+                id="edit-end-date"
+                type="date"
+                value={editEndDate}
+                onChange={(e) => setEditEndDate(e.target.value)}
+                className="mt-2"
+                data-testid="input-edit-end-date"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-notes">Notes (Optional)</Label>
+              <Textarea
+                id="edit-notes"
+                placeholder="Add a note explaining the date change..."
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                className="mt-2"
+                data-testid="textarea-edit-notes"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDatesDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateDatesConfirm}
+              disabled={updateDatesMutation.isPending || !editStartDate || !editEndDate}
+              data-testid="button-confirm-edit-dates"
+            >
+              {updateDatesMutation.isPending ? "Updating..." : "Update Dates"}
             </Button>
           </DialogFooter>
         </DialogContent>
