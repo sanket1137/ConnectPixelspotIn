@@ -19,9 +19,9 @@ The platform supports three distinct user roles: Admin, Screen Owner, and Advert
 
 **Key Features:**
 -   **AI-Driven Campaign Creation**: A 5-step workflow for advertisers to create highly targeted campaigns based on objectives, location, demographics, intent, duration, and venue types, culminating in AI-recommended screens and budget estimation.
--   **Dual-View Screen Discovery**: Advertisers can seamlessly toggle between a list view (card-based, paginated) and an interactive Google Maps view with custom, status-aware markers for screen selection.
+-   **Dual-View Screen Discovery**: Advertisers can seamlessly toggle between a list view (card-based, paginated) and an interactive Google Maps view with custom monitor/screen SVG icons (purple for unselected, green for selected) for screen selection.
 -   **Multi-Step Booking Approval Workflow**: Bookings require approval from both the Screen Owner and an Admin, ensuring proper oversight.
--   **Comprehensive Screen Data Model**: Screens are categorized with detailed identity, location/context, audience demographics, and commercial data to support granular targeting.
+-   **Comprehensive Screen Data Model**: Screens are categorized with detailed identity, location/context, audience demographics (including userIntent and userMood), and commercial data to support granular targeting. Screens can have multiple user intents (Shopping, Commuting, Dining, etc.) and moods (Relaxed, Rushed, Social, etc.) for precise campaign matching.
 -   **Role-Based Access Control**: Ensures secure and appropriate access to features for Admin, Screen Owner, and Advertiser roles.
 -   **File Uploads**: Integration with Replit Object Storage for managing screen images and campaign creatives.
 -   **Payment Processing**: Stripe integration for secure transactions (frontend integration pending).
