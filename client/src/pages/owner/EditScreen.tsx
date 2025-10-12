@@ -51,6 +51,8 @@ const editScreenSchema = z.object({
   occupationMix: z.array(z.string()).min(1, "Select at least one occupation"),
   avgDwellTime: z.string().min(1, "Average dwell time is required"),
   interestSegments: z.string().optional(),
+  userIntent: z.array(z.string()).min(1, "Select at least one user intent"),
+  userMood: z.array(z.string()).min(1, "Select at least one user mood"),
   
   // Commercial & Campaign Data
   isMultiScreen: z.boolean(),
@@ -117,6 +119,8 @@ export default function EditScreen() {
       occupationMix: [],
       avgDwellTime: "",
       interestSegments: "",
+      userIntent: [],
+      userMood: [],
       isMultiScreen: false,
       numberOfScreens: "",
       pricePerDay: "",
@@ -156,6 +160,8 @@ export default function EditScreen() {
         occupationMix: screen.occupationMix || [],
         avgDwellTime: screen.avgDwellTime?.toString() || "",
         interestSegments: screen.interestSegments?.join(", ") || "",
+        userIntent: screen.userIntent || [],
+        userMood: screen.userMood || [],
         isMultiScreen: screen.isMultiScreen || false,
         numberOfScreens: screen.numberOfScreens?.toString() || "",
         pricePerDay: screen.pricePerDay?.toString() || "",
@@ -184,6 +190,8 @@ export default function EditScreen() {
         genderSplit: { male: data.genderMale, female: data.genderFemale },
         nearbyLandmarks: data.nearbyLandmarks ? data.nearbyLandmarks.split(",").map(l => l.trim()).filter(l => l) : [],
         interestSegments: data.interestSegments ? data.interestSegments.split(",").map(s => s.trim()).filter(s => s) : [],
+        userIntent: data.userIntent,
+        userMood: data.userMood,
         images: uploadedImageURL ? [uploadedImageURL] : (screen?.images || []),
         type: data.category,
         size: `${data.resolution}`,
@@ -300,6 +308,9 @@ export default function EditScreen() {
       </div>
     );
   }
+
+  const intents = ["Shopping", "Commuting", "Dining", "Fitness", "Entertainment", "Work", "Education"];
+  const moods = ["Relaxed", "Rushed", "Social", "Focused", "Leisure"];
 
   return (
     <div className="min-h-screen p-8">
@@ -870,6 +881,84 @@ export default function EditScreen() {
                         <Input placeholder="Comma-separated: Fitness, Coffee, Tech, Fashion" {...field} data-testid="input-interests" />
                       </FormControl>
                       <FormDescription>Enter interests separated by commas</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="userIntent"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>User Intent at This Location</FormLabel>
+                      <FormDescription>What are people typically doing here? (Select all that apply)</FormDescription>
+                      <div className="flex flex-wrap gap-4 mt-2">
+                        {intents.map((intent) => (
+                          <FormField
+                            key={intent}
+                            control={form.control}
+                            name="userIntent"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(intent)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...field.value, intent])
+                                        : field.onChange(
+                                            field.value?.filter((value) => value !== intent)
+                                          );
+                                    }}
+                                    data-testid={`checkbox-intent-${intent.toLowerCase()}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal cursor-pointer">{intent}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="userMood"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>User Mood/State of Mind</FormLabel>
+                      <FormDescription>What's the typical mood of people at this location? (Select all that apply)</FormDescription>
+                      <div className="flex flex-wrap gap-4 mt-2">
+                        {moods.map((mood) => (
+                          <FormField
+                            key={mood}
+                            control={form.control}
+                            name="userMood"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(mood)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...field.value, mood])
+                                        : field.onChange(
+                                            field.value?.filter((value) => value !== mood)
+                                          );
+                                    }}
+                                    data-testid={`checkbox-mood-${mood.toLowerCase()}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal cursor-pointer">{mood}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
