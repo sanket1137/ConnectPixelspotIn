@@ -134,7 +134,11 @@ export default function CampaignsList() {
                   </div>
 
                   <div className="flex gap-2">
-                    <Button variant="outline" data-testid={`button-view-${campaign.id}`}>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setLocation(`/advertiser/campaigns/${campaign.id}`)}
+                      data-testid={`button-view-${campaign.id}`}
+                    >
                       <Eye className="mr-2 h-4 w-4" />
                       View Details
                     </Button>

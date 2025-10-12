@@ -25,6 +25,7 @@ import BookingRequests from "@/pages/owner/BookingRequests";
 import AdvertiserDashboard from "@/pages/advertiser/AdvertiserDashboard";
 import DiscoverScreens from "@/pages/advertiser/DiscoverScreens";
 import CampaignsList from "@/pages/advertiser/CampaignsList";
+import CampaignDetails from "@/pages/advertiser/CampaignDetails";
 import CreateCampaign from "@/pages/advertiser/CreateCampaign";
 import BookingManagement from "@/pages/advertiser/BookingManagement";
 
@@ -140,6 +141,11 @@ function Router() {
       <Route path="/advertiser/campaigns/new">
         <AuthGuard allowedRoles={["advertiser"]}>
           <CreateCampaign />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/campaigns/:id">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <CampaignDetails />
         </AuthGuard>
       </Route>
       <Route path="/advertiser/bookings">
