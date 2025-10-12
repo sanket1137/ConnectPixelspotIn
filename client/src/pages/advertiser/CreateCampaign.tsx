@@ -13,13 +13,26 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
-import { ArrowLeft, ArrowRight, Target, Users, Calendar, Filter, Monitor, Check, Trash2, DollarSign, MapPin, TrendingUp } from "lucide-react";
+import { ArrowLeft, ArrowRight, Target, Users, Calendar, Filter, Monitor, Check, Trash2, DollarSign, MapPin, TrendingUp, List, Map as MapIcon } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Screen } from "@shared/schema";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { GoogleMap, useLoadScript, Marker, InfoWindow } from "@react-google-maps/api";
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+
+const mapContainerStyle = {
+  width: '100%',
+  height: '500px'
+};
+
+const defaultCenter = {
+  lat: 12.9716,
+  lng: 77.5946
+};
 
 const createCampaignSchema = z.object({
   name: z.string().min(3, "Campaign name must be at least 3 characters"),
@@ -70,6 +83,10 @@ const indianStates = ["Karnataka", "Maharashtra", "Delhi", "Tamil Nadu", "Gujara
 const indianCities = ["Bangalore", "Mumbai", "Delhi", "Chennai", "Hyderabad", "Kolkata", "Pune", "Ahmedabad", "Jaipur"];
 
 export default function CreateCampaign() {
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+  });
+
   const [currentStep, setCurrentStep] = useState(1);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -79,6 +96,8 @@ export default function CreateCampaign() {
   const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>([]);
   const [pincodeInput, setPincodeInput] = useState("");
   const [cityInput, setCityInput] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [selectedMapScreen, setSelectedMapScreen] = useState<Screen | null>(null);
 
   const { data: allScreens = [] } = useQuery<Screen[]>({
     queryKey: ["/api/screens"],
@@ -109,89 +128,64 @@ export default function CreateCampaign() {
   const calculateRecommendedScreens = () => {
     const formData = form.getValues();
     
-    console.log("=== FILTERING DEBUG ===");
-    console.log("Form Data:", formData);
-    console.log("All Screens:", allScreens.length);
-    
     let filtered = allScreens.filter(s => s.status === "active");
-    console.log("After status filter:", filtered.length);
 
     // Location filtering
     if (formData.targetLocationType === "city" && formData.targetCities && formData.targetCities.length > 0) {
       filtered = filtered.filter(s => formData.targetCities?.includes(s.city));
-      console.log("After city filter:", filtered.length);
     } else if (formData.targetLocationType === "state" && formData.targetState) {
       filtered = filtered.filter(s => s.city.toLowerCase().includes((formData.targetState || '').toLowerCase()));
-      console.log("After state filter:", filtered.length);
     } else if (formData.targetLocationType === "pincodes" && formData.targetPincodes && formData.targetPincodes.length > 0) {
       filtered = filtered.filter(s => formData.targetPincodes?.includes(s.pincode));
-      console.log("After pincode filter:", filtered.length);
     }
 
     // Demographics filtering
     if (formData.targetAgeGroups && formData.targetAgeGroups.length > 0) {
-      const before = filtered.length;
       filtered = filtered.filter(s => 
         s.primaryAgeGroups && s.primaryAgeGroups.some(age => formData.targetAgeGroups.includes(age))
       );
-      console.log(`After age filter: ${before} -> ${filtered.length}`);
     }
 
     if (formData.targetGender && formData.targetGender !== "all" && filtered.length > 0) {
-      const before = filtered.length;
       filtered = filtered.filter(s => {
         if (!s.genderSplit) return true;
         const split = s.genderSplit as { male: number; female: number };
         return formData.targetGender === "male" ? split.male >= 40 : split.female >= 40;
       });
-      console.log(`After gender filter: ${before} -> ${filtered.length}`);
     }
 
     if (formData.targetAffluence && formData.targetAffluence.length > 0) {
-      const before = filtered.length;
       filtered = filtered.filter(s => formData.targetAffluence.includes(s.affluenceLevel));
-      console.log(`After affluence filter: ${before} -> ${filtered.length}`);
     }
 
     if (formData.targetOccupations && formData.targetOccupations.length > 0) {
-      const before = filtered.length;
       filtered = filtered.filter(s => 
         s.occupationMix && s.occupationMix.some(occ => formData.targetOccupations.includes(occ))
       );
-      console.log(`After occupation filter: ${before} -> ${filtered.length}`);
     }
 
     // Intent filtering (match with userIntent)
     if (formData.targetIntent && formData.targetIntent.length > 0) {
-      const before = filtered.length;
       filtered = filtered.filter(s => 
         !s.userIntent || s.userIntent.length === 0 || s.userIntent.some(intent => formData.targetIntent.includes(intent))
       );
-      console.log(`After intent filter: ${before} -> ${filtered.length}`);
     }
 
     // Mood filtering (match with userMood)
     if (formData.targetMood && formData.targetMood.length > 0) {
-      const before = filtered.length;
       filtered = filtered.filter(s => 
         !s.userMood || s.userMood.length === 0 || s.userMood.some(mood => formData.targetMood.includes(mood))
       );
-      console.log(`After mood filter: ${before} -> ${filtered.length}`);
     }
 
     // Venue type filtering (optional)
     if (formData.venueTypeFilters && formData.venueTypeFilters.length > 0) {
-      const before = filtered.length;
       filtered = filtered.filter(s => 
         formData.venueTypeFilters?.some(venue => 
           s.venueCategory.toLowerCase().includes(venue.toLowerCase())
         )
       );
-      console.log(`After venue filter: ${before} -> ${filtered.length}`);
     }
-
-    console.log("FINAL FILTERED COUNT:", filtered.length);
-    console.log("======================");
 
     setRecommendedScreens(filtered);
     setSelectedScreenIds(filtered.map(s => s.id)); // Auto-select all recommended
@@ -1011,12 +1005,41 @@ export default function CreateCampaign() {
                         Based on your targeting criteria, we found {recommendedScreens.length} matching screens
                       </p>
                     </div>
-                    {totalBudget > 0 && (
-                      <div className="text-right">
-                        <p className="text-sm text-muted-foreground">Estimated Budget</p>
-                        <p className="text-2xl font-bold text-primary">₹{totalBudget.toLocaleString()}</p>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {/* View Toggle */}
+                      {recommendedScreens.length > 0 && (
+                        <div className="flex items-center gap-1 border rounded-md p-1">
+                          <Button
+                            type="button"
+                            variant={viewMode === "list" ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={() => setViewMode("list")}
+                            className="gap-1"
+                            data-testid="button-list-view"
+                          >
+                            <List className="h-4 w-4" />
+                            List
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={viewMode === "map" ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={() => setViewMode("map")}
+                            className="gap-1"
+                            data-testid="button-map-view"
+                          >
+                            <MapIcon className="h-4 w-4" />
+                            Map
+                          </Button>
+                        </div>
+                      )}
+                      {totalBudget > 0 && (
+                        <div className="text-right">
+                          <p className="text-sm text-muted-foreground">Estimated Budget</p>
+                          <p className="text-2xl font-bold text-primary">₹{totalBudget.toLocaleString()}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {recommendedScreens.length === 0 ? (
@@ -1026,6 +1049,7 @@ export default function CreateCampaign() {
                       </AlertDescription>
                     </Alert>
                   ) : (
+                    viewMode === "list" ? (
                     <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                       {recommendedScreens.map((screen) => {
                         const isSelected = selectedScreenIds.includes(screen.id);
@@ -1100,6 +1124,110 @@ export default function CreateCampaign() {
                         );
                       })}
                     </div>
+                  ) : (
+                    <div className="border rounded-md overflow-hidden">
+                      {!isLoaded ? (
+                        <div className="flex items-center justify-center h-[500px]">
+                          <p className="text-muted-foreground">Loading map...</p>
+                        </div>
+                      ) : (
+                        <GoogleMap
+                          mapContainerStyle={mapContainerStyle}
+                          center={recommendedScreens.length > 0 ? {
+                            lat: parseFloat(recommendedScreens[0].latitude.toString()),
+                            lng: parseFloat(recommendedScreens[0].longitude.toString())
+                          } : defaultCenter}
+                          zoom={11}
+                          options={{
+                            zoomControl: true,
+                            streetViewControl: false,
+                            mapTypeControl: false,
+                            fullscreenControl: true,
+                          }}
+                        >
+                          {recommendedScreens.map((screen) => {
+                            const isSelected = selectedScreenIds.includes(screen.id);
+                            const iconSvg = `
+                              <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                                <rect x="5" y="8" width="30" height="20" rx="2" fill="${isSelected ? '#10b981' : '#7c3aed'}" stroke="white" stroke-width="2"/>
+                                <rect x="7" y="10" width="26" height="16" fill="${isSelected ? '#059669' : '#6d28d9'}"/>
+                                <rect x="15" y="28" width="10" height="2" fill="${isSelected ? '#10b981' : '#7c3aed'}"/>
+                                <rect x="12" y="30" width="16" height="3" rx="1" fill="${isSelected ? '#10b981' : '#7c3aed'}"/>
+                              </svg>
+                            `;
+                            
+                            return (
+                              <Marker
+                                key={screen.id}
+                                position={{ 
+                                  lat: parseFloat(screen.latitude.toString()), 
+                                  lng: parseFloat(screen.longitude.toString()) 
+                                }}
+                                onClick={() => setSelectedMapScreen(screen)}
+                                icon={{
+                                  url: `data:image/svg+xml;base64,${btoa(iconSvg)}`,
+                                  scaledSize: new google.maps.Size(40, 40),
+                                  anchor: new google.maps.Point(20, 35),
+                                }}
+                              />
+                            );
+                          })}
+
+                          {selectedMapScreen && (
+                            <InfoWindow
+                              position={{ 
+                                lat: parseFloat(selectedMapScreen.latitude.toString()), 
+                                lng: parseFloat(selectedMapScreen.longitude.toString()) 
+                              }}
+                              onCloseClick={() => setSelectedMapScreen(null)}
+                            >
+                              <div className="max-w-sm p-2">
+                                <h3 className="font-bold text-base mb-1">{selectedMapScreen.name}</h3>
+                                <p className="text-sm text-muted-foreground mb-2">
+                                  {selectedMapScreen.venueName} • {selectedMapScreen.city}
+                                </p>
+                                <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Venue</p>
+                                    <p className="font-medium">{selectedMapScreen.venueCategory}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Price/Day</p>
+                                    <p className="font-semibold text-primary">₹{selectedMapScreen.pricePerDay.toLocaleString()}</p>
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant={selectedScreenIds.includes(selectedMapScreen.id) ? "destructive" : "default"}
+                                  size="sm"
+                                  className="w-full"
+                                  onClick={() => {
+                                    if (selectedScreenIds.includes(selectedMapScreen.id)) {
+                                      removeScreen(selectedMapScreen.id);
+                                    } else {
+                                      setSelectedScreenIds(prev => [...prev, selectedMapScreen.id]);
+                                    }
+                                  }}
+                                >
+                                  {selectedScreenIds.includes(selectedMapScreen.id) ? (
+                                    <>
+                                      <Trash2 className="h-3 w-3 mr-1" />
+                                      Remove
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Check className="h-3 w-3 mr-1" />
+                                      Add to Campaign
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            </InfoWindow>
+                          )}
+                        </GoogleMap>
+                      )}
+                    </div>
+                    )
                   )}
 
                   <Separator />
