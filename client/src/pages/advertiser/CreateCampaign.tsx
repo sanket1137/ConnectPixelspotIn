@@ -109,68 +109,89 @@ export default function CreateCampaign() {
   const calculateRecommendedScreens = () => {
     const formData = form.getValues();
     
+    console.log("=== FILTERING DEBUG ===");
+    console.log("Form Data:", formData);
+    console.log("All Screens:", allScreens.length);
+    
     let filtered = allScreens.filter(s => s.status === "active");
+    console.log("After status filter:", filtered.length);
 
     // Location filtering
     if (formData.targetLocationType === "city" && formData.targetCities && formData.targetCities.length > 0) {
       filtered = filtered.filter(s => formData.targetCities?.includes(s.city));
+      console.log("After city filter:", filtered.length);
     } else if (formData.targetLocationType === "state" && formData.targetState) {
-      // Filter by state (you'd need state info in screens - for now we'll match by city)
       filtered = filtered.filter(s => s.city.toLowerCase().includes((formData.targetState || '').toLowerCase()));
+      console.log("After state filter:", filtered.length);
     } else if (formData.targetLocationType === "pincodes" && formData.targetPincodes && formData.targetPincodes.length > 0) {
       filtered = filtered.filter(s => formData.targetPincodes?.includes(s.pincode));
+      console.log("After pincode filter:", filtered.length);
     }
-    // If "india" is selected, all screens are eligible
 
     // Demographics filtering
     if (formData.targetAgeGroups && formData.targetAgeGroups.length > 0) {
+      const before = filtered.length;
       filtered = filtered.filter(s => 
         s.primaryAgeGroups && s.primaryAgeGroups.some(age => formData.targetAgeGroups.includes(age))
       );
+      console.log(`After age filter: ${before} -> ${filtered.length}`);
     }
 
     if (formData.targetGender && formData.targetGender !== "all" && filtered.length > 0) {
+      const before = filtered.length;
       filtered = filtered.filter(s => {
         if (!s.genderSplit) return true;
         const split = s.genderSplit as { male: number; female: number };
         return formData.targetGender === "male" ? split.male >= 40 : split.female >= 40;
       });
+      console.log(`After gender filter: ${before} -> ${filtered.length}`);
     }
 
     if (formData.targetAffluence && formData.targetAffluence.length > 0) {
+      const before = filtered.length;
       filtered = filtered.filter(s => formData.targetAffluence.includes(s.affluenceLevel));
+      console.log(`After affluence filter: ${before} -> ${filtered.length}`);
     }
 
     if (formData.targetOccupations && formData.targetOccupations.length > 0) {
+      const before = filtered.length;
       filtered = filtered.filter(s => 
         s.occupationMix && s.occupationMix.some(occ => formData.targetOccupations.includes(occ))
       );
+      console.log(`After occupation filter: ${before} -> ${filtered.length}`);
     }
 
     // Intent filtering (match with userIntent)
-    // Include screens without userIntent data (backward compatibility)
     if (formData.targetIntent && formData.targetIntent.length > 0) {
+      const before = filtered.length;
       filtered = filtered.filter(s => 
         !s.userIntent || s.userIntent.length === 0 || s.userIntent.some(intent => formData.targetIntent.includes(intent))
       );
+      console.log(`After intent filter: ${before} -> ${filtered.length}`);
     }
 
     // Mood filtering (match with userMood)
-    // Include screens without userMood data (backward compatibility)
     if (formData.targetMood && formData.targetMood.length > 0) {
+      const before = filtered.length;
       filtered = filtered.filter(s => 
         !s.userMood || s.userMood.length === 0 || s.userMood.some(mood => formData.targetMood.includes(mood))
       );
+      console.log(`After mood filter: ${before} -> ${filtered.length}`);
     }
 
     // Venue type filtering (optional)
     if (formData.venueTypeFilters && formData.venueTypeFilters.length > 0) {
+      const before = filtered.length;
       filtered = filtered.filter(s => 
         formData.venueTypeFilters?.some(venue => 
           s.venueCategory.toLowerCase().includes(venue.toLowerCase())
         )
       );
+      console.log(`After venue filter: ${before} -> ${filtered.length}`);
     }
+
+    console.log("FINAL FILTERED COUNT:", filtered.length);
+    console.log("======================");
 
     setRecommendedScreens(filtered);
     setSelectedScreenIds(filtered.map(s => s.id)); // Auto-select all recommended
