@@ -428,21 +428,31 @@ export default function DiscoverScreens() {
                   fullscreenControl: true,
                 }}
               >
-                {filteredScreens.map((screen) => (
-                  <Marker
-                    key={screen.id}
-                    position={{ lat: parseFloat(screen.latitude.toString()), lng: parseFloat(screen.longitude.toString()) }}
-                    onClick={() => setSelectedScreen(screen)}
-                    icon={{
-                      path: google.maps.SymbolPath.CIRCLE,
-                      scale: selectedScreenIds.has(screen.id) ? 12 : 8,
-                      fillColor: selectedScreenIds.has(screen.id) ? "#10b981" : "#3b82f6",
-                      fillOpacity: 1,
-                      strokeColor: "#ffffff",
-                      strokeWeight: 2,
-                    }}
-                  />
-                ))}
+                {filteredScreens.map((screen) => {
+                  const isSelected = selectedScreenIds.has(screen.id);
+                  // Custom monitor/screen icon SVG
+                  const iconSvg = `
+                    <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="5" y="8" width="30" height="20" rx="2" fill="${isSelected ? '#10b981' : '#7c3aed'}" stroke="white" stroke-width="2"/>
+                      <rect x="7" y="10" width="26" height="16" fill="${isSelected ? '#059669' : '#6d28d9'}"/>
+                      <rect x="15" y="28" width="10" height="2" fill="${isSelected ? '#10b981' : '#7c3aed'}"/>
+                      <rect x="12" y="30" width="16" height="3" rx="1" fill="${isSelected ? '#10b981' : '#7c3aed'}"/>
+                    </svg>
+                  `;
+                  
+                  return (
+                    <Marker
+                      key={screen.id}
+                      position={{ lat: parseFloat(screen.latitude.toString()), lng: parseFloat(screen.longitude.toString()) }}
+                      onClick={() => setSelectedScreen(screen)}
+                      icon={{
+                        url: `data:image/svg+xml;base64,${btoa(iconSvg)}`,
+                        scaledSize: new google.maps.Size(40, 40),
+                        anchor: new google.maps.Point(20, 35),
+                      }}
+                    />
+                  );
+                })}
 
                 {selectedScreen && (
                   <InfoWindow
