@@ -719,6 +719,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get available locations (states and cities from active screens)
+  app.get("/api/screens/locations", authenticate, async (req, res) => {
+    try {
+      const screens = await storage.getActiveScreens();
+      
+      // Extract unique states and cities
+      const statesSet = new Set<string>();
+      const citiesByState: Record<string, Set<string>> = {};
+      const allCitiesSet = new Set<string>();
+      
+      screens.forEach(screen => {
+        if (screen.state) {
+          statesSet.add(screen.state);
+          if (!citiesByState[screen.state]) {
+            citiesByState[screen.state] = new Set();
+          }
+          citiesByState[screen.state].add(screen.city);
+        }
+        allCitiesSet.add(screen.city);
+      });
+      
+      // Convert sets to sorted arrays
+      const states = Array.from(statesSet).sort();
+      const cities = Object.fromEntries(
+        Object.entries(citiesByState).map(([state, citySet]) => [
+          state,
+          Array.from(citySet).sort()
+        ])
+      );
+      const allCities = Array.from(allCitiesSet).sort();
+      
+      res.json({ states, cities, allCities });
+    } catch (error) {
+      console.error("Get locations error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get campaigns (advertiser)
   app.get("/api/advertiser/campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
