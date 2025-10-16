@@ -139,10 +139,10 @@ export default function CreateCampaign() {
       filtered = filtered.filter(s => formData.targetPincodes?.includes(s.pincode));
     }
 
-    // Demographics filtering
+    // Demographics filtering (lenient - includes screens with missing data)
     if (formData.targetAgeGroups && formData.targetAgeGroups.length > 0) {
       filtered = filtered.filter(s => 
-        s.primaryAgeGroups && s.primaryAgeGroups.some(age => formData.targetAgeGroups.includes(age))
+        !s.primaryAgeGroups || s.primaryAgeGroups.length === 0 || s.primaryAgeGroups.some(age => formData.targetAgeGroups.includes(age))
       );
     }
 
@@ -155,12 +155,14 @@ export default function CreateCampaign() {
     }
 
     if (formData.targetAffluence && formData.targetAffluence.length > 0) {
-      filtered = filtered.filter(s => formData.targetAffluence.includes(s.affluenceLevel));
+      filtered = filtered.filter(s => 
+        !s.affluenceLevel || formData.targetAffluence.includes(s.affluenceLevel)
+      );
     }
 
     if (formData.targetOccupations && formData.targetOccupations.length > 0) {
       filtered = filtered.filter(s => 
-        s.occupationMix && s.occupationMix.some(occ => formData.targetOccupations.includes(occ))
+        !s.occupationMix || s.occupationMix.length === 0 || s.occupationMix.some(occ => formData.targetOccupations.includes(occ))
       );
     }
 
