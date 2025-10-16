@@ -64,3 +64,14 @@ The platform supports three distinct user roles: Admin, Screen Owner, and Advert
 -   **Added Email/Password Authentication**: Extended Firebase authentication to support email/password signup and login alongside existing Google OAuth
 -   **Updated Login Page**: Redesigned login page with tabs for "Login" and "Sign Up", each supporting both Google and email/password authentication
 -   **Role Selection**: Email/password signup includes inline role selection (Advertiser vs Screen Owner) within the form
+-   **Indian Geography Integration**: Complete state/UT support with 28 Indian states and 8 union territories
+    -   Added `state` field to screens database schema for accurate location tracking
+    -   Screen onboarding form now includes state dropdown with all 36 states/UTs
+    -   Updated all 11 existing screens in database with accurate state values
+    -   Created shared constants file (`shared/constants.ts`) for INDIAN_STATES and INDIAN_UNION_TERRITORIES
+-   **Dynamic Location Filtering**: Campaign creation now shows only cities/states where screens actually exist
+    -   New API endpoint `/api/screens/locations` returns available states and cities from active screens
+    -   State dropdown in campaign creation dynamically populated from database
+    -   City dropdown in campaign creation dynamically populated from database
+    -   State filtering now uses actual `state` field instead of substring matching on city names
+    -   Ensures advertisers can only target locations with available screen inventory
