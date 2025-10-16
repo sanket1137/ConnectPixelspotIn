@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { INDIAN_STATES } from "@shared/constants";
 
 const addScreenSchema = z.object({
   // Section 1 - Screen Identity
@@ -31,6 +32,7 @@ const addScreenSchema = z.object({
   venueName: z.string().min(3, "Venue name is required"),
   location: z.string().min(3, "Address is required"),
   city: z.string().min(2, "City is required"),
+  state: z.string().min(2, "State is required"),
   pincode: z.string().regex(/^\d{6}$/, "Pincode must be 6 digits"),
   latitude: z.string().min(1, "Latitude is required"),
   longitude: z.string().min(1, "Longitude is required"),
@@ -85,6 +87,7 @@ export default function AddScreen() {
       venueName: "",
       location: "",
       city: "",
+      state: "",
       pincode: "",
       latitude: "",
       longitude: "",
@@ -355,7 +358,7 @@ export default function AddScreen() {
                 )}
               />
 
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="city"
@@ -370,6 +373,33 @@ export default function AddScreen() {
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="state"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>State / Union Territory</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-state">
+                            <SelectValue placeholder="Select state" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-[300px]">
+                          {INDIAN_STATES.map((state) => (
+                            <SelectItem key={state} value={state}>
+                              {state}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="pincode"
