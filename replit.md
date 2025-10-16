@@ -18,9 +18,14 @@ PixelSpot utilizes a modern web stack with a React + TypeScript + Vite frontend 
 The platform supports three distinct user roles: Admin, Screen Owner, and Advertiser, each with a dedicated portal.
 
 **Key Features:**
+-   **Multi-Method Authentication**: Firebase-powered authentication supporting both Google OAuth and email/password login/signup with role selection during account creation.
 -   **AI-Driven Campaign Creation**: A 5-step workflow for advertisers to create highly targeted campaigns based on objectives, location, demographics, intent, duration, and venue types, culminating in AI-recommended screens and budget estimation.
 -   **Dual-View Screen Discovery**: Advertisers can seamlessly toggle between a list view (card-based, paginated) and an interactive Google Maps view with custom monitor/screen SVG icons (purple for unselected, green for selected) for screen selection.
--   **Multi-Step Booking Approval Workflow**: Bookings require approval from both the Screen Owner and an Admin, ensuring proper oversight.
+-   **Multi-Step Booking Approval Workflow**: Bookings require approval from both the Screen Owner and an Admin, with support for:
+    -   Alternative dates negotiation between owner and advertiser
+    -   Admin override capabilities to edit booking dates
+    -   Partial approval tracking (e.g., "Partially Approved 3/5 screens")
+    -   Campaign details page showing individual booking statuses, rejection reasons, and alternative dates
 -   **Comprehensive Screen Data Model**: Screens are categorized with detailed identity, location/context, audience demographics (including userIntent and userMood), and commercial data to support granular targeting. Screens can have multiple user intents (Shopping, Commuting, Dining, etc.) and moods (Relaxed, Rushed, Social, etc.) for precise campaign matching.
 -   **Role-Based Access Control**: Ensures secure and appropriate access to features for Admin, Screen Owner, and Advertiser roles.
 -   **File Uploads**: Integration with Replit Object Storage for managing screen images and campaign creatives.
@@ -35,12 +40,17 @@ The platform supports three distinct user roles: Admin, Screen Owner, and Advert
 
 **System Design Choices:**
 -   **Database Schema**: Normalized schema with `Users`, `Screens`, `Campaigns`, `Bookings`, and `Payments` tables, designed to support complex relationships and targeting requirements. The `Screens` table is particularly detailed, with fields covering identity, location, audience, and commercial aspects.
--   **Authentication Flow**: Standard Firebase Google OAuth flow, where ID tokens are verified by the backend to establish user sessions and roles.
+-   **Authentication Flow**: Firebase authentication with multiple sign-in methods:
+    -   **Google OAuth**: Users can sign in with their Google account (for both login and signup with role selection)
+    -   **Email/Password**: Users can create accounts and login using email and password
+    -   ID tokens are verified by the backend to establish user sessions and roles
+    -   Role selection is required during signup (Screen Owner or Advertiser)
+    -   The login page uses tabs to organize Login and Sign Up flows
 
 ## External Dependencies
 -   **Database**: PostgreSQL (Neon)
 -   **ORM**: Drizzle ORM
--   **Authentication**: Firebase Google OAuth
+-   **Authentication**: Firebase Authentication (Google OAuth + Email/Password)
 -   **Maps**: Google Maps API (@react-google-maps/api)
 -   **Payments**: Stripe
 -   **Storage**: Replit Object Storage
@@ -49,3 +59,8 @@ The platform supports three distinct user roles: Admin, Screen Owner, and Advert
 -   **TypeScript**: Used across both frontend and backend for type safety.
 -   **Vite**: Frontend build tool.
 -   **Shadcn UI**: Component library.
+
+## Recent Changes (October 16, 2025)
+-   **Added Email/Password Authentication**: Extended Firebase authentication to support email/password signup and login alongside existing Google OAuth
+-   **Updated Login Page**: Redesigned login page with tabs for "Login" and "Sign Up", each supporting both Google and email/password authentication
+-   **Role Selection**: Email/password signup includes inline role selection (Advertiser vs Screen Owner) within the form
