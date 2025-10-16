@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { verifyToken } from "./firebaseAdmin";
+import { verifyToken, auth as firebaseAdmin } from "./firebaseAdmin";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { User } from "@shared/schema";
 import { db } from "./db";
@@ -112,6 +112,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sign out
   app.post("/api/auth/signout", (req, res) => {
     res.json({ success: true });
+  });
+
+  // DEV ONLY: Reset all user passwords (remove in production)
+  app.post("/api/dev/reset-passwords", async (req, res) => {
+    try {
+      const { password } = req.body;
+      
+      if (!password) {
+        return res.status(400).json({ error: "Password is required" });
+      }
+
+      // Get all users from database
+      const users = await storage.getAllUsers();
+      const results = [];
+
+      // Update password for each user in Firebase
+      for (const user of users) {
+        try {
+          await firebaseAdmin.updateUser(user.firebaseUid, {
+            password: password,
+          });
+          results.push({ 
+            email: user.email, 
+            status: "success",
+            message: `Password updated to: ${password}` 
+          });
+        } catch (error: any) {
+          results.push({ 
+            email: user.email, 
+            status: "error", 
+            message: error.message 
+          });
+        }
+      }
+
+      res.json({ 
+        message: "Password reset completed",
+        results 
+      });
+    } catch (error) {
+      console.error("Reset passwords error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // ========== OBJECT STORAGE ROUTES ==========
