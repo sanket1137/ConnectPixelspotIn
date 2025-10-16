@@ -79,8 +79,6 @@ const occupations = ["Students", "Working Professionals", "Business Owners", "Ho
 const intents = ["Shopping", "Commuting", "Dining", "Fitness", "Entertainment", "Work", "Education"];
 const moods = ["Relaxed", "Rushed", "Social", "Focused", "Leisure"];
 const venueTypes = ["Apartment", "Road Junction", "Highway", "Restaurant", "Cafe", "Shopping Complex", "Mall", "Corporate Park", "Airport", "Metro"];
-const indianStates = ["Karnataka", "Maharashtra", "Delhi", "Tamil Nadu", "Gujarat", "Rajasthan", "West Bengal", "Uttar Pradesh", "Kerala", "Punjab"];
-const indianCities = ["Bangalore", "Mumbai", "Delhi", "Chennai", "Hyderabad", "Kolkata", "Pune", "Ahmedabad", "Jaipur"];
 
 export default function CreateCampaign() {
   const { isLoaded } = useLoadScript({
@@ -90,6 +88,15 @@ export default function CreateCampaign() {
   const [currentStep, setCurrentStep] = useState(1);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  
+  // Fetch available locations dynamically from screens in database
+  const { data: locationsData } = useQuery<{ states: string[]; cities: Record<string, string[]>; allCities: string[] }>({
+    queryKey: ["/api/screens/locations"],
+  });
+  
+  const availableStates = locationsData?.states || [];
+  const availableCitiesByState = locationsData?.cities || {};
+  const allAvailableCities = locationsData?.allCities || [];
   const queryClient = useQueryClient();
   const [uploadedCreativeURL, setUploadedCreativeURL] = useState<string | null>(null);
   const [recommendedScreens, setRecommendedScreens] = useState<Screen[]>([]);
@@ -134,7 +141,7 @@ export default function CreateCampaign() {
     if (formData.targetLocationType === "city" && formData.targetCities && formData.targetCities.length > 0) {
       filtered = filtered.filter(s => formData.targetCities?.includes(s.city));
     } else if (formData.targetLocationType === "state" && formData.targetState) {
-      filtered = filtered.filter(s => s.city.toLowerCase().includes((formData.targetState || '').toLowerCase()));
+      filtered = filtered.filter(s => s.state === formData.targetState);
     } else if (formData.targetLocationType === "pincodes" && formData.targetPincodes && formData.targetPincodes.length > 0) {
       filtered = filtered.filter(s => formData.targetPincodes?.includes(s.pincode));
     }
@@ -587,8 +594,8 @@ export default function CreateCampaign() {
                             <SelectTrigger className="flex-1">
                               <SelectValue placeholder="Select a city" />
                             </SelectTrigger>
-                            <SelectContent>
-                              {indianCities.map(city => (
+                            <SelectContent className="max-h-[300px]">
+                              {allAvailableCities.map((city: string) => (
                                 <SelectItem key={city} value={city}>{city}</SelectItem>
                               ))}
                             </SelectContent>
@@ -629,8 +636,8 @@ export default function CreateCampaign() {
                                     <SelectValue placeholder="Select a state" />
                                   </SelectTrigger>
                                 </FormControl>
-                                <SelectContent>
-                                  {indianStates.map(state => (
+                                <SelectContent className="max-h-[300px]">
+                                  {availableStates.map(state => (
                                     <SelectItem key={state} value={state}>{state}</SelectItem>
                                   ))}
                                 </SelectContent>
