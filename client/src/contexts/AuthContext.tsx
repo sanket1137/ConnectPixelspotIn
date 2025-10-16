@@ -1,5 +1,12 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { User as FirebaseUser, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from "firebase/auth";
+import { 
+  User as FirebaseUser, 
+  signInWithPopup, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut, 
+  onAuthStateChanged 
+} from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -10,6 +17,8 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signInWithGoogle: (role?: "screen_owner" | "advertiser") => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string, name: string, role: "screen_owner" | "advertiser") => Promise<void>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isScreenOwner: boolean;
@@ -57,6 +66,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
+  const signInEmailMutation = useMutation({
+    mutationFn: async ({ email, password }: { email: string; password: string }) => {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      const token = await result.user.getIdToken();
+      
+      // Send token to backend to fetch user
+      const response = await apiRequest("POST", "/api/auth/signin", {
+        token,
+        email: result.user.email,
+        name: result.user.displayName || result.user.email,
+      });
+      
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+  });
+
+  const signUpEmailMutation = useMutation({
+    mutationFn: async ({ email, password, name, role }: { 
+      email: string; 
+      password: string; 
+      name: string; 
+      role: "screen_owner" | "advertiser" 
+    }) => {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      const token = await result.user.getIdToken();
+      
+      // Send token to backend to create user
+      const response = await apiRequest("POST", "/api/auth/signin", {
+        token,
+        email: result.user.email,
+        name,
+        role,
+      });
+      
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+  });
+
   const signOutMutation = useMutation({
     mutationFn: async () => {
       await firebaseSignOut(auth);
@@ -70,9 +123,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextType = {
     firebaseUser,
     user: user || null,
-    loading: loading || signInMutation.isPending,
-    signInWithGoogle: (role?: "screen_owner" | "advertiser") => signInMutation.mutateAsync(role),
-    signOut: () => signOutMutation.mutateAsync(),
+    loading: loading || signInMutation.isPending || signInEmailMutation.isPending || signUpEmailMutation.isPending,
+    signInWithGoogle: async (role?: "screen_owner" | "advertiser") => { 
+      await signInMutation.mutateAsync(role);
+    },
+    signInWithEmail: async (email: string, password: string) => { 
+      await signInEmailMutation.mutateAsync({ email, password });
+    },
+    signUpWithEmail: async (email: string, password: string, name: string, role: "screen_owner" | "advertiser") => {
+      await signUpEmailMutation.mutateAsync({ email, password, name, role });
+    },
+    signOut: async () => {
+      await signOutMutation.mutateAsync();
+    },
     isAdmin: user?.role === "admin",
     isScreenOwner: user?.role === "screen_owner",
     isAdvertiser: user?.role === "advertiser",
