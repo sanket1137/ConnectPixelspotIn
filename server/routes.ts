@@ -130,8 +130,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update password for each user in Firebase
       for (const user of users) {
         try {
+          // Update user to enable email/password authentication
           await firebaseAdmin.updateUser(user.firebaseUid, {
+            email: user.email,
             password: password,
+            emailVerified: true,
           });
           results.push({ 
             email: user.email, 
