@@ -32,6 +32,7 @@ export const screens = pgTable("screens", {
   venueName: text("venue_name").notNull(),
   location: text("location").notNull(), // address
   city: text("city").notNull(),
+  state: text("state"), // Indian state or union territory (nullable for backward compatibility)
   pincode: text("pincode").notNull(),
   latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
   longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
