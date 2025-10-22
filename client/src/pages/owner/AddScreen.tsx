@@ -50,7 +50,6 @@ const addScreenSchema = z.object({
   trafficType: z.string().min(1, "Traffic type is required"),
   timeOfDayActivity: z.array(z.string()).min(1, "Select at least one time slot"),
   environmentType: z.string().min(1, "Environment type is required"),
-  nearbyLandmarks: z.string().optional(),
   
   // Enhanced Location Context
   visibility: z.string().optional(),
@@ -62,12 +61,8 @@ const addScreenSchema = z.object({
   customLocationTags: z.string().optional(),
   
   // Section 3 - Audience Demographics
-  primaryAgeGroups: z.array(z.string()).min(1, "Select at least one age group"),
   detailedAgeGroups: z.array(z.string()).optional(),
-  genderMale: z.number().min(0).max(100),
-  genderFemale: z.number().min(0).max(100),
   genderOrientation: z.string().optional(),
-  affluenceLevel: z.string().min(1, "Affluence level is required"),
   incomeLevel: z.string().optional(),
   occupationMix: z.array(z.string()).min(1, "Select at least one occupation"),
   lifestyleTags: z.array(z.string()).optional(),
@@ -119,7 +114,6 @@ export default function AddScreen() {
       trafficType: "",
       timeOfDayActivity: [],
       environmentType: "",
-      nearbyLandmarks: "",
       visibility: "",
       description: "",
       operatingHoursPreset: "",
@@ -127,12 +121,8 @@ export default function AddScreen() {
       customOperatingDays: "",
       locationTags: [],
       customLocationTags: "",
-      primaryAgeGroups: [],
       detailedAgeGroups: [],
-      genderMale: 50,
-      genderFemale: 50,
       genderOrientation: "",
-      affluenceLevel: "",
       incomeLevel: "",
       occupationMix: [],
       lifestyleTags: [],
@@ -164,8 +154,6 @@ export default function AddScreen() {
         avgDwellTime: parseInt(data.avgDwellTime),
         playbackSlotsPerHour: parseInt(data.playbackSlotsPerHour),
         numberOfScreens: data.numberOfScreens ? parseInt(data.numberOfScreens) : null,
-        genderSplit: { male: data.genderMale, female: data.genderFemale },
-        nearbyLandmarks: data.nearbyLandmarks ? data.nearbyLandmarks.split(',').map(s => s.trim()) : [],
         interestSegments: data.interestSegments ? data.interestSegments.split(',').map(s => s.trim()) : [],
         customLocationTags: data.customLocationTags ? data.customLocationTags.split(',').map(s => s.trim()) : [],
         customAudienceTags: data.customAudienceTags ? data.customAudienceTags.split(',').map(s => s.trim()) : [],
@@ -602,44 +590,28 @@ export default function AddScreen() {
                 )}
               />
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="environmentType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Environment Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-environment">
-                            <SelectValue placeholder="Select" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Indoor">Indoor</SelectItem>
-                          <SelectItem value="Semi-Outdoor">Semi-Outdoor</SelectItem>
-                          <SelectItem value="Outdoor Digital">Outdoor Digital</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="nearbyLandmarks"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nearby Landmarks (comma-separated)</FormLabel>
+              <FormField
+                control={form.control}
+                name="environmentType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Environment Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <Input placeholder="e.g., Metro Station, Starbucks" {...field} data-testid="input-landmarks" />
+                        <SelectTrigger data-testid="select-environment">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                      <SelectContent>
+                        <SelectItem value="Indoor">Indoor</SelectItem>
+                        <SelectItem value="Semi-Outdoor">Semi-Outdoor</SelectItem>
+                        <SelectItem value="Outdoor Digital">Outdoor Digital</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               {/* Enhanced Location Context */}
               <div className="pt-4 border-t">
@@ -821,137 +793,17 @@ export default function AddScreen() {
             <CardContent className="space-y-4">
               <FormField
                 control={form.control}
-                name="primaryAgeGroups"
-                render={() => (
+                name="avgDwellTime"
+                render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Primary Audience Age Groups</FormLabel>
-                    <div className="flex flex-wrap gap-4">
-                      {ageGroups.map((age) => (
-                        <FormField
-                          key={age}
-                          control={form.control}
-                          name="primaryAgeGroups"
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2 space-y-0">
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(age)}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([...field.value, age])
-                                      : field.onChange(
-                                          field.value?.filter((value) => value !== age)
-                                        );
-                                  }}
-                                  data-testid={`checkbox-age-${age}`}
-                                />
-                              </FormControl>
-                              <FormLabel className="font-normal cursor-pointer">{age}</FormLabel>
-                            </FormItem>
-                          )}
-                        />
-                      ))}
-                    </div>
+                    <FormLabel>Avg. Dwell Time (minutes)</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="e.g., 15" {...field} data-testid="input-dwell-time" />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
-              <div>
-                <FormLabel>Gender Split (%)</FormLabel>
-                <div className="grid md:grid-cols-2 gap-4 mt-2">
-                  <FormField
-                    control={form.control}
-                    name="genderMale"
-                    render={({ field }) => (
-                      <FormItem>
-                        <div className="flex items-center justify-between">
-                          <FormLabel className="text-sm font-normal">Male</FormLabel>
-                          <span className="text-sm font-semibold">{field.value}%</span>
-                        </div>
-                        <FormControl>
-                          <Slider
-                            min={0}
-                            max={100}
-                            step={5}
-                            value={[field.value]}
-                            onValueChange={(vals) => {
-                              field.onChange(vals[0]);
-                              form.setValue("genderFemale", 100 - vals[0]);
-                            }}
-                            data-testid="slider-male"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="genderFemale"
-                    render={({ field }) => (
-                      <FormItem>
-                        <div className="flex items-center justify-between">
-                          <FormLabel className="text-sm font-normal">Female</FormLabel>
-                          <span className="text-sm font-semibold">{field.value}%</span>
-                        </div>
-                        <FormControl>
-                          <Slider
-                            min={0}
-                            max={100}
-                            step={5}
-                            value={[field.value]}
-                            onValueChange={(vals) => {
-                              field.onChange(vals[0]);
-                              form.setValue("genderMale", 100 - vals[0]);
-                            }}
-                            data-testid="slider-female"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="affluenceLevel"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Audience Affluence Level</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-affluence">
-                            <SelectValue placeholder="Select" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Premium">Premium</SelectItem>
-                          <SelectItem value="Mid">Mid</SelectItem>
-                          <SelectItem value="Budget">Budget</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="avgDwellTime"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Avg. Dwell Time (minutes)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="e.g., 15" {...field} data-testid="input-dwell-time" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
 
               <FormField
                 control={form.control}

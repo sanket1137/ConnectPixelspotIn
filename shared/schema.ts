@@ -41,7 +41,6 @@ export const screens = pgTable("screens", {
   trafficType: text("traffic_type").notNull(), // Pedestrian / Seated Audience / Transit / Mixed
   timeOfDayActivity: text("time_of_day_activity").array(), // Morning Rush / Lunch Hours / Evening Leisure / Late Night
   environmentType: text("environment_type").notNull(), // Indoor / Semi-Outdoor / Outdoor Digital
-  nearbyLandmarks: text("nearby_landmarks").array(),
   
   // Enhanced Location Context
   visibility: text("visibility"), // High / Medium / Low - based on footfall and visibility
@@ -53,11 +52,8 @@ export const screens = pgTable("screens", {
   customLocationTags: text("custom_location_tags").array(), // User-added custom location tags
   
   // SECTION 3 — Audience Demographics
-  primaryAgeGroups: text("primary_age_groups").array(), // 18-25 / 25-40 / 40-60 (legacy format, kept for compatibility)
   detailedAgeGroups: text("detailed_age_groups").array(), // Children (5-12) / Teenagers (13-17) / Young Adults (18-25) / Adults (26-40) / Middle Age (41-55) / Seniors (55+) / All Ages
-  genderSplit: jsonb("gender_split").$type<{ male: number; female: number }>(), // percentages
   genderOrientation: text("gender_orientation"), // Male Dominant / Female Dominant / Mixed Gender / Family Oriented
-  affluenceLevel: text("affluence_level").notNull(), // Premium / Mid / Budget (legacy)
   incomeLevel: text("income_level"), // Budget Conscious / Middle Income / Premium Audience / Luxury Buyers
   occupationMix: text("occupation_mix").array(), // Students / Working Professionals / Business Owners / Homemakers
   lifestyleTags: text("lifestyle_tags").array(), // Working Professionals / Students / Commuters / Shoppers / Tourists / Local Residents / Health Conscious / Tech Savvy
