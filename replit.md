@@ -61,6 +61,16 @@ The platform supports three distinct user roles: Admin, Screen Owner, and Advert
 -   **Shadcn UI**: Component library.
 
 ## Recent Changes (October 22, 2025)
+-   **Schema Cleanup & Bug Fixes**:
+    -   **Removed Duplicate Fields**: Cleaned up database schema by removing 4 legacy/duplicate fields:
+        - Removed `primaryAgeGroups` (replaced by `detailedAgeGroups` with more granular age ranges)
+        - Removed `affluenceLevel` (replaced by `incomeLevel` with better descriptive targeting)
+        - Removed `nearbyLandmarks` (replaced by organized `locationTags` + `customLocationTags`)
+        - Removed `genderSplit` (replaced by `genderOrientation` for better targeting)
+    -   **Fixed Dwell Time Input Issue**: Changed `avgDwellTime` validation from `z.string()` to `z.coerce.number()` to properly handle numeric input in both owner and admin forms
+    -   Updated both AddScreen.tsx and AddScreenForOwner.tsx forms to remove legacy UI sections
+    -   Database schema pushed successfully with cleaner, non-redundant structure
+
 -   **Expanded Venue Types**: Added new venue categories for more targeted screen selection:
     -   New venue types: Bus Stop, Retail Store, Office Building, Stadium
     -   Complete list now includes 22 venue categories sorted alphabetically
