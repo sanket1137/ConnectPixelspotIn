@@ -1,0 +1,121 @@
+Visibility : for easy filtering. or based on footfall number also based on slider they can filter. (adding this or not both will work.)
+High[prime visibility with maximum visibility], Medium [ good visibility with moderate foot traffic], Low [Limited visibility or niche audience]
+
+Description:  to describe screen, surroundings, justification for slot pricings
+
+Operating Hours and Days :
+Business hours 09:00 to 18:00 | Mon to Fri,
+Mall Hour's 10:00 to 22:00 | Mon to Sun,
+Retro 11:00 to 23:00 | Mon to Sun,
+Airport/Highways 24/7 | Mon to Sun,
+Custom operating hours and days
+
+also allow screen owner to provide more context about location
+
+Audience & Location Context
+
+•⁠  ⁠Demographics as below inputs it will work as tags. and get attached with screen as string array. based on advertiser inputes it will check in this array and give screen with relevant audience 
+
+Target Audience Demographics
+
+Age Groups
+Children (5-12)
+Teenagers (13-17)
+Young Adults (18-25)
+Adults (26-40)
+Middle Age (41-55)
+Seniors (55+)
+All Ages
+
+Gender
+Male Dominant
+Female Dominant
+Mixed Gender
+Family Oriented
+
+Income Level
+Budget Conscious
+Middle Income
+Premium Audience
+Luxury Buyers
+
+Lifestyle
+Working Professionals
+Students
+Commuters
+Shoppers
+Tourists
+Local Residents
+Health Conscious
+Tech Savvy
+
+and also allow them to add some custom tags so those also we will save and it will increase our accuracy in suggesting relevant suggestions
+
+
+_________________________________________
+
+now Location Tags to define surroundings
+
+Nearby Facilities & Points of Interest
+_
+
+Educational
+School Nearby
+College/University
+Coaching Centers
+Library
+
+Healthcare
+Hospital
+Clinic
+Pharmacy
+Diagnostic Center
+
+Commercial
+Shopping Mall
+Market Area
+Office Complex
+Bank/ATM
+
+Food & Dining
+Restaurant
+Food Court
+Cafe
+Street Food
+
+Transportation
+Bus Stop
+Metro Station
+Railway Station
+Airport
+Parking Area
+
+Residential
+Housing Society
+PG/Hostel
+Apartment Complex
+
+Religious & Cultural
+Temple
+Church
+Mosque
+Gurudwara
+Cultural Center
+
+Industrial
+Factory
+Industrial Area
+Warehouse
+
+Safety & Security
+Police Station
+Fire Station
+Security Office
+
+Entertainment
+Cinema Hall
+Park/Garden
+Sports Complex
+Gym
+
+Also allow to add custom location tags to add surroundings that we might missing.

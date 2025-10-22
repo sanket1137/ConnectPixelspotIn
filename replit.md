@@ -60,7 +60,14 @@ The platform supports three distinct user roles: Admin, Screen Owner, and Advert
 -   **Vite**: Frontend build tool.
 -   **Shadcn UI**: Component library.
 
-## Recent Changes (October 16, 2025)
+## Recent Changes (October 22, 2025)
+-   **Expanded Venue Types**: Added new venue categories for more targeted screen selection:
+    -   New venue types: Bus Stop, Retail Store, Office Building, Stadium
+    -   Complete list now includes 22 venue categories sorted alphabetically
+    -   Updated in both screen onboarding and campaign creation forms
+    -   Enhanced targeting capabilities for advertisers to reach specific audience segments
+
+## Previous Changes (October 16, 2025)
 -   **Added Email/Password Authentication**: Extended Firebase authentication to support email/password signup and login alongside existing Google OAuth
 -   **Updated Login Page**: Redesigned login page with tabs for "Login" and "Sign Up", each supporting both Google and email/password authentication
 -   **Role Selection**: Email/password signup includes inline role selection (Advertiser vs Screen Owner) within the form

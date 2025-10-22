@@ -78,7 +78,22 @@ const affluenceLevels = ["Premium", "Mid", "Budget"];
 const occupations = ["Students", "Working Professionals", "Business Owners", "Homemakers"];
 const intents = ["Shopping", "Commuting", "Dining", "Fitness", "Entertainment", "Work", "Education"];
 const moods = ["Relaxed", "Rushed", "Social", "Focused", "Leisure"];
-const venueTypes = ["Apartment", "Road Junction", "Highway", "Restaurant", "Cafe", "Shopping Complex", "Mall", "Corporate Park", "Airport", "Metro"];
+const venueTypes = [
+  "Apartment",
+  "Road Junction", 
+  "Highway",
+  "Restaurant",
+  "Cafe",
+  "Shopping Complex",
+  "Mall",
+  "Corporate Park",
+  "Airport",
+  "Metro",
+  "Bus Stop",
+  "Retail Store",
+  "Office Building",
+  "Stadium"
+];
 
 export default function CreateCampaign() {
   const { isLoaded } = useLoadScript({

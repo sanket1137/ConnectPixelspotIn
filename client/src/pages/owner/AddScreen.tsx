@@ -426,22 +426,29 @@ export default function AddScreen() {
                             <SelectValue placeholder="Select" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Café">Café</SelectItem>
-                          <SelectItem value="Mall">Mall</SelectItem>
-                          <SelectItem value="Apartment">Apartment</SelectItem>
-                          <SelectItem value="Gym">Gym</SelectItem>
-                          <SelectItem value="Co-working">Co-working</SelectItem>
+                        <SelectContent className="max-h-[300px]">
                           <SelectItem value="Airport">Airport</SelectItem>
-                          <SelectItem value="Metro">Metro</SelectItem>
-                          <SelectItem value="Salon">Salon</SelectItem>
+                          <SelectItem value="Apartment">Apartment</SelectItem>
+                          <SelectItem value="Bus Stop">Bus Stop</SelectItem>
+                          <SelectItem value="Café">Café</SelectItem>
                           <SelectItem value="Cinema">Cinema</SelectItem>
-                          <SelectItem value="Hospital">Hospital</SelectItem>
+                          <SelectItem value="Co-working">Co-working</SelectItem>
                           <SelectItem value="College">College</SelectItem>
                           <SelectItem value="Corporate Park">Corporate Park</SelectItem>
-                          <SelectItem value="Highway">Highway</SelectItem>
-                          <SelectItem value="Road Side">Road Side</SelectItem>
                           <SelectItem value="Flyover">Flyover</SelectItem>
+                          <SelectItem value="Gym">Gym</SelectItem>
+                          <SelectItem value="Highway">Highway</SelectItem>
+                          <SelectItem value="Hospital">Hospital</SelectItem>
+                          <SelectItem value="Mall">Mall</SelectItem>
+                          <SelectItem value="Metro">Metro</SelectItem>
+                          <SelectItem value="Office Building">Office Building</SelectItem>
+                          <SelectItem value="Restaurant">Restaurant</SelectItem>
+                          <SelectItem value="Retail Store">Retail Store</SelectItem>
+                          <SelectItem value="Road Junction">Road Junction</SelectItem>
+                          <SelectItem value="Road Side">Road Side</SelectItem>
+                          <SelectItem value="Salon">Salon</SelectItem>
+                          <SelectItem value="Shopping Complex">Shopping Complex</SelectItem>
+                          <SelectItem value="Stadium">Stadium</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

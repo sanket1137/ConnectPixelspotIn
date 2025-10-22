@@ -36,7 +36,7 @@ export const screens = pgTable("screens", {
   pincode: text("pincode").notNull(),
   latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
   longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
-  venueCategory: text("venue_category").notNull(), // Café / Mall / Apartment / Gym / Co-working / Airport / Metro / Salon / Cinema / Hospital / College / Corporate Park
+  venueCategory: text("venue_category").notNull(), // Airport / Apartment / Bus Stop / Café / Cinema / Co-working / College / Corporate Park / Flyover / Gym / Highway / Hospital / Mall / Metro / Office Building / Restaurant / Retail Store / Road Junction / Road Side / Salon / Shopping Complex / Stadium
   avgDailyFootfall: integer("avg_daily_footfall").notNull(),
   trafficType: text("traffic_type").notNull(), // Pedestrian / Seated Audience / Transit / Mixed
   timeOfDayActivity: text("time_of_day_activity").array(), // Morning Rush / Lunch Hours / Evening Leisure / Late Night
@@ -97,7 +97,7 @@ export const campaigns = pgTable("campaigns", {
   targetMood: text("target_mood").array(), // Relaxed, Rushed, Social, Focused
   
   // Venue type filters (optional)
-  venueTypeFilters: text("venue_type_filters").array(), // Apartment, Road Junction, Highway, Restaurant, Shopping Complex
+  venueTypeFilters: text("venue_type_filters").array(), // Airport, Apartment, Bus Stop, Café, Cinema, Co-working, College, Corporate Park, Flyover, Gym, Highway, Hospital, Mall, Metro, Office Building, Restaurant, Retail Store, Road Junction, Road Side, Salon, Shopping Complex, Stadium
   
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
