@@ -13,11 +13,23 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
-import { MapPin, Upload, Check, Users, DollarSign, Monitor } from "lucide-react";
+import { MapPin, Upload, Check, Users, DollarSign, Monitor, Crosshair } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { Textarea } from "@/components/ui/textarea";
 import type { User } from "@shared/schema";
+import { 
+  INDIAN_STATES, 
+  VISIBILITY_LEVELS, 
+  OPERATING_HOURS_PRESETS, 
+  DETAILED_AGE_GROUPS,
+  GENDER_ORIENTATIONS,
+  INCOME_LEVELS,
+  LIFESTYLE_TAGS,
+  LOCATION_TAGS
+} from "@shared/constants";
 
 const addScreenSchema = z.object({
   ownerId: z.string().min(1, "Screen owner is required"),
@@ -33,6 +45,7 @@ const addScreenSchema = z.object({
   venueName: z.string().min(3, "Venue name is required"),
   location: z.string().min(3, "Address is required"),
   city: z.string().min(2, "City is required"),
+  state: z.string().min(2, "State is required"),
   pincode: z.string().regex(/^\d{6}$/, "Pincode must be 6 digits"),
   latitude: z.string().min(1, "Latitude is required"),
   longitude: z.string().min(1, "Longitude is required"),
@@ -43,14 +56,30 @@ const addScreenSchema = z.object({
   environmentType: z.string().min(1, "Environment type is required"),
   nearbyLandmarks: z.string().optional(),
   
+  // Enhanced Location Context
+  visibility: z.string().optional(),
+  description: z.string().optional(),
+  operatingHoursPreset: z.string().optional(),
+  customOperatingHours: z.string().optional(),
+  customOperatingDays: z.string().optional(),
+  locationTags: z.array(z.string()).optional(),
+  customLocationTags: z.string().optional(),
+  
   // Section 3 - Audience Demographics
   primaryAgeGroups: z.array(z.string()).min(1, "Select at least one age group"),
+  detailedAgeGroups: z.array(z.string()).optional(),
   genderMale: z.number().min(0).max(100),
   genderFemale: z.number().min(0).max(100),
+  genderOrientation: z.string().optional(),
   affluenceLevel: z.string().min(1, "Affluence level is required"),
+  incomeLevel: z.string().optional(),
   occupationMix: z.array(z.string()).min(1, "Select at least one occupation"),
+  lifestyleTags: z.array(z.string()).optional(),
   avgDwellTime: z.string().min(1, "Average dwell time is required"),
   interestSegments: z.string().optional(),
+  customAudienceTags: z.string().optional(),
+  userIntent: z.array(z.string()).min(1, "Select at least one user intent"),
+  userMood: z.array(z.string()).min(1, "Select at least one user mood"),
   
   // Commercial & Campaign Data
   isMultiScreen: z.boolean(),
@@ -86,6 +115,7 @@ export default function AddScreenForOwner() {
       venueName: "",
       location: "",
       city: "",
+      state: "",
       pincode: "",
       latitude: "",
       longitude: "",
@@ -95,13 +125,27 @@ export default function AddScreenForOwner() {
       timeOfDayActivity: [],
       environmentType: "",
       nearbyLandmarks: "",
+      visibility: "",
+      description: "",
+      operatingHoursPreset: "",
+      customOperatingHours: "",
+      customOperatingDays: "",
+      locationTags: [],
+      customLocationTags: "",
       primaryAgeGroups: [],
+      detailedAgeGroups: [],
       genderMale: 50,
       genderFemale: 50,
+      genderOrientation: "",
       affluenceLevel: "",
+      incomeLevel: "",
       occupationMix: [],
+      lifestyleTags: [],
       avgDwellTime: "",
       interestSegments: "",
+      customAudienceTags: "",
+      userIntent: [],
+      userMood: [],
       isMultiScreen: false,
       numberOfScreens: "",
       pricePerDay: "",
@@ -135,6 +179,10 @@ export default function AddScreenForOwner() {
         genderSplit: { male: data.genderMale, female: data.genderFemale },
         nearbyLandmarks: data.nearbyLandmarks ? data.nearbyLandmarks.split(',').map(s => s.trim()) : [],
         interestSegments: data.interestSegments ? data.interestSegments.split(',').map(s => s.trim()) : [],
+        customLocationTags: data.customLocationTags ? data.customLocationTags.split(',').map(s => s.trim()) : [],
+        customAudienceTags: data.customAudienceTags ? data.customAudienceTags.split(',').map(s => s.trim()) : [],
+        userIntent: data.userIntent,
+        userMood: data.userMood,
         type: data.category,
         size: data.resolution,
         imageUrl: uploadedImageURL || null,
@@ -192,6 +240,8 @@ export default function AddScreenForOwner() {
   const timeSlots = ["Morning Rush", "Lunch Hours", "Evening Leisure", "Late Night"];
   const ageGroups = ["18-25", "25-40", "40-60", "60+"];
   const occupations = ["Students", "Working Professionals", "Business Owners", "Homemakers"];
+  const intents = ["Shopping", "Commuting", "Dining", "Fitness", "Entertainment", "Work", "Education"];
+  const moods = ["Relaxed", "Rushed", "Social", "Focused", "Leisure"];
   const contentTypes = ["Static Image", "Video", "Interactive", "HTML5"];
 
   return (
@@ -386,7 +436,7 @@ export default function AddScreenForOwner() {
                 )}
               />
 
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="city"
@@ -401,6 +451,33 @@ export default function AddScreenForOwner() {
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="state"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>State / Union Territory</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-state">
+                            <SelectValue placeholder="Select state" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-[300px]">
+                          {INDIAN_STATES.map((state) => (
+                            <SelectItem key={state} value={state}>
+                              {state}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="pincode"
@@ -427,22 +504,29 @@ export default function AddScreenForOwner() {
                             <SelectValue placeholder="Select" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Café">Café</SelectItem>
-                          <SelectItem value="Mall">Mall</SelectItem>
-                          <SelectItem value="Apartment">Apartment</SelectItem>
-                          <SelectItem value="Gym">Gym</SelectItem>
-                          <SelectItem value="Co-working">Co-working</SelectItem>
+                        <SelectContent className="max-h-[300px]">
                           <SelectItem value="Airport">Airport</SelectItem>
-                          <SelectItem value="Metro">Metro</SelectItem>
-                          <SelectItem value="Salon">Salon</SelectItem>
+                          <SelectItem value="Apartment">Apartment</SelectItem>
+                          <SelectItem value="Bus Stop">Bus Stop</SelectItem>
+                          <SelectItem value="Café">Café</SelectItem>
                           <SelectItem value="Cinema">Cinema</SelectItem>
-                          <SelectItem value="Hospital">Hospital</SelectItem>
+                          <SelectItem value="Co-working">Co-working</SelectItem>
                           <SelectItem value="College">College</SelectItem>
                           <SelectItem value="Corporate Park">Corporate Park</SelectItem>
-                          <SelectItem value="Highway">Highway</SelectItem>
-                          <SelectItem value="Road Side">Road Side</SelectItem>
                           <SelectItem value="Flyover">Flyover</SelectItem>
+                          <SelectItem value="Gym">Gym</SelectItem>
+                          <SelectItem value="Highway">Highway</SelectItem>
+                          <SelectItem value="Hospital">Hospital</SelectItem>
+                          <SelectItem value="Mall">Mall</SelectItem>
+                          <SelectItem value="Metro">Metro</SelectItem>
+                          <SelectItem value="Office Building">Office Building</SelectItem>
+                          <SelectItem value="Restaurant">Restaurant</SelectItem>
+                          <SelectItem value="Retail Store">Retail Store</SelectItem>
+                          <SelectItem value="Road Junction">Road Junction</SelectItem>
+                          <SelectItem value="Road Side">Road Side</SelectItem>
+                          <SelectItem value="Salon">Salon</SelectItem>
+                          <SelectItem value="Shopping Complex">Shopping Complex</SelectItem>
+                          <SelectItem value="Stadium">Stadium</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -592,6 +676,172 @@ export default function AddScreenForOwner() {
                       <FormControl>
                         <Input placeholder="e.g., Metro Station, Starbucks" {...field} data-testid="input-landmarks" />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Enhanced Location Context */}
+              <div className="pt-4 border-t">
+                <h3 className="text-lg font-semibold mb-4">Enhanced Location Details</h3>
+                
+                <div className="grid md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="visibility"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Visibility Level</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-visibility">
+                              <SelectValue placeholder="Select visibility" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {VISIBILITY_LEVELS.map((level) => (
+                              <SelectItem key={level} value={level}>{level}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>Based on footfall and screen position</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="operatingHoursPreset"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Operating Hours</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-operating-hours">
+                              <SelectValue placeholder="Select operating hours" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {OPERATING_HOURS_PRESETS.map((preset) => (
+                              <SelectItem key={preset} value={preset}>{preset}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {form.watch("operatingHoursPreset") === "Custom" && (
+                  <div className="grid md:grid-cols-2 gap-4 mt-4">
+                    <FormField
+                      control={form.control}
+                      name="customOperatingHours"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Custom Hours</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., 09:00-18:00" {...field} data-testid="input-custom-hours" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="customOperatingDays"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Custom Days</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., Mon-Fri" {...field} data-testid="input-custom-days" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Screen Description</FormLabel>
+                      <FormControl>
+                        <textarea
+                          {...field}
+                          rows={3}
+                          placeholder="Describe the screen, surroundings, and justification for pricing..."
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          data-testid="textarea-description"
+                        />
+                      </FormControl>
+                      <FormDescription>Provide context about location and pricing</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="locationTags"
+                  render={() => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Nearby Facilities & Points of Interest</FormLabel>
+                      <div className="space-y-3">
+                        {Object.entries(LOCATION_TAGS).map(([category, tags]) => (
+                          <div key={category} className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">{category}</p>
+                            <div className="flex flex-wrap gap-3">
+                              {(tags as readonly string[]).map((tag: string) => (
+                                <FormField
+                                  key={tag}
+                                  control={form.control}
+                                  name="locationTags"
+                                  render={({ field }) => (
+                                    <FormItem className="flex items-center space-x-2 space-y-0">
+                                      <FormControl>
+                                        <Checkbox
+                                          checked={field.value?.includes(tag)}
+                                          onCheckedChange={(checked) => {
+                                            return checked
+                                              ? field.onChange([...(field.value || []), tag])
+                                              : field.onChange(
+                                                  field.value?.filter((value) => value !== tag)
+                                                );
+                                          }}
+                                          data-testid={`checkbox-location-${tag.toLowerCase().replace(/[\/\s]/g, '-')}`}
+                                        />
+                                      </FormControl>
+                                      <FormLabel className="text-sm font-normal cursor-pointer">{tag}</FormLabel>
+                                    </FormItem>
+                                  )}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="customLocationTags"
+                  render={({ field }) => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Custom Location Tags (comma-separated)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Tech Park, Beach View, Heritage Site" {...field} data-testid="input-custom-location-tags" />
+                      </FormControl>
+                      <FormDescription>Add custom tags to increase targeting accuracy</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -789,9 +1039,233 @@ export default function AddScreenForOwner() {
                   <FormItem>
                     <FormLabel>Audience Interest Segments (comma-separated)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Fitness, Coffee, Tech" {...field} data-testid="input-interests" />
+                      <Input placeholder="e.g., Fitness, Coffee, Tech, Luxury Cars" {...field} data-testid="input-interests" />
                     </FormControl>
-                    <FormDescription>Tags for targeting specific interests</FormDescription>
+                    <FormDescription>Tags for targeting specific audience interests</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Enhanced Demographics */}
+              <div className="pt-4 border-t">
+                <h3 className="text-lg font-semibold mb-4">Enhanced Audience Demographics</h3>
+                
+                <FormField
+                  control={form.control}
+                  name="detailedAgeGroups"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Detailed Age Groups (Optional)</FormLabel>
+                      <FormDescription>Select more granular age segments for better targeting</FormDescription>
+                      <div className="flex flex-wrap gap-4 mt-2">
+                        {DETAILED_AGE_GROUPS.map((age) => (
+                          <FormField
+                            key={age}
+                            control={form.control}
+                            name="detailedAgeGroups"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(age)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), age])
+                                        : field.onChange(
+                                            field.value?.filter((value) => value !== age)
+                                          );
+                                    }}
+                                    data-testid={`checkbox-detailed-age-${age.toLowerCase().replace(/[()]/g, '').replace(/\s/g, '-')}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm font-normal cursor-pointer">{age}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid md:grid-cols-2 gap-4 mt-4">
+                  <FormField
+                    control={form.control}
+                    name="genderOrientation"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Gender Orientation</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-gender-orientation">
+                              <SelectValue placeholder="Select orientation" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {GENDER_ORIENTATIONS.map((orientation) => (
+                              <SelectItem key={orientation} value={orientation}>{orientation}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="incomeLevel"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Income Level</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-income-level">
+                              <SelectValue placeholder="Select income level" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {INCOME_LEVELS.map((level) => (
+                              <SelectItem key={level} value={level}>{level}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="lifestyleTags"
+                  render={() => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Lifestyle Tags</FormLabel>
+                      <FormDescription>Describe the lifestyle characteristics of your audience</FormDescription>
+                      <div className="flex flex-wrap gap-4 mt-2">
+                        {LIFESTYLE_TAGS.map((tag) => (
+                          <FormField
+                            key={tag}
+                            control={form.control}
+                            name="lifestyleTags"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(tag)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), tag])
+                                        : field.onChange(
+                                            field.value?.filter((value) => value !== tag)
+                                          );
+                                    }}
+                                    data-testid={`checkbox-lifestyle-${tag.toLowerCase().replace(/\s/g, '-')}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm font-normal cursor-pointer">{tag}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="customAudienceTags"
+                  render={({ field }) => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Custom Audience Tags (comma-separated)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Young Entrepreneurs, Digital Nomads, Pet Owners" {...field} data-testid="input-custom-audience-tags" />
+                      </FormControl>
+                      <FormDescription>Add custom tags to increase targeting accuracy</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="userIntent"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>User Intent at This Location</FormLabel>
+                    <FormDescription>What are people typically doing here? (Select all that apply)</FormDescription>
+                    <div className="flex flex-wrap gap-4 mt-2">
+                      {intents.map((intent) => (
+                        <FormField
+                          key={intent}
+                          control={form.control}
+                          name="userIntent"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(intent)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, intent])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== intent)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-intent-${intent.toLowerCase()}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{intent}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="userMood"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>User Mood/State of Mind</FormLabel>
+                    <FormDescription>What's the typical mood of people at this location? (Select all that apply)</FormDescription>
+                    <div className="flex flex-wrap gap-4 mt-2">
+                      {moods.map((mood) => (
+                        <FormField
+                          key={mood}
+                          control={form.control}
+                          name="userMood"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(mood)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, mood])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== mood)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-mood-${mood.toLowerCase()}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{mood}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
