@@ -18,7 +18,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { INDIAN_STATES } from "@shared/constants";
+import { 
+  INDIAN_STATES, 
+  VISIBILITY_LEVELS, 
+  OPERATING_HOURS_PRESETS, 
+  DETAILED_AGE_GROUPS,
+  GENDER_ORIENTATIONS,
+  INCOME_LEVELS,
+  LIFESTYLE_TAGS,
+  ALL_LOCATION_TAGS
+} from "@shared/constants";
 
 const addScreenSchema = z.object({
   // Section 1 - Screen Identity
@@ -43,14 +52,28 @@ const addScreenSchema = z.object({
   environmentType: z.string().min(1, "Environment type is required"),
   nearbyLandmarks: z.string().optional(),
   
+  // Enhanced Location Context
+  visibility: z.string().optional(),
+  description: z.string().optional(),
+  operatingHoursPreset: z.string().optional(),
+  customOperatingHours: z.string().optional(),
+  customOperatingDays: z.string().optional(),
+  locationTags: z.array(z.string()).optional(),
+  customLocationTags: z.string().optional(),
+  
   // Section 3 - Audience Demographics
   primaryAgeGroups: z.array(z.string()).min(1, "Select at least one age group"),
+  detailedAgeGroups: z.array(z.string()).optional(),
   genderMale: z.number().min(0).max(100),
   genderFemale: z.number().min(0).max(100),
+  genderOrientation: z.string().optional(),
   affluenceLevel: z.string().min(1, "Affluence level is required"),
+  incomeLevel: z.string().optional(),
   occupationMix: z.array(z.string()).min(1, "Select at least one occupation"),
+  lifestyleTags: z.array(z.string()).optional(),
   avgDwellTime: z.string().min(1, "Average dwell time is required"),
   interestSegments: z.string().optional(),
+  customAudienceTags: z.string().optional(),
   userIntent: z.array(z.string()).min(1, "Select at least one user intent"),
   userMood: z.array(z.string()).min(1, "Select at least one user mood"),
   
@@ -97,13 +120,25 @@ export default function AddScreen() {
       timeOfDayActivity: [],
       environmentType: "",
       nearbyLandmarks: "",
+      visibility: "",
+      description: "",
+      operatingHoursPreset: "",
+      customOperatingHours: "",
+      customOperatingDays: "",
+      locationTags: [],
+      customLocationTags: "",
       primaryAgeGroups: [],
+      detailedAgeGroups: [],
       genderMale: 50,
       genderFemale: 50,
+      genderOrientation: "",
       affluenceLevel: "",
+      incomeLevel: "",
       occupationMix: [],
+      lifestyleTags: [],
       avgDwellTime: "",
       interestSegments: "",
+      customAudienceTags: "",
       userIntent: [],
       userMood: [],
       isMultiScreen: false,
@@ -132,6 +167,8 @@ export default function AddScreen() {
         genderSplit: { male: data.genderMale, female: data.genderFemale },
         nearbyLandmarks: data.nearbyLandmarks ? data.nearbyLandmarks.split(',').map(s => s.trim()) : [],
         interestSegments: data.interestSegments ? data.interestSegments.split(',').map(s => s.trim()) : [],
+        customLocationTags: data.customLocationTags ? data.customLocationTags.split(',').map(s => s.trim()) : [],
+        customAudienceTags: data.customAudienceTags ? data.customAudienceTags.split(',').map(s => s.trim()) : [],
         userIntent: data.userIntent,
         userMood: data.userMood,
         type: data.category,
