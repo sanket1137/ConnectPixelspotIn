@@ -43,13 +43,27 @@ export const screens = pgTable("screens", {
   environmentType: text("environment_type").notNull(), // Indoor / Semi-Outdoor / Outdoor Digital
   nearbyLandmarks: text("nearby_landmarks").array(),
   
+  // Enhanced Location Context
+  visibility: text("visibility"), // High / Medium / Low - based on footfall and visibility
+  description: text("description"), // Describe screen, surroundings, pricing justification
+  operatingHoursPreset: text("operating_hours_preset"), // Business hours / Mall hours / Retail / Airport/Highways / Custom
+  customOperatingHours: text("custom_operating_hours"), // e.g., "09:00-18:00" for custom preset
+  customOperatingDays: text("custom_operating_days"), // e.g., "Mon-Fri" for custom preset
+  locationTags: text("location_tags").array(), // Nearby facilities: School, Hospital, Mall, etc.
+  customLocationTags: text("custom_location_tags").array(), // User-added custom location tags
+  
   // SECTION 3 — Audience Demographics
-  primaryAgeGroups: text("primary_age_groups").array(), // 18-25 / 25-40 / 40-60
+  primaryAgeGroups: text("primary_age_groups").array(), // 18-25 / 25-40 / 40-60 (legacy format, kept for compatibility)
+  detailedAgeGroups: text("detailed_age_groups").array(), // Children (5-12) / Teenagers (13-17) / Young Adults (18-25) / Adults (26-40) / Middle Age (41-55) / Seniors (55+) / All Ages
   genderSplit: jsonb("gender_split").$type<{ male: number; female: number }>(), // percentages
-  affluenceLevel: text("affluence_level").notNull(), // Premium / Mid / Budget
+  genderOrientation: text("gender_orientation"), // Male Dominant / Female Dominant / Mixed Gender / Family Oriented
+  affluenceLevel: text("affluence_level").notNull(), // Premium / Mid / Budget (legacy)
+  incomeLevel: text("income_level"), // Budget Conscious / Middle Income / Premium Audience / Luxury Buyers
   occupationMix: text("occupation_mix").array(), // Students / Working Professionals / Business Owners / Homemakers
+  lifestyleTags: text("lifestyle_tags").array(), // Working Professionals / Students / Commuters / Shoppers / Tourists / Local Residents / Health Conscious / Tech Savvy
   avgDwellTime: integer("avg_dwell_time").notNull(), // minutes
   interestSegments: text("interest_segments").array(), // Fitness, Coffee, Tech, Luxury Cars, Fashion, Foodies
+  customAudienceTags: text("custom_audience_tags").array(), // User-added custom audience tags for increased targeting accuracy
   
   // User Intent & Mood (for campaign targeting)
   userIntent: text("user_intent").array(), // Shopping, Commuting, Dining, Fitness, Entertainment, Work, Education

@@ -69,3 +69,124 @@ export const STATE_CITIES: Record<string, string[]> = {
   "Chandigarh": ["Chandigarh"],
   "Puducherry": ["Puducherry", "Karaikal", "Mahe", "Yanam"],
 };
+
+// Visibility Levels
+export const VISIBILITY_LEVELS = [
+  "High", // Prime visibility with maximum exposure
+  "Medium", // Good visibility with moderate foot traffic
+  "Low" // Limited visibility or niche audience
+] as const;
+
+// Operating Hours Presets
+export const OPERATING_HOURS_PRESETS = [
+  "Business hours (09:00-18:00 | Mon-Fri)",
+  "Mall hours (10:00-22:00 | Mon-Sun)",
+  "Retail (11:00-23:00 | Mon-Sun)",
+  "Airport/Highways (24/7 | Mon-Sun)",
+  "Custom"
+] as const;
+
+// Detailed Age Groups
+export const DETAILED_AGE_GROUPS = [
+  "Children (5-12)",
+  "Teenagers (13-17)",
+  "Young Adults (18-25)",
+  "Adults (26-40)",
+  "Middle Age (41-55)",
+  "Seniors (55+)",
+  "All Ages"
+] as const;
+
+// Gender Orientation
+export const GENDER_ORIENTATIONS = [
+  "Male Dominant",
+  "Female Dominant",
+  "Mixed Gender",
+  "Family Oriented"
+] as const;
+
+// Income Levels
+export const INCOME_LEVELS = [
+  "Budget Conscious",
+  "Middle Income",
+  "Premium Audience",
+  "Luxury Buyers"
+] as const;
+
+// Lifestyle Tags
+export const LIFESTYLE_TAGS = [
+  "Working Professionals",
+  "Students",
+  "Commuters",
+  "Shoppers",
+  "Tourists",
+  "Local Residents",
+  "Health Conscious",
+  "Tech Savvy"
+] as const;
+
+// Location Tags - Nearby Facilities & Points of Interest
+export const LOCATION_TAGS = {
+  Educational: [
+    "School Nearby",
+    "College/University",
+    "Coaching Centers",
+    "Library"
+  ],
+  Healthcare: [
+    "Hospital",
+    "Clinic",
+    "Pharmacy",
+    "Diagnostic Center"
+  ],
+  Commercial: [
+    "Shopping Mall",
+    "Market Area",
+    "Office Complex",
+    "Bank/ATM"
+  ],
+  "Food & Dining": [
+    "Restaurant",
+    "Food Court",
+    "Cafe",
+    "Street Food"
+  ],
+  Transportation: [
+    "Bus Stop",
+    "Metro Station",
+    "Railway Station",
+    "Airport",
+    "Parking Area"
+  ],
+  Residential: [
+    "Housing Society",
+    "PG/Hostel",
+    "Apartment Complex"
+  ],
+  "Religious & Cultural": [
+    "Temple",
+    "Church",
+    "Mosque",
+    "Gurudwara",
+    "Cultural Center"
+  ],
+  Industrial: [
+    "Factory",
+    "Industrial Area",
+    "Warehouse"
+  ],
+  "Safety & Security": [
+    "Police Station",
+    "Fire Station",
+    "Security Office"
+  ],
+  Entertainment: [
+    "Cinema Hall",
+    "Park/Garden",
+    "Sports Complex",
+    "Gym"
+  ]
+} as const;
+
+// Flatten all location tags for easy access
+export const ALL_LOCATION_TAGS = Object.values(LOCATION_TAGS).flat();
