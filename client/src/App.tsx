@@ -28,6 +28,7 @@ import CampaignsList from "@/pages/advertiser/CampaignsList";
 import CampaignDetails from "@/pages/advertiser/CampaignDetails";
 import CreateCampaign from "@/pages/advertiser/CreateCampaign";
 import BookingManagement from "@/pages/advertiser/BookingManagement";
+import ComingSoon from "@/pages/ComingSoon";
 
 function RedirectToDashboard() {
   const { user, loading } = useAuth();
@@ -121,6 +122,16 @@ function Router() {
           <BookingRequests />
         </AuthGuard>
       </Route>
+      <Route path="/owner/earnings">
+        <AuthGuard allowedRoles={["screen_owner"]}>
+          <ComingSoon 
+            title="Earnings & Payouts"
+            description="Track your earnings from screen bookings and manage payouts"
+            backLink="/owner"
+            backLabel="Back to Dashboard"
+          />
+        </AuthGuard>
+      </Route>
       
       {/* Advertiser Routes */}
       <Route path="/advertiser">
@@ -151,6 +162,16 @@ function Router() {
       <Route path="/advertiser/bookings">
         <AuthGuard allowedRoles={["advertiser"]}>
           <BookingManagement />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/payments">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <ComingSoon 
+            title="Payments & Billing"
+            description="View your payment history and manage billing information"
+            backLink="/advertiser"
+            backLabel="Back to Dashboard"
+          />
         </AuthGuard>
       </Route>
       
