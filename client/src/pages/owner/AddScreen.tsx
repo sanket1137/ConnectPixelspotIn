@@ -26,7 +26,7 @@ import {
   GENDER_ORIENTATIONS,
   INCOME_LEVELS,
   LIFESTYLE_TAGS,
-  ALL_LOCATION_TAGS
+  LOCATION_TAGS
 } from "@shared/constants";
 
 const addScreenSchema = z.object({
@@ -640,6 +640,172 @@ export default function AddScreen() {
                   )}
                 />
               </div>
+
+              {/* Enhanced Location Context */}
+              <div className="pt-4 border-t">
+                <h3 className="text-lg font-semibold mb-4">Enhanced Location Details</h3>
+                
+                <div className="grid md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="visibility"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Visibility Level</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-visibility">
+                              <SelectValue placeholder="Select visibility" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {VISIBILITY_LEVELS.map((level) => (
+                              <SelectItem key={level} value={level}>{level}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>Based on footfall and screen position</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="operatingHoursPreset"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Operating Hours</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-operating-hours">
+                              <SelectValue placeholder="Select operating hours" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {OPERATING_HOURS_PRESETS.map((preset) => (
+                              <SelectItem key={preset} value={preset}>{preset}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {form.watch("operatingHoursPreset") === "Custom" && (
+                  <div className="grid md:grid-cols-2 gap-4 mt-4">
+                    <FormField
+                      control={form.control}
+                      name="customOperatingHours"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Custom Hours</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., 09:00-18:00" {...field} data-testid="input-custom-hours" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="customOperatingDays"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Custom Days</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., Mon-Fri" {...field} data-testid="input-custom-days" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Screen Description</FormLabel>
+                      <FormControl>
+                        <textarea
+                          {...field}
+                          rows={3}
+                          placeholder="Describe the screen, surroundings, and justification for pricing..."
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          data-testid="textarea-description"
+                        />
+                      </FormControl>
+                      <FormDescription>Provide context about location and pricing</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="locationTags"
+                  render={() => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Nearby Facilities & Points of Interest</FormLabel>
+                      <div className="space-y-3">
+                        {Object.entries(LOCATION_TAGS).map(([category, tags]) => (
+                          <div key={category} className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">{category}</p>
+                            <div className="flex flex-wrap gap-3">
+                              {(tags as readonly string[]).map((tag: string) => (
+                                <FormField
+                                  key={tag}
+                                  control={form.control}
+                                  name="locationTags"
+                                  render={({ field }) => (
+                                    <FormItem className="flex items-center space-x-2 space-y-0">
+                                      <FormControl>
+                                        <Checkbox
+                                          checked={field.value?.includes(tag)}
+                                          onCheckedChange={(checked) => {
+                                            return checked
+                                              ? field.onChange([...(field.value || []), tag])
+                                              : field.onChange(
+                                                  field.value?.filter((value) => value !== tag)
+                                                );
+                                          }}
+                                          data-testid={`checkbox-location-${tag.toLowerCase().replace(/[\/\s]/g, '-')}`}
+                                        />
+                                      </FormControl>
+                                      <FormLabel className="text-sm font-normal cursor-pointer">{tag}</FormLabel>
+                                    </FormItem>
+                                  )}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="customLocationTags"
+                  render={({ field }) => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Custom Location Tags (comma-separated)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Tech Park, Beach View, Heritage Site" {...field} data-testid="input-custom-location-tags" />
+                      </FormControl>
+                      <FormDescription>Add custom tags to increase targeting accuracy</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </CardContent>
           </Card>
 
@@ -839,6 +1005,152 @@ export default function AddScreen() {
                   </FormItem>
                 )}
               />
+
+              {/* Enhanced Demographics */}
+              <div className="pt-4 border-t">
+                <h3 className="text-lg font-semibold mb-4">Enhanced Audience Demographics</h3>
+                
+                <FormField
+                  control={form.control}
+                  name="detailedAgeGroups"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Detailed Age Groups (Optional)</FormLabel>
+                      <FormDescription>Select more granular age segments for better targeting</FormDescription>
+                      <div className="flex flex-wrap gap-4 mt-2">
+                        {DETAILED_AGE_GROUPS.map((age) => (
+                          <FormField
+                            key={age}
+                            control={form.control}
+                            name="detailedAgeGroups"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(age)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), age])
+                                        : field.onChange(
+                                            field.value?.filter((value) => value !== age)
+                                          );
+                                    }}
+                                    data-testid={`checkbox-detailed-age-${age.toLowerCase().replace(/[()]/g, '').replace(/\s/g, '-')}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm font-normal cursor-pointer">{age}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid md:grid-cols-2 gap-4 mt-4">
+                  <FormField
+                    control={form.control}
+                    name="genderOrientation"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Gender Orientation</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-gender-orientation">
+                              <SelectValue placeholder="Select orientation" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {GENDER_ORIENTATIONS.map((orientation) => (
+                              <SelectItem key={orientation} value={orientation}>{orientation}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="incomeLevel"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Income Level</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-income-level">
+                              <SelectValue placeholder="Select income level" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {INCOME_LEVELS.map((level) => (
+                              <SelectItem key={level} value={level}>{level}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="lifestyleTags"
+                  render={() => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Lifestyle Tags</FormLabel>
+                      <FormDescription>Describe the lifestyle characteristics of your audience</FormDescription>
+                      <div className="flex flex-wrap gap-4 mt-2">
+                        {LIFESTYLE_TAGS.map((tag) => (
+                          <FormField
+                            key={tag}
+                            control={form.control}
+                            name="lifestyleTags"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(tag)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), tag])
+                                        : field.onChange(
+                                            field.value?.filter((value) => value !== tag)
+                                          );
+                                    }}
+                                    data-testid={`checkbox-lifestyle-${tag.toLowerCase().replace(/\s/g, '-')}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm font-normal cursor-pointer">{tag}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="customAudienceTags"
+                  render={({ field }) => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Custom Audience Tags (comma-separated)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Young Entrepreneurs, Digital Nomads, Pet Owners" {...field} data-testid="input-custom-audience-tags" />
+                      </FormControl>
+                      <FormDescription>Add custom tags to increase targeting accuracy</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}
