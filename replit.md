@@ -67,6 +67,37 @@ The platform supports three distinct user roles: Admin, Screen Owner, and Advert
     -   Updated in both screen onboarding and campaign creation forms
     -   Enhanced targeting capabilities for advertisers to reach specific audience segments
 
+-   **Comprehensive Screen Enhancement System**: Major upgrade to screen onboarding with granular targeting attributes:
+    
+    **Enhanced Location Context:**
+    -   Visibility Level (High/Medium/Low) based on footfall and screen positioning
+    -   Description field for screen surroundings and pricing justification
+    -   Operating Hours Presets: Business hours, Mall hours, Retail, Airport/Highways 24/7, or Custom
+    -   Custom operating hours and days for flexible scheduling
+    -   Location Tags System with 10 categories (50+ tags total):
+        - Educational: School Nearby, College/University, Coaching Centers, Library
+        - Healthcare: Hospital, Clinic, Pharmacy, Diagnostic Center
+        - Commercial: Shopping Mall, Market Area, Office Complex, Bank/ATM
+        - Food & Dining: Restaurant, Food Court, Cafe, Street Food
+        - Transportation: Bus Stop, Metro Station, Railway Station, Airport, Parking Area
+        - Residential: Housing Society, PG/Hostel, Apartment Complex
+        - Religious & Cultural: Temple, Church, Mosque, Gurudwara, Cultural Center
+        - Industrial: Factory, Industrial Area, Warehouse
+        - Safety & Security: Police Station, Fire Station, Security Office
+        - Entertainment: Cinema Hall, Park/Garden, Sports Complex, Gym
+    -   Custom Location Tags for user-defined points of interest
+    
+    **Enhanced Audience Demographics:**
+    -   Detailed Age Groups: Children (5-12), Teenagers (13-17), Young Adults (18-25), Adults (26-40), Middle Age (41-55), Seniors (55+), All Ages
+    -   Gender Orientation: Male Dominant, Female Dominant, Mixed Gender, Family Oriented
+    -   Income Levels: Budget Conscious, Middle Income, Premium Audience, Luxury Buyers
+    -   Lifestyle Tags: Working Professionals, Students, Commuters, Shoppers, Tourists, Local Residents, Health Conscious, Tech Savvy
+    -   Custom Audience Tags for user-defined demographic characteristics
+    
+    -   All enhanced fields stored in database with backward compatibility for existing screens
+    -   Comprehensive constants defined in `shared/constants.ts` for consistency across app
+    -   Form validation and UI updated to support all new targeting dimensions
+
 ## Previous Changes (October 16, 2025)
 -   **Added Email/Password Authentication**: Extended Firebase authentication to support email/password signup and login alongside existing Google OAuth
 -   **Updated Login Page**: Redesigned login page with tabs for "Login" and "Sign Up", each supporting both Google and email/password authentication
