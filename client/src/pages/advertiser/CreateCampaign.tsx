@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -7,26 +7,31 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
-import { ArrowLeft, ArrowRight, Target, Users, Calendar, Filter, Monitor, Check, Trash2, DollarSign, MapPin, TrendingUp, List, Map as MapIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor, Upload, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Screen } from "@shared/schema";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { GoogleMap, useLoadScript, Marker, InfoWindow } from "@react-google-maps/api";
+import { GoogleMap, useLoadScript, Marker, InfoWindow, Circle } from "@react-google-maps/api";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
 const mapContainerStyle = {
   width: '100%',
-  height: '500px'
+  height: '400px'
 };
 
 const defaultCenter = {
@@ -37,63 +42,59 @@ const defaultCenter = {
 const createCampaignSchema = z.object({
   name: z.string().min(3, "Campaign name must be at least 3 characters"),
   objective: z.string().min(1, "Objective is required"),
+  budget: z.number().min(1000, "Minimum budget is ₹1,000"),
   
-  // Location targeting
-  targetLocationType: z.string().min(1, "Location type is required"),
-  targetCities: z.array(z.string()).optional(),
+  // Area targeting
+  areaType: z.enum(["map", "city"]),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  radiusKm: z.number().min(1).max(10).optional(),
+  targetCity: z.string().optional(),
   targetState: z.string().optional(),
-  targetPincodes: z.array(z.string()).optional(),
-  
-  // Demographics
-  targetAgeGroups: z.array(z.string()).min(1, "Select at least one age group"),
-  targetGender: z.string().min(1, "Select target gender"),
-  targetAffluence: z.array(z.string()).min(1, "Select at least one affluence level"),
-  targetOccupations: z.array(z.string()).min(1, "Select at least one occupation"),
-  
-  // Intent & Mood
-  targetIntent: z.array(z.string()).min(1, "Select at least one intent"),
-  targetMood: z.array(z.string()).min(1, "Select at least one mood"),
   
   // Duration
+  durationMode: z.enum(["auto", "custom"]),
+  customDays: z.number().min(1).optional(),
+  
+  // Optional filters
+  venueTypeFilters: z.array(z.string()).optional(),
+  targetAgeGroups: z.array(z.string()).optional(),
+  targetGender: z.string().optional(),
+  targetAffluence: z.array(z.string()).optional(),
+  timePreference: z.array(z.string()).optional(),
+  
+  // Dates (calculated from duration)
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
-  
-  // Venue filters (optional)
-  venueTypeFilters: z.array(z.string()).optional(),
 });
 
 type CreateCampaignForm = z.infer<typeof createCampaignSchema>;
 
 const steps = [
-  { id: 1, name: "Objective & Location", icon: Target },
-  { id: 2, name: "Audience & Intent", icon: Users },
-  { id: 3, name: "Duration", icon: Calendar },
-  { id: 4, name: "Venue Filters", icon: Filter },
-  { id: 5, name: "Recommended Screens", icon: Monitor },
+  { id: 1, name: "Goal & Budget", icon: Target },
+  { id: 2, name: "Choose Area", icon: MapPin },
+  { id: 3, name: "Set Duration", icon: Calendar },
+  { id: 4, name: "Filters", icon: Filter },
+  { id: 5, name: "Smart Plan", icon: Monitor },
+  { id: 6, name: "Review", icon: Upload },
+];
+
+const objectives = [
+  { value: "brand_awareness", label: "Brand Awareness" },
+  { value: "product_launch", label: "Product Launch" },
+  { value: "event_promotion", label: "Event Promotion" },
+  { value: "seasonal_campaign", label: "Seasonal Campaign" },
+  { value: "local_promotion", label: "Local Promotion" },
+];
+
+const venueTypes = [
+  "Mall", "Corporate Park", "Airport", "Metro", "Bus Stop", 
+  "Shopping Complex", "Restaurant", "Cafe", "Highway", "Road Junction"
 ];
 
 const ageGroups = ["18-25", "25-40", "40-60", "60+"];
-const genderOptions = ["male", "female", "all"];
 const affluenceLevels = ["Premium", "Mid", "Budget"];
-const occupations = ["Students", "Working Professionals", "Business Owners", "Homemakers"];
-const intents = ["Shopping", "Commuting", "Dining", "Fitness", "Entertainment", "Work", "Education"];
-const moods = ["Relaxed", "Rushed", "Social", "Focused", "Leisure"];
-const venueTypes = [
-  "Apartment",
-  "Road Junction", 
-  "Highway",
-  "Restaurant",
-  "Cafe",
-  "Shopping Complex",
-  "Mall",
-  "Corporate Park",
-  "Airport",
-  "Metro",
-  "Bus Stop",
-  "Retail Store",
-  "Office Building",
-  "Stadium"
-];
+const timePreferences = ["Rush hour", "All-day"];
 
 export default function CreateCampaign() {
   const { isLoaded } = useLoadScript({
@@ -103,117 +104,143 @@ export default function CreateCampaign() {
   const [currentStep, setCurrentStep] = useState(1);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
-  // Fetch available locations dynamically from screens in database
+  const [uploadedCreativeURL, setUploadedCreativeURL] = useState<string | null>(null);
+  const [screensInArea, setScreensInArea] = useState<Screen[]>([]);
+  const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [selectedMapScreen, setSelectedMapScreen] = useState<Screen | null>(null);
+  const [planMode, setPlanMode] = useState<"smart" | "customize">("smart");
+  const [calculatedDuration, setCalculatedDuration] = useState<number | null>(null);
+  const [estimatedReach, setEstimatedReach] = useState<{ reach: number; impressions: number; screenCount: number } | null>(null);
+  
+  // Map state
+  const [mapCenter, setMapCenter] = useState(defaultCenter);
+  const [markerPosition, setMarkerPosition] = useState(defaultCenter);
+
+  // Fetch available cities
   const { data: locationsData } = useQuery<{ states: string[]; cities: Record<string, string[]>; allCities: string[] }>({
     queryKey: ["/api/screens/locations"],
   });
-  
-  const availableStates = locationsData?.states || [];
-  const availableCitiesByState = locationsData?.cities || {};
-  const allAvailableCities = locationsData?.allCities || [];
-  const queryClient = useQueryClient();
-  const [uploadedCreativeURL, setUploadedCreativeURL] = useState<string | null>(null);
-  const [recommendedScreens, setRecommendedScreens] = useState<Screen[]>([]);
-  const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>([]);
-  const [pincodeInput, setPincodeInput] = useState("");
-  const [cityInput, setCityInput] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "map">("list");
-  const [selectedMapScreen, setSelectedMapScreen] = useState<Screen | null>(null);
 
-  const { data: allScreens = [] } = useQuery<Screen[]>({
-    queryKey: ["/api/screens"],
-  });
+  const allCities = locationsData?.allCities || [];
 
   const form = useForm<CreateCampaignForm>({
     resolver: zodResolver(createCampaignSchema),
     defaultValues: {
       name: "",
       objective: "",
-      targetLocationType: "",
-      targetCities: [],
+      budget: 10000,
+      areaType: "map",
+      latitude: defaultCenter.lat,
+      longitude: defaultCenter.lng,
+      radiusKm: 5,
+      targetCity: "",
       targetState: "",
-      targetPincodes: [],
-      targetAgeGroups: [],
-      targetGender: "",
-      targetAffluence: [],
-      targetOccupations: [],
-      targetIntent: [],
-      targetMood: [],
-      startDate: "",
-      endDate: "",
+      durationMode: "auto",
+      customDays: 7,
       venueTypeFilters: [],
+      targetAgeGroups: [],
+      targetGender: "all",
+      targetAffluence: [],
+      timePreference: [],
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: "",
     },
   });
 
-  // AI-driven screen recommendation logic
-  const calculateRecommendedScreens = () => {
-    const formData = form.getValues();
-    
-    let filtered = allScreens.filter(s => s.status === "active");
+  const watchBudget = form.watch("budget");
+  const watchAreaType = form.watch("areaType");
+  const watchRadius = form.watch("radiusKm");
+  const watchTargetCity = form.watch("targetCity");
+  const watchDurationMode = form.watch("durationMode");
+  const watchCustomDays = form.watch("customDays");
 
-    // Location filtering
-    if (formData.targetLocationType === "city" && formData.targetCities && formData.targetCities.length > 0) {
-      filtered = filtered.filter(s => formData.targetCities?.includes(s.city));
-    } else if (formData.targetLocationType === "state" && formData.targetState) {
-      filtered = filtered.filter(s => s.state === formData.targetState);
-    } else if (formData.targetLocationType === "pincodes" && formData.targetPincodes && formData.targetPincodes.length > 0) {
-      filtered = filtered.filter(s => formData.targetPincodes?.includes(s.pincode));
+  // Fetch screens in area when area changes
+  useEffect(() => {
+    const fetchScreensInArea = async () => {
+      if (watchAreaType === "map") {
+        const lat = form.getValues("latitude");
+        const lng = form.getValues("longitude");
+        const radiusKm = form.getValues("radiusKm");
+        
+        if (lat && lng && radiusKm) {
+          try {
+            const response = await apiRequest("GET", `/api/screens/in-area?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`);
+            const data = await response.json();
+            setScreensInArea(data);
+            if (planMode === "smart") {
+              setSelectedScreenIds(data.map((s: Screen) => s.id));
+            }
+          } catch (error) {
+            console.error("Error fetching screens:", error);
+          }
+        }
+      } else if (watchAreaType === "city" && watchTargetCity) {
+        try {
+          const response = await apiRequest("GET", `/api/screens/in-area?city=${watchTargetCity}`);
+          const data = await response.json();
+          setScreensInArea(data);
+          if (planMode === "smart") {
+            setSelectedScreenIds(data.map((s: Screen) => s.id));
+          }
+        } catch (error) {
+          console.error("Error fetching screens:", error);
+        }
+      }
+    };
+
+    if (currentStep >= 2) {
+      fetchScreensInArea();
     }
+  }, [watchAreaType, watchRadius, watchTargetCity, currentStep]);
 
-    // Demographics filtering (lenient - includes screens with missing data)
-    if (formData.targetAgeGroups && formData.targetAgeGroups.length > 0) {
-      filtered = filtered.filter(s => 
-        !s.primaryAgeGroups || s.primaryAgeGroups.length === 0 || s.primaryAgeGroups.some(age => formData.targetAgeGroups.includes(age))
-      );
+  // Calculate duration when in auto mode
+  useEffect(() => {
+    const calculateAutoDuration = async () => {
+      if (watchDurationMode === "auto" && selectedScreenIds.length > 0 && watchBudget) {
+        try {
+          const response = await apiRequest("POST", "/api/campaign/calculate-duration", {
+            budget: watchBudget,
+            screenIds: selectedScreenIds,
+          });
+          const data = await response.json();
+          setCalculatedDuration(data.days);
+        } catch (error) {
+          console.error("Error calculating duration:", error);
+        }
+      }
+    };
+
+    if (currentStep >= 3 && watchDurationMode === "auto") {
+      calculateAutoDuration();
     }
+  }, [watchDurationMode, selectedScreenIds, watchBudget, currentStep]);
 
-    if (formData.targetGender && formData.targetGender !== "all" && filtered.length > 0) {
-      filtered = filtered.filter(s => {
-        if (!s.genderSplit) return true;
-        const split = s.genderSplit as { male: number; female: number };
-        return formData.targetGender === "male" ? split.male >= 40 : split.female >= 40;
-      });
+  // Calculate reach estimate
+  useEffect(() => {
+    const calculateReach = async () => {
+      const duration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
+      
+      if (selectedScreenIds.length > 0 && duration) {
+        try {
+          const response = await apiRequest("POST", "/api/campaign/calculate-reach", {
+            screenIds: selectedScreenIds,
+            duration: duration,
+          });
+          const data = await response.json();
+          setEstimatedReach(data);
+        } catch (error) {
+          console.error("Error calculating reach:", error);
+        }
+      }
+    };
+
+    if (currentStep >= 3) {
+      calculateReach();
     }
-
-    if (formData.targetAffluence && formData.targetAffluence.length > 0) {
-      filtered = filtered.filter(s => 
-        !s.affluenceLevel || formData.targetAffluence.includes(s.affluenceLevel)
-      );
-    }
-
-    if (formData.targetOccupations && formData.targetOccupations.length > 0) {
-      filtered = filtered.filter(s => 
-        !s.occupationMix || s.occupationMix.length === 0 || s.occupationMix.some(occ => formData.targetOccupations.includes(occ))
-      );
-    }
-
-    // Intent filtering (match with userIntent)
-    if (formData.targetIntent && formData.targetIntent.length > 0) {
-      filtered = filtered.filter(s => 
-        !s.userIntent || s.userIntent.length === 0 || s.userIntent.some(intent => formData.targetIntent.includes(intent))
-      );
-    }
-
-    // Mood filtering (match with userMood)
-    if (formData.targetMood && formData.targetMood.length > 0) {
-      filtered = filtered.filter(s => 
-        !s.userMood || s.userMood.length === 0 || s.userMood.some(mood => formData.targetMood.includes(mood))
-      );
-    }
-
-    // Venue type filtering (optional)
-    if (formData.venueTypeFilters && formData.venueTypeFilters.length > 0) {
-      filtered = filtered.filter(s => 
-        formData.venueTypeFilters?.some(venue => 
-          s.venueCategory.toLowerCase().includes(venue.toLowerCase())
-        )
-      );
-    }
-
-    setRecommendedScreens(filtered);
-    setSelectedScreenIds(filtered.map(s => s.id)); // Auto-select all recommended
-  };
+  }, [selectedScreenIds, calculatedDuration, watchDurationMode, watchCustomDays, currentStep]);
 
   const createCampaignMutation = useMutation({
     mutationFn: async (data: CreateCampaignForm) => {
@@ -221,46 +248,68 @@ export default function CreateCampaign() {
         throw new Error("No screens selected for the campaign");
       }
 
-      // First create the campaign
+      const duration = data.durationMode === "auto" ? calculatedDuration : data.customDays;
+      if (!duration) {
+        throw new Error("Duration not calculated");
+      }
+
+      // Calculate end date
+      const startDate = new Date(data.startDate);
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + duration);
+
+      // Create campaign with targetArea
+      const targetArea = data.areaType === "map" 
+        ? {
+            type: "map" as const,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            radiusKm: data.radiusKm,
+          }
+        : {
+            type: "city" as const,
+            city: data.targetCity,
+            state: data.targetState,
+          };
+
       const campaignResponse = await apiRequest("POST", "/api/advertiser/campaigns", {
         name: data.name,
         objective: data.objective,
-        targetLocationType: data.targetLocationType,
-        targetCities: data.targetCities || [],
+        targetArea,
+        // Legacy fields for backward compatibility
+        targetLocationType: data.areaType === "city" ? "city" : "india",
+        targetCities: data.areaType === "city" ? [data.targetCity || ""] : [],
         targetState: data.targetState || null,
-        targetPincodes: data.targetPincodes || [],
-        targetAgeGroups: data.targetAgeGroups,
-        targetGender: data.targetGender,
-        targetAffluence: data.targetAffluence,
-        targetOccupations: data.targetOccupations,
-        targetIntent: data.targetIntent,
-        targetMood: data.targetMood,
+        targetPincodes: [],
+        targetAgeGroups: data.targetAgeGroups || [],
+        targetGender: data.targetGender || "all",
+        targetAffluence: data.targetAffluence || [],
+        targetOccupations: [],
+        targetIntent: [],
+        targetMood: [],
         venueTypeFilters: data.venueTypeFilters || [],
-        startDate: new Date(data.startDate).toISOString(),
-        endDate: new Date(data.endDate).toISOString(),
-        budget: calculateTotalBudget(),
-        estimatedBudget: calculateTotalBudget(),
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        budget: data.budget,
+        estimatedBudget: data.budget,
         creativeUrl: uploadedCreativeURL || null,
       });
+      
       const campaign = await campaignResponse.json();
 
-      // Then create bookings for each selected screen
+      // Create bookings for each selected screen
       const bookingPromises = selectedScreenIds.map(screenId => {
-        const screen = allScreens.find(s => s.id === screenId);
+        const screen = screensInArea.find(s => s.id === screenId);
         if (!screen) throw new Error(`Screen ${screenId} not found`);
 
-        const days = Math.max(1, Math.ceil(
-          (new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / 
-          (1000 * 60 * 60 * 24)
-        ) + 1);
-        const price = screen.pricePerDay * days;
+        const price = screen.pricePerDay * duration;
 
         return apiRequest("POST", "/api/advertiser/bookings", {
           screenId,
           campaignId: campaign.id,
           price,
-          startDate: new Date(data.startDate).toISOString(),
-          endDate: new Date(data.endDate).toISOString(),
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
         });
       });
 
@@ -270,7 +319,7 @@ export default function CreateCampaign() {
     onSuccess: () => {
       toast({
         title: "Campaign Created",
-        description: `Campaign created with ${selectedScreenIds.length} booking requests.`,
+        description: `Campaign created successfully with ${selectedScreenIds.length} booking requests.`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       setLocation("/advertiser/campaigns");
@@ -312,29 +361,7 @@ export default function CreateCampaign() {
     }
   };
 
-  const calculateTotalBudget = () => {
-    const startDate = form.watch("startDate");
-    const endDate = form.watch("endDate");
-    
-    if (!startDate || !endDate) return 0;
-
-    const days = Math.max(1, Math.ceil(
-      (new Date(endDate).getTime() - new Date(startDate).getTime()) / 
-      (1000 * 60 * 60 * 24)
-    ) + 1);
-
-    return selectedScreenIds.reduce((sum, screenId) => {
-      const screen = allScreens.find(s => s.id === screenId);
-      return sum + (screen ? screen.pricePerDay * days : 0);
-    }, 0);
-  };
-
-  const removeScreen = (screenId: string) => {
-    setSelectedScreenIds(prev => prev.filter(id => id !== screenId));
-  };
-
   const onSubmit = (data: CreateCampaignForm) => {
-    // Prevent accidental submission - only allow from final step with explicit button click
     if (currentStep !== steps.length) {
       return;
     }
@@ -347,18 +374,21 @@ export default function CreateCampaign() {
       });
       return;
     }
+    
     createCampaignMutation.mutate(data);
   };
 
-  const handleCreateCampaign = () => {
-    // Explicitly trigger form submission only when Create Campaign button is clicked
-    form.handleSubmit(onSubmit)();
+  const handleSaveDraft = () => {
+    toast({
+      title: "Save as Draft",
+      description: "Draft functionality coming soon!",
+    });
   };
 
   const nextStep = async () => {
     // Validate current step
     if (currentStep === 1) {
-      const isValid = await form.trigger(["name", "objective", "targetLocationType"]);
+      const isValid = await form.trigger(["name", "objective", "budget"]);
       if (!isValid) {
         toast({
           title: "Incomplete Information",
@@ -367,44 +397,35 @@ export default function CreateCampaign() {
         });
         return;
       }
-
-      // Check location-specific fields
-      const locationType = form.getValues("targetLocationType");
-      if (locationType === "city" && (!form.getValues("targetCities") || form.getValues("targetCities")?.length === 0)) {
-        toast({
-          title: "No Cities Selected",
-          description: "Please select at least one city.",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (locationType === "state" && !form.getValues("targetState")) {
-        toast({
-          title: "No State Selected",
-          description: "Please select a state.",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (locationType === "pincodes" && (!form.getValues("targetPincodes") || form.getValues("targetPincodes")?.length === 0)) {
-        toast({
-          title: "No Pincodes Added",
-          description: "Please add at least one pincode.",
-          variant: "destructive",
-        });
-        return;
-      }
     }
 
     if (currentStep === 2) {
-      const isValid = await form.trigger([
-        "targetAgeGroups", "targetGender", "targetAffluence", 
-        "targetOccupations", "targetIntent", "targetMood"
-      ]);
-      if (!isValid) {
+      if (watchAreaType === "map") {
+        const isValid = await form.trigger(["latitude", "longitude", "radiusKm"]);
+        if (!isValid) {
+          toast({
+            title: "Invalid Area",
+            description: "Please select a valid area on the map.",
+            variant: "destructive",
+          });
+          return;
+        }
+      } else {
+        const isValid = await form.trigger(["targetCity"]);
+        if (!isValid || !watchTargetCity) {
+          toast({
+            title: "No City Selected",
+            description: "Please select a city.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      
+      if (screensInArea.length === 0) {
         toast({
-          title: "Incomplete Targeting",
-          description: "Please complete all targeting criteria.",
+          title: "No Screens Available",
+          description: "No screens found in the selected area. Please choose a different area.",
           variant: "destructive",
         });
         return;
@@ -412,31 +433,36 @@ export default function CreateCampaign() {
     }
 
     if (currentStep === 3) {
-      const isValid = await form.trigger(["startDate", "endDate"]);
+      const isValid = await form.trigger(["startDate"]);
       if (!isValid) {
         toast({
-          title: "Invalid Dates",
-          description: "Please select valid dates.",
+          title: "Invalid Date",
+          description: "Please select a valid start date.",
           variant: "destructive",
         });
         return;
       }
 
-      const startDate = new Date(form.getValues("startDate"));
-      const endDate = new Date(form.getValues("endDate"));
-      if (endDate < startDate) {
-        toast({
-          title: "Invalid Date Range",
-          description: "End date must be after start date.",
-          variant: "destructive",
-        });
-        return;
+      if (watchDurationMode === "custom") {
+        const customDaysValid = await form.trigger(["customDays"]);
+        if (!customDaysValid || !watchCustomDays) {
+          toast({
+            title: "Invalid Duration",
+            description: "Please enter a valid number of days.",
+            variant: "destructive",
+          });
+          return;
+        }
       }
-    }
 
-    // Calculate recommendations when moving from step 4 to 5
-    if (currentStep === 4) {
-      calculateRecommendedScreens();
+      // Set end date based on duration
+      const duration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
+      if (duration) {
+        const startDate = new Date(form.getValues("startDate"));
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + duration);
+        form.setValue("endDate", endDate.toISOString().split('T')[0]);
+      }
     }
 
     if (currentStep < steps.length) {
@@ -449,43 +475,21 @@ export default function CreateCampaign() {
   };
 
   const progress = (currentStep / steps.length) * 100;
-  const totalBudget = calculateTotalBudget();
 
-  const addPincode = () => {
-    if (pincodeInput.trim() && /^\d{6}$/.test(pincodeInput)) {
-      const current = form.getValues("targetPincodes") || [];
-      if (!current.includes(pincodeInput)) {
-        form.setValue("targetPincodes", [...current, pincodeInput]);
-        setPincodeInput("");
-      }
-    } else {
-      toast({
-        title: "Invalid Pincode",
-        description: "Please enter a valid 6-digit pincode.",
-        variant: "destructive",
-      });
-    }
+  const toggleScreen = (screenId: string) => {
+    setSelectedScreenIds(prev => 
+      prev.includes(screenId) 
+        ? prev.filter(id => id !== screenId)
+        : [...prev, screenId]
+    );
   };
 
-  const removePincode = (pincode: string) => {
-    const current = form.getValues("targetPincodes") || [];
-    form.setValue("targetPincodes", current.filter(p => p !== pincode));
-  };
-
-  const addCity = () => {
-    if (cityInput.trim()) {
-      const current = form.getValues("targetCities") || [];
-      if (!current.includes(cityInput)) {
-        form.setValue("targetCities", [...current, cityInput]);
-        setCityInput("");
-      }
-    }
-  };
-
-  const removeCity = (city: string) => {
-    const current = form.getValues("targetCities") || [];
-    form.setValue("targetCities", current.filter(c => c !== city));
-  };
+  const totalBudget = watchBudget;
+  const duration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
+  const spentBudget = selectedScreenIds.reduce((sum, screenId) => {
+    const screen = screensInArea.find(s => s.id === screenId);
+    return sum + (screen ? screen.pricePerDay * (duration || 1) : 0);
+  }, 0);
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-6">
@@ -494,13 +498,13 @@ export default function CreateCampaign() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Dashboard
         </Button>
-        <h1 className="text-3xl font-bold text-foreground font-serif mt-4">Create AI-Driven Campaign</h1>
-        <p className="text-muted-foreground mt-1">Let AI recommend the best screens for your target audience</p>
+        <h1 className="text-3xl font-bold text-foreground font-serif mt-4">Create Smart Campaign</h1>
+        <p className="text-muted-foreground mt-1">AI-powered campaign creation in 6 simple steps</p>
       </div>
 
       <Card>
         <CardHeader>
-          <Progress value={progress} className="mb-4" />
+          <Progress value={progress} className="mb-4" data-testid="progress-campaign" />
           <div className="flex justify-between">
             {steps.map((step) => {
               const Icon = step.icon;
@@ -528,13 +532,20 @@ export default function CreateCampaign() {
           <Form {...form}>
             <form 
               onSubmit={(e) => {
-                e.preventDefault(); // Prevent form submission unless explicitly triggered
+                e.preventDefault();
               }} 
               className="space-y-6"
             >
-              {/* Step 1: Objective & Location */}
+              {/* Step 1: Campaign Goal & Budget */}
               {currentStep === 1 && (
-                <div className="space-y-4">
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-semibold mb-2">Campaign Goal & Budget</h2>
+                    <p className="text-muted-foreground">
+                      Tell us your goal and budget — we'll show what's possible near you.
+                    </p>
+                  </div>
+
                   <FormField
                     control={form.control}
                     name="name"
@@ -558,15 +569,13 @@ export default function CreateCampaign() {
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger data-testid="select-objective">
-                              <SelectValue placeholder="Select objective" />
+                              <SelectValue placeholder="Select your goal" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="brand_awareness">Brand Awareness</SelectItem>
-                            <SelectItem value="product_launch">Product Launch</SelectItem>
-                            <SelectItem value="event_promotion">Event Promotion</SelectItem>
-                            <SelectItem value="seasonal_campaign">Seasonal Campaign</SelectItem>
-                            <SelectItem value="local_promotion">Local Business Promotion</SelectItem>
+                            {objectives.map(obj => (
+                              <SelectItem key={obj.value} value={obj.value}>{obj.label}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -574,379 +583,199 @@ export default function CreateCampaign() {
                     )}
                   />
 
-                  <Separator className="my-6" />
+                  <FormField
+                    control={form.control}
+                    name="budget"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Campaign Budget (₹)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="e.g., 50000" 
+                            {...field}
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                            data-testid="input-budget"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Minimum budget: ₹1,000
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
 
+              {/* Step 2: Choose Area */}
+              {currentStep === 2 && (
+                <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-semibold mb-3">Target Location</h3>
+                    <h2 className="text-2xl font-semibold mb-2">Choose Your Target Area</h2>
+                    <p className="text-muted-foreground">
+                      Select an area using the map or choose a specific city.
+                    </p>
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="areaType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Selection Method</FormLabel>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          className="flex gap-4"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="map" id="map" data-testid="radio-area-map" />
+                            <Label htmlFor="map">Map & Radius</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="city" id="city" data-testid="radio-area-city" />
+                            <Label htmlFor="city">City Search</Label>
+                          </div>
+                        </RadioGroup>
+                      </FormItem>
+                    )}
+                  />
+
+                  {watchAreaType === "map" && (
+                    <div className="space-y-4">
+                      {isLoaded && (
+                        <div className="border rounded-lg overflow-hidden">
+                          <GoogleMap
+                            mapContainerStyle={mapContainerStyle}
+                            center={mapCenter}
+                            zoom={12}
+                            onClick={(e) => {
+                              if (e.latLng) {
+                                const lat = e.latLng.lat();
+                                const lng = e.latLng.lng();
+                                setMarkerPosition({ lat, lng });
+                                form.setValue("latitude", lat);
+                                form.setValue("longitude", lng);
+                              }
+                            }}
+                          >
+                            <Marker
+                              position={markerPosition}
+                              draggable={true}
+                              onDragEnd={(e) => {
+                                if (e.latLng) {
+                                  const lat = e.latLng.lat();
+                                  const lng = e.latLng.lng();
+                                  setMarkerPosition({ lat, lng });
+                                  form.setValue("latitude", lat);
+                                  form.setValue("longitude", lng);
+                                }
+                              }}
+                            />
+                            {watchRadius && (
+                              <Circle
+                                center={markerPosition}
+                                radius={watchRadius * 1000}
+                                options={{
+                                  fillColor: "#3b82f6",
+                                  fillOpacity: 0.1,
+                                  strokeColor: "#3b82f6",
+                                  strokeOpacity: 0.8,
+                                  strokeWeight: 2,
+                                }}
+                              />
+                            )}
+                          </GoogleMap>
+                        </div>
+                      )}
+
+                      <FormField
+                        control={form.control}
+                        name="radiusKm"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Radius: {field.value} km</FormLabel>
+                            <FormControl>
+                              <Slider
+                                min={1}
+                                max={10}
+                                step={0.5}
+                                value={[field.value || 5]}
+                                onValueChange={(value) => field.onChange(value[0])}
+                                data-testid="slider-radius"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {watchAreaType === "city" && (
                     <FormField
                       control={form.control}
-                      name="targetLocationType"
+                      name="targetCity"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Location Type</FormLabel>
+                          <FormLabel>Select City</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
-                              <SelectTrigger data-testid="select-location-type">
-                                <SelectValue placeholder="Select location targeting" />
+                              <SelectTrigger data-testid="select-city">
+                                <SelectValue placeholder="Choose a city" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
-                              <SelectItem value="city">Specific Cities</SelectItem>
-                              <SelectItem value="state">Specific State</SelectItem>
-                              <SelectItem value="india">All India</SelectItem>
-                              <SelectItem value="pincodes">Specific Pincodes</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {form.watch("targetLocationType") === "city" && (
-                      <div className="mt-4 space-y-3">
-                        <div className="flex gap-2">
-                          <Select value={cityInput} onValueChange={setCityInput}>
-                            <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="Select a city" />
-                            </SelectTrigger>
                             <SelectContent className="max-h-[300px]">
-                              {allAvailableCities.map((city: string) => (
+                              {allCities.map((city) => (
                                 <SelectItem key={city} value={city}>{city}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                          <Button type="button" onClick={addCity} variant="outline">
-                            Add City
-                          </Button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {(form.watch("targetCities") || []).map(city => (
-                            <Badge key={city} variant="secondary" className="gap-2">
-                              <MapPin className="h-3 w-3" />
-                              {city}
-                              <button
-                                type="button"
-                                onClick={() => removeCity(city)}
-                                className="ml-1 hover:text-destructive"
-                              >
-                                ×
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
-                    {form.watch("targetLocationType") === "state" && (
-                      <div className="mt-4">
-                        <FormField
-                          control={form.control}
-                          name="targetState"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Select State</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select a state" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent className="max-h-[300px]">
-                                  {availableStates.map(state => (
-                                    <SelectItem key={state} value={state}>{state}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    )}
-
-                    {form.watch("targetLocationType") === "pincodes" && (
-                      <div className="mt-4 space-y-3">
-                        <div className="flex gap-2">
-                          <Input
-                            placeholder="Enter 6-digit pincode"
-                            value={pincodeInput}
-                            onChange={(e) => setPincodeInput(e.target.value)}
-                            maxLength={6}
-                          />
-                          <Button type="button" onClick={addPincode} variant="outline">
-                            Add Pincode
-                          </Button>
+                  {/* Live Estimate Card */}
+                  {screensInArea.length > 0 && (
+                    <Card className="bg-primary/5 border-primary/20">
+                      <CardContent className="pt-6">
+                        <div className="flex items-start gap-3">
+                          <TrendingUp className="h-5 w-5 text-primary mt-1" />
+                          <div>
+                            <p className="font-medium text-foreground">
+                              In {watchAreaType === "map" 
+                                ? `selected area (${watchRadius} km radius)` 
+                                : watchTargetCity}, ₹{totalBudget.toLocaleString()} can reach ~
+                              {screensInArea.reduce((sum, s) => sum + s.avgDailyFootfall, 0).toLocaleString()} people 
+                              across {screensInArea.length} LED screens.
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          {(form.watch("targetPincodes") || []).map(pincode => (
-                            <Badge key={pincode} variant="secondary" className="gap-2">
-                              {pincode}
-                              <button
-                                type="button"
-                                onClick={() => removePincode(pincode)}
-                                className="ml-1 hover:text-destructive"
-                              >
-                                ×
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {form.watch("targetLocationType") === "india" && (
-                      <Alert className="mt-4">
-                        <TrendingUp className="h-4 w-4" />
-                        <AlertDescription>
-                          All screens across India will be considered for recommendations.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               )}
 
-              {/* Step 2: Audience & Intent */}
-              {currentStep === 2 && (
+              {/* Step 3: Set Duration */}
+              {currentStep === 3 && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-semibold mb-3">Target Demographics</h3>
-                    
-                    <FormField
-                      control={form.control}
-                      name="targetAgeGroups"
-                      render={() => (
-                        <FormItem>
-                          <FormLabel>Age Groups</FormLabel>
-                          <div className="grid grid-cols-2 gap-3">
-                            {ageGroups.map((age) => (
-                              <FormField
-                                key={age}
-                                control={form.control}
-                                name="targetAgeGroups"
-                                render={({ field }) => (
-                                  <FormItem className="flex items-center gap-2 space-y-0">
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={field.value?.includes(age)}
-                                        onCheckedChange={(checked) => {
-                                          const current = field.value || [];
-                                          field.onChange(
-                                            checked
-                                              ? [...current, age]
-                                              : current.filter((val) => val !== age)
-                                          );
-                                        }}
-                                      />
-                                    </FormControl>
-                                    <FormLabel className="font-normal cursor-pointer">{age}</FormLabel>
-                                  </FormItem>
-                                )}
-                              />
-                            ))}
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="targetGender"
-                      render={({ field }) => (
-                        <FormItem className="mt-4">
-                          <FormLabel>Gender</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select gender" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="all">All</SelectItem>
-                              <SelectItem value="male">Male Dominated</SelectItem>
-                              <SelectItem value="female">Female Dominated</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="targetAffluence"
-                      render={() => (
-                        <FormItem className="mt-4">
-                          <FormLabel>Affluence Level</FormLabel>
-                          <div className="grid grid-cols-3 gap-3">
-                            {affluenceLevels.map((level) => (
-                              <FormField
-                                key={level}
-                                control={form.control}
-                                name="targetAffluence"
-                                render={({ field }) => (
-                                  <FormItem className="flex items-center gap-2 space-y-0">
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={field.value?.includes(level)}
-                                        onCheckedChange={(checked) => {
-                                          const current = field.value || [];
-                                          field.onChange(
-                                            checked
-                                              ? [...current, level]
-                                              : current.filter((val) => val !== level)
-                                          );
-                                        }}
-                                      />
-                                    </FormControl>
-                                    <FormLabel className="font-normal cursor-pointer">{level}</FormLabel>
-                                  </FormItem>
-                                )}
-                              />
-                            ))}
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="targetOccupations"
-                      render={() => (
-                        <FormItem className="mt-4">
-                          <FormLabel>Occupation Mix</FormLabel>
-                          <div className="grid grid-cols-2 gap-3">
-                            {occupations.map((occupation) => (
-                              <FormField
-                                key={occupation}
-                                control={form.control}
-                                name="targetOccupations"
-                                render={({ field }) => (
-                                  <FormItem className="flex items-center gap-2 space-y-0">
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={field.value?.includes(occupation)}
-                                        onCheckedChange={(checked) => {
-                                          const current = field.value || [];
-                                          field.onChange(
-                                            checked
-                                              ? [...current, occupation]
-                                              : current.filter((val) => val !== occupation)
-                                          );
-                                        }}
-                                      />
-                                    </FormControl>
-                                    <FormLabel className="font-normal cursor-pointer">{occupation}</FormLabel>
-                                  </FormItem>
-                                )}
-                              />
-                            ))}
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    <h2 className="text-2xl font-semibold mb-2">Set Campaign Duration</h2>
+                    <p className="text-muted-foreground">
+                      Want to maximize your impact? Let Pixelspot auto-plan your duration — or choose days manually.
+                    </p>
                   </div>
 
-                  <Separator />
-
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3">User Intent & Mood</h3>
-                    
-                    <FormField
-                      control={form.control}
-                      name="targetIntent"
-                      render={() => (
-                        <FormItem>
-                          <FormLabel>User Intent</FormLabel>
-                          <FormDescription>What are users doing at these locations?</FormDescription>
-                          <div className="grid grid-cols-2 gap-3 mt-2">
-                            {intents.map((intent) => (
-                              <FormField
-                                key={intent}
-                                control={form.control}
-                                name="targetIntent"
-                                render={({ field }) => (
-                                  <FormItem className="flex items-center gap-2 space-y-0">
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={field.value?.includes(intent)}
-                                        onCheckedChange={(checked) => {
-                                          const current = field.value || [];
-                                          field.onChange(
-                                            checked
-                                              ? [...current, intent]
-                                              : current.filter((val) => val !== intent)
-                                          );
-                                        }}
-                                      />
-                                    </FormControl>
-                                    <FormLabel className="font-normal cursor-pointer">{intent}</FormLabel>
-                                  </FormItem>
-                                )}
-                              />
-                            ))}
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="targetMood"
-                      render={() => (
-                        <FormItem className="mt-4">
-                          <FormLabel>User Mood</FormLabel>
-                          <FormDescription>What's the typical mood/state of mind?</FormDescription>
-                          <div className="grid grid-cols-2 gap-3 mt-2">
-                            {moods.map((mood) => (
-                              <FormField
-                                key={mood}
-                                control={form.control}
-                                name="targetMood"
-                                render={({ field }) => (
-                                  <FormItem className="flex items-center gap-2 space-y-0">
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={field.value?.includes(mood)}
-                                        onCheckedChange={(checked) => {
-                                          const current = field.value || [];
-                                          field.onChange(
-                                            checked
-                                              ? [...current, mood]
-                                              : current.filter((val) => val !== mood)
-                                          );
-                                        }}
-                                      />
-                                    </FormControl>
-                                    <FormLabel className="font-normal cursor-pointer">{mood}</FormLabel>
-                                  </FormItem>
-                                )}
-                              />
-                            ))}
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3: Duration */}
-              {currentStep === 3 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Campaign Duration</h3>
-                  
                   <FormField
                     control={form.control}
                     name="startDate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Start Date</FormLabel>
+                        <FormLabel>Campaign Start Date</FormLabel>
                         <FormControl>
                           <Input type="date" {...field} data-testid="input-start-date" />
                         </FormControl>
@@ -957,361 +786,607 @@ export default function CreateCampaign() {
 
                   <FormField
                     control={form.control}
-                    name="endDate"
+                    name="durationMode"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>End Date</FormLabel>
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-base">
+                            Auto decide for me
+                          </FormLabel>
+                          <FormDescription>
+                            Let AI optimize your campaign duration based on budget
+                          </FormDescription>
+                        </div>
                         <FormControl>
-                          <Input type="date" {...field} data-testid="input-end-date" />
+                          <Switch
+                            checked={field.value === "auto"}
+                            onCheckedChange={(checked) => field.onChange(checked ? "auto" : "custom")}
+                            data-testid="switch-duration-mode"
+                          />
                         </FormControl>
-                        <FormMessage />
                       </FormItem>
                     )}
                   />
+
+                  {watchDurationMode === "auto" && calculatedDuration && (
+                    <Alert>
+                      <Check className="h-4 w-4" />
+                      <AlertDescription>
+                        Recommended duration: <strong>{calculatedDuration} days</strong> to maximize reach with your budget.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {watchDurationMode === "custom" && (
+                    <FormField
+                      control={form.control}
+                      name="customDays"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Number of Days</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="e.g., 7" 
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                              data-testid="input-custom-days"
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Choose how many days you want your campaign to run
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </div>
               )}
 
-              {/* Step 4: Venue Filters (Optional) */}
+              {/* Step 4: Audience & Location Filters (Optional) */}
               {currentStep === 4 && (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-semibold mb-2">Venue Type Filters (Optional)</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Narrow down to specific venue types. Leave unchecked to consider all venues.
+                    <h2 className="text-2xl font-semibold mb-2">Audience & Location Filters</h2>
+                    <p className="text-muted-foreground">
+                      Optional: Refine your audience targeting (most users skip this)
                     </p>
                   </div>
 
-                  <FormField
-                    control={form.control}
-                    name="venueTypeFilters"
-                    render={() => (
-                      <FormItem>
-                        <div className="grid grid-cols-2 gap-3">
-                          {venueTypes.map((venue) => (
-                            <FormField
-                              key={venue}
-                              control={form.control}
-                              name="venueTypeFilters"
-                              render={({ field }) => (
-                                <FormItem className="flex items-center gap-2 space-y-0">
-                                  <FormControl>
-                                    <Checkbox
-                                      checked={field.value?.includes(venue)}
-                                      onCheckedChange={(checked) => {
-                                        const current = field.value || [];
-                                        field.onChange(
-                                          checked
-                                            ? [...current, venue]
-                                            : current.filter((val) => val !== venue)
-                                        );
-                                      }}
-                                    />
-                                  </FormControl>
-                                  <FormLabel className="font-normal cursor-pointer">{venue}</FormLabel>
-                                </FormItem>
-                              )}
-                            />
-                          ))}
-                        </div>
-                      </FormItem>
-                    )}
-                  />
+                  <Accordion type="single" collapsible data-testid="accordion-filters">
+                    <AccordionItem value="venue-types">
+                      <AccordionTrigger>Venue Types</AccordionTrigger>
+                      <AccordionContent>
+                        <FormField
+                          control={form.control}
+                          name="venueTypeFilters"
+                          render={() => (
+                            <FormItem>
+                              <div className="grid grid-cols-2 gap-3">
+                                {venueTypes.map((venue) => (
+                                  <FormField
+                                    key={venue}
+                                    control={form.control}
+                                    name="venueTypeFilters"
+                                    render={({ field }) => (
+                                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                        <FormControl>
+                                          <Checkbox
+                                            checked={field.value?.includes(venue)}
+                                            onCheckedChange={(checked) => {
+                                              return checked
+                                                ? field.onChange([...(field.value || []), venue])
+                                                : field.onChange(field.value?.filter((value) => value !== venue))
+                                            }}
+                                            data-testid={`checkbox-venue-${venue.toLowerCase().replace(' ', '-')}`}
+                                          />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">{venue}</FormLabel>
+                                      </FormItem>
+                                    )}
+                                  />
+                                ))}
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                      </AccordionContent>
+                    </AccordionItem>
+
+                    <AccordionItem value="age-groups">
+                      <AccordionTrigger>Age Groups</AccordionTrigger>
+                      <AccordionContent>
+                        <FormField
+                          control={form.control}
+                          name="targetAgeGroups"
+                          render={() => (
+                            <FormItem>
+                              <div className="grid grid-cols-2 gap-3">
+                                {ageGroups.map((age) => (
+                                  <FormField
+                                    key={age}
+                                    control={form.control}
+                                    name="targetAgeGroups"
+                                    render={({ field }) => (
+                                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                        <FormControl>
+                                          <Checkbox
+                                            checked={field.value?.includes(age)}
+                                            onCheckedChange={(checked) => {
+                                              return checked
+                                                ? field.onChange([...(field.value || []), age])
+                                                : field.onChange(field.value?.filter((value) => value !== age))
+                                            }}
+                                            data-testid={`checkbox-age-${age}`}
+                                          />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">{age}</FormLabel>
+                                      </FormItem>
+                                    )}
+                                  />
+                                ))}
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                      </AccordionContent>
+                    </AccordionItem>
+
+                    <AccordionItem value="gender">
+                      <AccordionTrigger>Gender</AccordionTrigger>
+                      <AccordionContent>
+                        <FormField
+                          control={form.control}
+                          name="targetGender"
+                          render={({ field }) => (
+                            <FormItem>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-gender">
+                                    <SelectValue placeholder="Select gender" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="all">All</SelectItem>
+                                  <SelectItem value="male">Male</SelectItem>
+                                  <SelectItem value="female">Female</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}
+                        />
+                      </AccordionContent>
+                    </AccordionItem>
+
+                    <AccordionItem value="affluence">
+                      <AccordionTrigger>Income Levels</AccordionTrigger>
+                      <AccordionContent>
+                        <FormField
+                          control={form.control}
+                          name="targetAffluence"
+                          render={() => (
+                            <FormItem>
+                              <div className="grid grid-cols-2 gap-3">
+                                {affluenceLevels.map((level) => (
+                                  <FormField
+                                    key={level}
+                                    control={form.control}
+                                    name="targetAffluence"
+                                    render={({ field }) => (
+                                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                        <FormControl>
+                                          <Checkbox
+                                            checked={field.value?.includes(level)}
+                                            onCheckedChange={(checked) => {
+                                              return checked
+                                                ? field.onChange([...(field.value || []), level])
+                                                : field.onChange(field.value?.filter((value) => value !== level))
+                                            }}
+                                            data-testid={`checkbox-affluence-${level.toLowerCase()}`}
+                                          />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">{level}</FormLabel>
+                                      </FormItem>
+                                    )}
+                                  />
+                                ))}
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                      </AccordionContent>
+                    </AccordionItem>
+
+                    <AccordionItem value="time">
+                      <AccordionTrigger>Time Preference</AccordionTrigger>
+                      <AccordionContent>
+                        <FormField
+                          control={form.control}
+                          name="timePreference"
+                          render={() => (
+                            <FormItem>
+                              <div className="grid grid-cols-2 gap-3">
+                                {timePreferences.map((time) => (
+                                  <FormField
+                                    key={time}
+                                    control={form.control}
+                                    name="timePreference"
+                                    render={({ field }) => (
+                                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                        <FormControl>
+                                          <Checkbox
+                                            checked={field.value?.includes(time)}
+                                            onCheckedChange={(checked) => {
+                                              return checked
+                                                ? field.onChange([...(field.value || []), time])
+                                                : field.onChange(field.value?.filter((value) => value !== time))
+                                            }}
+                                            data-testid={`checkbox-time-${time.toLowerCase().replace(' ', '-')}`}
+                                          />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">{time}</FormLabel>
+                                      </FormItem>
+                                    )}
+                                  />
+                                ))}
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                 </div>
               )}
 
-              {/* Step 5: Recommended Screens */}
+              {/* Step 5: Smart Plan Suggestions */}
               {currentStep === 5 && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold">AI-Recommended Screens</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Based on your targeting criteria, we found {recommendedScreens.length} matching screens
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {/* View Toggle */}
-                      {recommendedScreens.length > 0 && (
-                        <div className="flex items-center gap-1 border rounded-md p-1">
-                          <Button
-                            type="button"
-                            variant={viewMode === "list" ? "secondary" : "ghost"}
-                            size="sm"
-                            onClick={() => setViewMode("list")}
-                            className="gap-1"
-                            data-testid="button-list-view"
-                          >
-                            <List className="h-4 w-4" />
-                            List
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={viewMode === "map" ? "secondary" : "ghost"}
-                            size="sm"
-                            onClick={() => setViewMode("map")}
-                            className="gap-1"
-                            data-testid="button-map-view"
-                          >
-                            <MapIcon className="h-4 w-4" />
-                            Map
-                          </Button>
-                        </div>
-                      )}
-                      {totalBudget > 0 && (
-                        <div className="text-right">
-                          <p className="text-sm text-muted-foreground">Estimated Budget</p>
-                          <p className="text-2xl font-bold text-primary">₹{totalBudget.toLocaleString()}</p>
-                        </div>
-                      )}
-                    </div>
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-semibold mb-2">Smart Plan Suggestions</h2>
+                    <p className="text-muted-foreground">
+                      With your ₹{totalBudget.toLocaleString()}, you can either spread your reach for {duration} days or go big for premium screens.
+                    </p>
                   </div>
 
-                  {recommendedScreens.length === 0 ? (
-                    <Alert>
-                      <AlertDescription>
-                        No screens match your criteria. Try adjusting your targeting parameters.
-                      </AlertDescription>
-                    </Alert>
-                  ) : (
-                    viewMode === "list" ? (
-                    <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                      {recommendedScreens.map((screen) => {
-                        const isSelected = selectedScreenIds.includes(screen.id);
-                        const days = form.watch("startDate") && form.watch("endDate") 
-                          ? Math.max(1, Math.ceil(
-                              (new Date(form.watch("endDate")).getTime() - new Date(form.watch("startDate")).getTime()) / 
-                              (1000 * 60 * 60 * 24)
-                            ) + 1)
-                          : 0;
-                        const screenCost = screen.pricePerDay * days;
+                  {/* Plan Mode Toggle */}
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant={planMode === "smart" ? "default" : "outline"}
+                      onClick={() => {
+                        setPlanMode("smart");
+                        setSelectedScreenIds(screensInArea.map(s => s.id));
+                      }}
+                      className="flex-1"
+                      data-testid="button-smart-plan"
+                    >
+                      <Check className="mr-2 h-4 w-4" />
+                      Smart Plan (Auto-optimized)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={planMode === "customize" ? "default" : "outline"}
+                      onClick={() => setPlanMode("customize")}
+                      className="flex-1"
+                      data-testid="button-customize-plan"
+                    >
+                      Customize Plan
+                    </Button>
+                  </div>
 
-                        return (
-                          <Card 
-                            key={screen.id} 
-                            className={`${isSelected ? 'border-primary' : ''}`}
-                            data-testid={`card-recommended-screen-${screen.id}`}
-                          >
-                            <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-3">
-                              <div className="flex-1">
-                                <CardTitle className="text-base">{screen.name}</CardTitle>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  {screen.venueName} • {screen.city}
-                                </p>
-                              </div>
-                              <Button
-                                type="button"
-                                variant={isSelected ? "destructive" : "outline"}
-                                size="sm"
-                                onClick={() => {
-                                  if (isSelected) {
-                                    removeScreen(screen.id);
-                                  } else {
-                                    setSelectedScreenIds(prev => [...prev, screen.id]);
-                                  }
-                                }}
-                                data-testid={`button-toggle-screen-${screen.id}`}
-                              >
-                                {isSelected ? (
-                                  <>
-                                    <Trash2 className="h-3 w-3 mr-1" />
-                                    Remove
-                                  </>
-                                ) : (
-                                  <>
-                                    <Check className="h-3 w-3 mr-1" />
-                                    Add
-                                  </>
-                                )}
-                              </Button>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="grid grid-cols-2 gap-3 text-sm">
-                                <div>
-                                  <p className="text-muted-foreground text-xs">Venue Category</p>
-                                  <p className="font-medium">{screen.venueCategory}</p>
-                                </div>
-                                <div>
-                                  <p className="text-muted-foreground text-xs">Affluence</p>
-                                  <p className="font-medium">{screen.affluenceLevel}</p>
-                                </div>
-                                <div>
-                                  <p className="text-muted-foreground text-xs">Footfall/Day</p>
-                                  <p className="font-medium">{screen.avgDailyFootfall.toLocaleString()}</p>
-                                </div>
-                                <div>
-                                  <p className="text-muted-foreground text-xs">Cost for {days} days</p>
-                                  <p className="font-semibold text-primary">₹{screenCost.toLocaleString()}</p>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="border rounded-md overflow-hidden">
-                      {!isLoaded ? (
-                        <div className="flex items-center justify-center h-[500px]">
-                          <p className="text-muted-foreground">Loading map...</p>
+                  {/* Smart Plan Preview */}
+                  {planMode === "smart" && (
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-center space-y-2">
+                          <p className="text-4xl font-bold text-primary">{selectedScreenIds.length} screens × {duration} days</p>
+                          <p className="text-muted-foreground">
+                            Estimated Reach: <strong className="text-foreground">{estimatedReach?.reach.toLocaleString() || 0}</strong> people
+                          </p>
+                          <p className="text-muted-foreground">
+                            Total Impressions: <strong className="text-foreground">{estimatedReach?.impressions.toLocaleString() || 0}</strong>
+                          </p>
                         </div>
-                      ) : (
-                        <GoogleMap
-                          mapContainerStyle={mapContainerStyle}
-                          center={recommendedScreens.length > 0 ? {
-                            lat: parseFloat(recommendedScreens[0].latitude.toString()),
-                            lng: parseFloat(recommendedScreens[0].longitude.toString())
-                          } : defaultCenter}
-                          zoom={11}
-                          options={{
-                            zoomControl: true,
-                            streetViewControl: false,
-                            mapTypeControl: false,
-                            fullscreenControl: true,
-                          }}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Customize Plan */}
+                  {planMode === "customize" && (
+                    <div className="space-y-4">
+                      {/* View Toggle */}
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant={viewMode === "list" ? "default" : "outline"}
+                          onClick={() => setViewMode("list")}
+                          size="sm"
+                          data-testid="button-view-list"
                         >
-                          {recommendedScreens.map((screen) => {
-                            const isSelected = selectedScreenIds.includes(screen.id);
-                            const iconSvg = `
-                              <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-                                <rect x="5" y="8" width="30" height="20" rx="2" fill="${isSelected ? '#10b981' : '#7c3aed'}" stroke="white" stroke-width="2"/>
-                                <rect x="7" y="10" width="26" height="16" fill="${isSelected ? '#059669' : '#6d28d9'}"/>
-                                <rect x="15" y="28" width="10" height="2" fill="${isSelected ? '#10b981' : '#7c3aed'}"/>
-                                <rect x="12" y="30" width="16" height="3" rx="1" fill="${isSelected ? '#10b981' : '#7c3aed'}"/>
-                              </svg>
-                            `;
-                            
-                            return (
+                          <ListIcon className="mr-2 h-4 w-4" />
+                          List View
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={viewMode === "map" ? "default" : "outline"}
+                          onClick={() => setViewMode("map")}
+                          size="sm"
+                          data-testid="button-view-map"
+                        >
+                          <MapIcon className="mr-2 h-4 w-4" />
+                          Map View
+                        </Button>
+                      </div>
+
+                      {/* Budget Indicator */}
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span>Budget Used</span>
+                              <span className="font-semibold">
+                                ₹{spentBudget.toLocaleString()} / ₹{totalBudget.toLocaleString()}
+                              </span>
+                            </div>
+                            <Progress value={(spentBudget / totalBudget) * 100} data-testid="progress-budget" />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* List View */}
+                      {viewMode === "list" && (
+                        <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                          {screensInArea.map((screen) => (
+                            <Card key={screen.id} className={selectedScreenIds.includes(screen.id) ? "border-primary" : ""}>
+                              <CardContent className="pt-6">
+                                <div className="flex items-start gap-4">
+                                  <Checkbox
+                                    checked={selectedScreenIds.includes(screen.id)}
+                                    onCheckedChange={() => toggleScreen(screen.id)}
+                                    data-testid={`checkbox-screen-${screen.id}`}
+                                  />
+                                  <div className="flex-1">
+                                    <h3 className="font-semibold">{screen.name}</h3>
+                                    <p className="text-sm text-muted-foreground">{screen.location}</p>
+                                    <div className="flex gap-2 mt-2">
+                                      <Badge variant="outline">{screen.venueCategory}</Badge>
+                                      <Badge variant="outline">{screen.avgDailyFootfall.toLocaleString()} daily footfall</Badge>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="font-semibold">₹{screen.pricePerDay.toLocaleString()}/day</p>
+                                    <p className="text-sm text-muted-foreground">₹{(screen.pricePerDay * (duration || 1)).toLocaleString()} total</p>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Map View */}
+                      {viewMode === "map" && isLoaded && (
+                        <div className="border rounded-lg overflow-hidden">
+                          <GoogleMap
+                            mapContainerStyle={mapContainerStyle}
+                            center={markerPosition}
+                            zoom={12}
+                          >
+                            {screensInArea.map((screen) => (
                               <Marker
                                 key={screen.id}
-                                position={{ 
-                                  lat: parseFloat(screen.latitude.toString()), 
-                                  lng: parseFloat(screen.longitude.toString()) 
+                                position={{
+                                  lat: parseFloat(screen.latitude.toString()),
+                                  lng: parseFloat(screen.longitude.toString()),
                                 }}
                                 onClick={() => setSelectedMapScreen(screen)}
                                 icon={{
-                                  url: `data:image/svg+xml;base64,${btoa(iconSvg)}`,
-                                  scaledSize: new google.maps.Size(40, 40),
-                                  anchor: new google.maps.Point(20, 35),
+                                  path: window.google.maps.SymbolPath.CIRCLE,
+                                  scale: 8,
+                                  fillColor: selectedScreenIds.includes(screen.id) ? "#3b82f6" : "#6b7280",
+                                  fillOpacity: 1,
+                                  strokeColor: "#ffffff",
+                                  strokeWeight: 2,
                                 }}
                               />
-                            );
-                          })}
-
-                          {selectedMapScreen && (
-                            <InfoWindow
-                              position={{ 
-                                lat: parseFloat(selectedMapScreen.latitude.toString()), 
-                                lng: parseFloat(selectedMapScreen.longitude.toString()) 
-                              }}
-                              onCloseClick={() => setSelectedMapScreen(null)}
-                            >
-                              <div className="max-w-sm p-2">
-                                <h3 className="font-bold text-base mb-1">{selectedMapScreen.name}</h3>
-                                <p className="text-sm text-muted-foreground mb-2">
-                                  {selectedMapScreen.venueName} • {selectedMapScreen.city}
-                                </p>
-                                <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                                  <div>
-                                    <p className="text-xs text-muted-foreground">Venue</p>
-                                    <p className="font-medium">{selectedMapScreen.venueCategory}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground">Price/Day</p>
-                                    <p className="font-semibold text-primary">₹{selectedMapScreen.pricePerDay.toLocaleString()}</p>
-                                  </div>
+                            ))}
+                            
+                            {selectedMapScreen && (
+                              <InfoWindow
+                                position={{
+                                  lat: parseFloat(selectedMapScreen.latitude.toString()),
+                                  lng: parseFloat(selectedMapScreen.longitude.toString()),
+                                }}
+                                onCloseClick={() => setSelectedMapScreen(null)}
+                              >
+                                <div className="p-2">
+                                  <h3 className="font-semibold">{selectedMapScreen.name}</h3>
+                                  <p className="text-sm text-muted-foreground mb-2">{selectedMapScreen.location}</p>
+                                  <p className="text-sm font-medium">₹{selectedMapScreen.pricePerDay.toLocaleString()}/day</p>
+                                  <Button
+                                    size="sm"
+                                    className="mt-2 w-full"
+                                    onClick={() => toggleScreen(selectedMapScreen.id)}
+                                    data-testid={`button-toggle-screen-${selectedMapScreen.id}`}
+                                  >
+                                    {selectedScreenIds.includes(selectedMapScreen.id) ? "Remove" : "Add"}
+                                  </Button>
                                 </div>
-                                <Button
-                                  type="button"
-                                  variant={selectedScreenIds.includes(selectedMapScreen.id) ? "destructive" : "default"}
-                                  size="sm"
-                                  className="w-full"
-                                  onClick={() => {
-                                    if (selectedScreenIds.includes(selectedMapScreen.id)) {
-                                      removeScreen(selectedMapScreen.id);
-                                    } else {
-                                      setSelectedScreenIds(prev => [...prev, selectedMapScreen.id]);
-                                    }
-                                  }}
-                                >
-                                  {selectedScreenIds.includes(selectedMapScreen.id) ? (
-                                    <>
-                                      <Trash2 className="h-3 w-3 mr-1" />
-                                      Remove
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Check className="h-3 w-3 mr-1" />
-                                      Add to Campaign
-                                    </>
-                                  )}
-                                </Button>
+                              </InfoWindow>
+                            )}
+                          </GoogleMap>
+                        </div>
+                      )}
+
+                      {/* Reach Stats */}
+                      {estimatedReach && (
+                        <Card className="bg-primary/5 border-primary/20">
+                          <CardContent className="pt-6">
+                            <div className="grid grid-cols-3 gap-4 text-center">
+                              <div>
+                                <p className="text-2xl font-bold text-primary">{selectedScreenIds.length}</p>
+                                <p className="text-sm text-muted-foreground">Screens</p>
                               </div>
-                            </InfoWindow>
-                          )}
-                        </GoogleMap>
+                              <div>
+                                <p className="text-2xl font-bold text-primary">{estimatedReach.reach.toLocaleString()}</p>
+                                <p className="text-sm text-muted-foreground">Reach</p>
+                              </div>
+                              <div>
+                                <p className="text-2xl font-bold text-primary">{estimatedReach.impressions.toLocaleString()}</p>
+                                <p className="text-sm text-muted-foreground">Impressions</p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
                       )}
                     </div>
-                    )
                   )}
-
-                  <Separator />
-
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold">Upload Campaign Creative</h3>
-                    <ObjectUploader
-                      maxNumberOfFiles={1}
-                      maxFileSize={52428800}
-                      allowedFileTypes={["image/*", "video/*"]}
-                      onGetUploadParameters={handleGetUploadParameters}
-                      onComplete={handleUploadComplete}
-                      buttonVariant="outline"
-                    >
-                      {uploadedCreativeURL ? "Change Creative" : "Upload Creative"}
-                    </ObjectUploader>
-                    {uploadedCreativeURL && (
-                      <div className="flex items-center gap-2 text-sm text-green-600">
-                        <Check className="h-4 w-4" />
-                        Creative uploaded successfully
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
 
-              {/* Navigation */}
+              {/* Step 6: Upload Creative & Review */}
+              {currentStep === 6 && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-semibold mb-2">Upload Creative & Review</h2>
+                    <p className="text-muted-foreground">
+                      Upload your creative assets and review your campaign before launching.
+                    </p>
+                  </div>
+
+                  {/* Creative Upload */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Campaign Creative</CardTitle>
+                      <CardDescription>Upload your image or video creative (recommended: 1920x1080)</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ObjectUploader
+                        onComplete={handleUploadComplete}
+                        onGetUploadParameters={handleGetUploadParameters}
+                        allowedFileTypes={["image/*", "video/*"]}
+                        maxFileSize={50 * 1024 * 1024}
+                        buttonTestId="button-upload-creative"
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload Creative
+                      </ObjectUploader>
+                      {uploadedCreativeURL && (
+                        <Alert className="mt-4">
+                          <Check className="h-4 w-4" />
+                          <AlertDescription>
+                            Creative uploaded successfully!
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Summary Card */}
+                  <Card className="border-2 border-primary/20">
+                    <CardHeader>
+                      <CardTitle>Campaign Summary</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground">🎯 Campaign Goal</p>
+                          <p className="font-semibold" data-testid="text-summary-objective">
+                            {objectives.find(o => o.value === form.getValues("objective"))?.label}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">💰 Budget</p>
+                          <p className="font-semibold" data-testid="text-summary-budget">₹{totalBudget.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">📍 Target Area</p>
+                          <p className="font-semibold" data-testid="text-summary-area">
+                            {watchAreaType === "map" 
+                              ? `${watchRadius} km radius` 
+                              : watchTargetCity}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">📅 Duration</p>
+                          <p className="font-semibold" data-testid="text-summary-duration">{duration} days</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">🖥️ Screens</p>
+                          <p className="font-semibold" data-testid="text-summary-screens">{selectedScreenIds.length} screens</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">👁️ Est. Reach</p>
+                          <p className="font-semibold" data-testid="text-summary-reach">
+                            {estimatedReach?.reach.toLocaleString() || 0} people
+                          </p>
+                        </div>
+                      </div>
+
+                      {uploadedCreativeURL && (
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-2">🖼 Creative Preview</p>
+                          <div className="border rounded-lg overflow-hidden">
+                            <img 
+                              src={`/objects${uploadedCreativeURL}`} 
+                              alt="Campaign creative" 
+                              className="w-full h-auto"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Navigation Buttons */}
               <div className="flex justify-between pt-6">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={prevStep}
-                  disabled={currentStep === 1 || createCampaignMutation.isPending}
+                  disabled={currentStep === 1}
                   data-testid="button-previous"
                 >
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Previous
                 </Button>
 
-                {currentStep < steps.length ? (
-                  <Button
-                    type="button"
-                    onClick={nextStep}
-                    disabled={createCampaignMutation.isPending}
-                    data-testid="button-next"
-                  >
-                    Next
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    onClick={handleCreateCampaign}
-                    disabled={createCampaignMutation.isPending || selectedScreenIds.length === 0}
-                    data-testid="button-submit"
-                  >
-                    {createCampaignMutation.isPending ? "Creating..." : "Create Campaign"}
-                    <Check className="ml-2 h-4 w-4" />
-                  </Button>
-                )}
+                <div className="flex gap-2">
+                  {currentStep === steps.length && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleSaveDraft}
+                      data-testid="button-save-draft"
+                    >
+                      Save as Draft
+                    </Button>
+                  )}
+                  
+                  {currentStep < steps.length ? (
+                    <Button
+                      type="button"
+                      onClick={nextStep}
+                      data-testid="button-next"
+                    >
+                      Next
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={() => form.handleSubmit(onSubmit)()}
+                      disabled={createCampaignMutation.isPending}
+                      data-testid="button-create-campaign"
+                    >
+                      {createCampaignMutation.isPending ? "Creating..." : "Create Campaign"}
+                    </Button>
+                  )}
+                </div>
               </div>
             </form>
           </Form>
