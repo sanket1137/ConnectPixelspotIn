@@ -202,7 +202,7 @@ export default function CampaignDetails() {
 
         <div>
           <h1 className="text-4xl font-bold text-foreground font-serif mb-2">{campaign.name}</h1>
-          <p className="text-muted-foreground capitalize">{campaign.objective.replace(/_/g, " ")}</p>
+          <p className="text-muted-foreground capitalize">{campaign.objective ? campaign.objective.replace(/_/g, " ") : "N/A"}</p>
         </div>
 
         {/* Campaign Overview */}
