@@ -215,12 +215,16 @@ export default function CampaignDetails() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Created</p>
-                <p className="text-sm font-medium">{format(new Date(campaign.createdAt), "MMM d, yyyy")}</p>
+                <p className="text-sm font-medium">
+                  {campaign.createdAt ? format(new Date(campaign.createdAt), "MMM d, yyyy") : "N/A"}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Duration</p>
                 <p className="text-sm font-medium">
-                  {format(new Date(campaign.startDate), "MMM d")} - {format(new Date(campaign.endDate), "MMM d, yyyy")}
+                  {campaign.startDate && campaign.endDate 
+                    ? `${format(new Date(campaign.startDate), "MMM d")} - ${format(new Date(campaign.endDate), "MMM d, yyyy")}`
+                    : "N/A"}
                 </p>
               </div>
               <div>
@@ -268,7 +272,9 @@ export default function CampaignDetails() {
                           <div>
                             <p className="text-xs text-muted-foreground">Duration</p>
                             <p className="font-medium">
-                              {format(new Date(booking.startDate), "MMM d")} - {format(new Date(booking.endDate), "MMM d")}
+                              {booking.startDate && booking.endDate 
+                                ? `${format(new Date(booking.startDate), "MMM d")} - ${format(new Date(booking.endDate), "MMM d")}`
+                                : "N/A"}
                             </p>
                           </div>
                         </div>
@@ -296,7 +302,9 @@ export default function CampaignDetails() {
                                 <p className="text-sm text-yellow-800 dark:text-yellow-200 mt-1">{booking.ownerResponse}</p>
                               )}
                               <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100 mt-2">
-                                New Dates: {format(new Date(booking.alternativeDates.startDate), "MMM d, yyyy")} - {format(new Date(booking.alternativeDates.endDate), "MMM d, yyyy")}
+                                New Dates: {booking.alternativeDates.startDate && booking.alternativeDates.endDate
+                                  ? `${format(new Date(booking.alternativeDates.startDate), "MMM d, yyyy")} - ${format(new Date(booking.alternativeDates.endDate), "MMM d, yyyy")}`
+                                  : "N/A"}
                               </p>
                             </div>
                             <div className="flex gap-2">
