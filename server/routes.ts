@@ -877,18 +877,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const budgetAmount = parseInt(budget as string);
         const durationDays = parseInt(duration as string);
         
+        console.log(`\n🎯 Budget Filter: Budget=₹${budgetAmount}, Duration=${durationDays} days`);
+        console.log(`📊 Total screens in area: ${screens.length}`);
+        
         // Greedy algorithm: pick screens sorted by footfall until budget is exhausted
         const selectedScreens: typeof screens = [];
         let remainingBudget = budgetAmount;
         
         for (const screen of screens) {
           const screenCost = screen.pricePerDay * durationDays;
+          console.log(`   ${screen.name}: ₹${screenCost} (₹${screen.pricePerDay}/day × ${durationDays}) - ${screenCost <= remainingBudget ? '✅ SELECTED' : '❌ SKIP'} (remaining: ₹${remainingBudget})`);
+          
           if (screenCost <= remainingBudget) {
             selectedScreens.push(screen);
             remainingBudget -= screenCost;
           }
         }
         
+        console.log(`✅ Selected ${selectedScreens.length} screens, Total cost: ₹${budgetAmount - remainingBudget}, Remaining: ₹${remainingBudget}\n`);
         screens = selectedScreens;
       }
       

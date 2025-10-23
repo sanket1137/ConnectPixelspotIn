@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
-import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor as MonitorIcon, Upload, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign, Users, Clock } from "lucide-react";
+import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor as MonitorIcon, Upload, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign, Users, Clock, AlertTriangle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Screen } from "@shared/schema";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -1174,6 +1174,46 @@ export default function CreateCampaign() {
                                 ₹{(totalBudget - screensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0)).toLocaleString()}
                               </span>
                             </div>
+                            
+                            {/* Budget Warning */}
+                            {(() => {
+                              const totalCost = screensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0);
+                              const overBudget = totalCost > totalBudget;
+                              
+                              if (overBudget) {
+                                const suggestedBudget = Math.ceil(totalCost / 1000) * 1000; // Round up to nearest 1000
+                                return (
+                                  <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg" data-testid="alert-budget-exceeded">
+                                    <div className="flex items-start gap-3">
+                                      <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
+                                      <div className="flex-1 space-y-2">
+                                        <h4 className="font-semibold text-destructive">Budget Exceeded</h4>
+                                        <p className="text-sm text-foreground">
+                                          The selected screens cost ₹{totalCost.toLocaleString()}, which exceeds your budget of ₹{totalBudget.toLocaleString()}.
+                                        </p>
+                                        <p className="text-sm text-foreground">
+                                          <strong>Suggestion:</strong> Increase your budget to at least ₹{suggestedBudget.toLocaleString()} to proceed with these screens.
+                                        </p>
+                                        <Button
+                                          type="button"
+                                          variant="destructive"
+                                          size="sm"
+                                          onClick={() => {
+                                            form.setValue("budget", suggestedBudget);
+                                            setCurrentStep(1);
+                                          }}
+                                          className="mt-2"
+                                          data-testid="button-increase-budget"
+                                        >
+                                          Increase Budget to ₹{suggestedBudget.toLocaleString()}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         </CardContent>
                       </Card>
