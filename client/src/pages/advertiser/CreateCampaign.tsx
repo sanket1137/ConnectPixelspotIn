@@ -88,8 +88,10 @@ const objectives = [
 ];
 
 const venueTypes = [
-  "Mall", "Corporate Park", "Airport", "Metro", "Bus Stop", 
-  "Shopping Complex", "Restaurant", "Cafe", "Highway", "Road Junction"
+  "Airport", "Apartment", "Bus Stop", "Café", "Cinema", "Co-working", 
+  "College", "Corporate Park", "Flyover", "Gym", "Highway", "Hospital", 
+  "Mall", "Metro", "Office Building", "Restaurant", "Retail Store", 
+  "Road Junction", "Road Side", "Salon", "Shopping Complex", "Stadium"
 ];
 
 // Match database values from shared/constants.ts
