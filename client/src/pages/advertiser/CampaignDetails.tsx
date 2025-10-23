@@ -73,7 +73,7 @@ export default function CampaignDetails() {
   const [selectedBooking, setSelectedBooking] = useState<BookingWithScreen | null>(null);
 
   const { data: campaign, isLoading } = useQuery<CampaignWithBookings>({
-    queryKey: ["/api/advertiser/campaigns", params?.id],
+    queryKey: [`/api/advertiser/campaigns/${params?.id}`],
     enabled: !!params?.id,
   });
 
@@ -82,7 +82,7 @@ export default function CampaignDetails() {
       return apiRequest("PATCH", `/api/advertiser/bookings/${bookingId}/accept-alternative`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns", params?.id] });
+      queryClient.invalidateQueries({ queryKey: [`/api/advertiser/campaigns/${params?.id}`] });
       setAlternativeDateDialog(false);
       toast({
         title: "Alternative Dates Accepted",
@@ -96,7 +96,7 @@ export default function CampaignDetails() {
       return apiRequest("PATCH", `/api/advertiser/bookings/${bookingId}/reject-alternative`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns", params?.id] });
+      queryClient.invalidateQueries({ queryKey: [`/api/advertiser/campaigns/${params?.id}`] });
       setAlternativeDateDialog(false);
       toast({
         title: "Alternative Dates Rejected",
