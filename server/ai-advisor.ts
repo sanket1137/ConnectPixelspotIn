@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { IStorage } from "./storage";
+import type { Screen } from "@shared/schema";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -137,7 +138,7 @@ export async function getCampaignAdvice(
   if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
     const toolCall = responseMessage.tool_calls[0];
     
-    if (toolCall.function.name === "searchScreens") {
+    if (toolCall.type === "function" && toolCall.function.name === "searchScreens") {
       const args = JSON.parse(toolCall.function.arguments);
       
       // Query the database with the extracted criteria
@@ -225,15 +226,15 @@ export async function getCampaignAdvice(
 async function searchScreensInDatabase(
   criteria: any,
   storage: IStorage
-): Promise<any[]> {
+): Promise<Screen[]> {
   // Get all approved screens
   const allScreens = await storage.getApprovedScreens();
   
   // Apply filters
-  let filtered = allScreens.filter(screen => screen.status === "approved");
+  let filtered = allScreens.filter((screen: Screen) => screen.status === "approved");
   
   if (criteria.cities && criteria.cities.length > 0) {
-    filtered = filtered.filter(screen => 
+    filtered = filtered.filter((screen: Screen) => 
       criteria.cities.some((city: string) => 
         screen.city.toLowerCase().includes(city.toLowerCase())
       )
@@ -241,51 +242,51 @@ async function searchScreensInDatabase(
   }
   
   if (criteria.venueCategories && criteria.venueCategories.length > 0) {
-    filtered = filtered.filter(screen => 
+    filtered = filtered.filter((screen: Screen) => 
       criteria.venueCategories.includes(screen.venueCategory)
     );
   }
   
   if (criteria.maxPricePerDay) {
-    filtered = filtered.filter(screen => 
+    filtered = filtered.filter((screen: Screen) => 
       screen.pricePerDay <= criteria.maxPricePerDay
     );
   }
   
   if (criteria.minFootfall) {
-    filtered = filtered.filter(screen => 
+    filtered = filtered.filter((screen: Screen) => 
       screen.avgDailyFootfall && screen.avgDailyFootfall >= criteria.minFootfall
     );
   }
   
   if (criteria.ageGroups && criteria.ageGroups.length > 0) {
-    filtered = filtered.filter(screen => 
+    filtered = filtered.filter((screen: Screen) => 
       screen.detailedAgeGroups && 
       criteria.ageGroups.some((age: string) => screen.detailedAgeGroups?.includes(age))
     );
   }
   
   if (criteria.genderOrientation) {
-    filtered = filtered.filter(screen => 
+    filtered = filtered.filter((screen: Screen) => 
       screen.genderOrientation === criteria.genderOrientation
     );
   }
   
   if (criteria.incomeLevel) {
-    filtered = filtered.filter(screen => 
+    filtered = filtered.filter((screen: Screen) => 
       screen.incomeLevel === criteria.incomeLevel
     );
   }
   
   if (criteria.lifestyleTags && criteria.lifestyleTags.length > 0) {
-    filtered = filtered.filter(screen => 
+    filtered = filtered.filter((screen: Screen) => 
       screen.lifestyleTags && 
       criteria.lifestyleTags.some((tag: string) => screen.lifestyleTags?.includes(tag))
     );
   }
   
   // Sort by footfall (descending) and take the limit
-  const sorted = filtered.sort((a, b) => 
+  const sorted = filtered.sort((a: Screen, b: Screen) => 
     (b.avgDailyFootfall || 0) - (a.avgDailyFootfall || 0)
   );
   

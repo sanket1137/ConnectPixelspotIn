@@ -24,6 +24,7 @@ export interface IStorage {
   getScreensByOwner(ownerId: string): Promise<Screen[]>;
   getAllScreens(): Promise<Screen[]>;
   getActiveScreens(): Promise<Screen[]>;
+  getApprovedScreens(): Promise<Screen[]>;
   createScreen(screen: InsertScreen): Promise<Screen>;
   updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined>;
   updateScreenStatus(id: string, status: string): Promise<Screen | undefined>;
@@ -106,6 +107,10 @@ export class DatabaseStorage implements IStorage {
 
   async getActiveScreens(): Promise<Screen[]> {
     return await db.select().from(screens).where(eq(screens.status, "active"));
+  }
+
+  async getApprovedScreens(): Promise<Screen[]> {
+    return await db.select().from(screens).where(eq(screens.status, "approved"));
   }
 
   async createScreen(insertScreen: InsertScreen): Promise<Screen> {
