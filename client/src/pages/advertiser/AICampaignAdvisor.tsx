@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, Send, User, Bot, MapPin, DollarSign, Calendar, ArrowRight } from "lucide-react";
 import { useLocation } from "wouter";
+import { auth } from "@/lib/firebase";
 
 interface Message {
   id: string;
@@ -62,10 +63,18 @@ export default function AICampaignAdvisor() {
     setIsLoading(true);
 
     try {
+      // Get Firebase auth token
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error("Not authenticated");
+      }
+      const token = await user.getIdToken();
+
       const response = await fetch("/api/ai/campaign-advisor", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
         },
         credentials: "include",
         body: JSON.stringify({
