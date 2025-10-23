@@ -92,9 +92,24 @@ const venueTypes = [
   "Shopping Complex", "Restaurant", "Cafe", "Highway", "Road Junction"
 ];
 
-const ageGroups = ["18-25", "25-40", "40-60", "60+"];
-const affluenceLevels = ["Premium", "Mid", "Budget"];
-const timePreferences = ["Rush hour", "All-day"];
+// Match database values from shared/constants.ts
+const ageGroups = [
+  "Children (5-12)",
+  "Teenagers (13-17)",
+  "Young Adults (18-25)",
+  "Adults (26-40)",
+  "Middle Age (41-55)",
+  "Seniors (55+)"
+];
+
+const affluenceLevels = [
+  "Budget Conscious",
+  "Middle Income",
+  "Premium Audience",
+  "Luxury Buyers"
+];
+
+const timePreferences = ["Morning Rush", "Lunch Hours", "Evening Leisure", "Late Night"];
 
 export default function CreateCampaign() {
   const { isLoaded } = useLoadScript({
@@ -238,14 +253,14 @@ export default function CreateCampaign() {
 
   // Apply demographic filters from Step 4 to screens
   const filteredScreensInArea = screensInArea.filter((screen) => {
-    // Venue type filter
+    // Venue type filter (single value match)
     if (watchVenueTypeFilters && watchVenueTypeFilters.length > 0) {
       if (!watchVenueTypeFilters.includes(screen.venueCategory || "")) {
         return false;
       }
     }
     
-    // Age groups filter - check if any target age group matches screen's age groups
+    // Age groups filter (array intersection) - check if any target age group matches screen's age groups
     if (watchTargetAgeGroups && watchTargetAgeGroups.length > 0) {
       const screenAgeGroups = screen.detailedAgeGroups || [];
       const hasMatchingAge = watchTargetAgeGroups.some(targetAge => 
@@ -256,7 +271,7 @@ export default function CreateCampaign() {
       }
     }
     
-    // Gender filter - map campaign gender to screen gender orientation
+    // Gender filter (single value match with logic mapping)
     if (watchTargetGender && watchTargetGender !== "all") {
       const genderMap: Record<string, string[]> = {
         "male": ["Male Dominant", "Mixed Gender", "Family Oriented"],
@@ -268,21 +283,14 @@ export default function CreateCampaign() {
       }
     }
     
-    // Affluence filter - map campaign affluence to screen income level
+    // Affluence filter (single screen value must be in target array)
     if (watchTargetAffluence && watchTargetAffluence.length > 0) {
-      const affluenceMap: Record<string, string> = {
-        "Premium": "Premium Audience",
-        "Luxury": "Luxury Buyers",
-        "Mid": "Middle Income",
-        "Budget": "Budget Conscious",
-      };
-      const targetIncomeLevels = watchTargetAffluence.map(a => affluenceMap[a] || a);
-      if (!targetIncomeLevels.includes(screen.incomeLevel || "")) {
+      if (!watchTargetAffluence.includes(screen.incomeLevel || "")) {
         return false;
       }
     }
     
-    // Time preference filter - check if any target time matches screen's time of day activity
+    // Time preference filter (array intersection) - check if any target time matches screen's time of day activity
     if (watchTimePreference && watchTimePreference.length > 0) {
       const screenTimeActivities = screen.timeOfDayActivity || [];
       const hasMatchingTime = watchTimePreference.some(targetTime => 
