@@ -1173,7 +1173,20 @@ export default function CreateCampaign() {
                       <Card>
                         <CardContent className="pt-6">
                           <div className="text-center space-y-2">
-                            <p className="text-4xl font-bold text-primary">{selectedScreenIds.length} screens × {duration} days</p>
+                            <p className="text-4xl font-bold text-primary">
+                              {(() => {
+                                const totalScreens = filteredScreensInArea.reduce((sum, s) => {
+                                  const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
+                                  return sum + screenMultiplier;
+                                }, 0);
+                                const venueCount = filteredScreensInArea.length;
+                                return venueCount === 1 && totalScreens > 1 
+                                  ? `${totalScreens} screens (1 venue) × ${duration} days`
+                                  : totalScreens === venueCount
+                                    ? `${totalScreens} screens × ${duration} days`
+                                    : `${totalScreens} screens (${venueCount} venues) × ${duration} days`;
+                              })()}
+                            </p>
                             <p className="text-muted-foreground">
                               Estimated Reach: <strong className="text-foreground">{estimatedReach?.reach.toLocaleString() || 0}</strong> people
                             </p>
@@ -1200,8 +1213,8 @@ export default function CreateCampaign() {
                                     </span>
                                     <h4 className="font-semibold text-foreground">{screen.name}</h4>
                                     {screen.isMultiScreen && screen.numberOfScreens && (
-                                      <Badge variant="secondary" className="ml-2">
-                                        🖥️ {screen.numberOfScreens} screens
+                                      <Badge variant="default" className="ml-2 bg-purple-600 hover:bg-purple-700">
+                                        🖥️ Multi-Venue: {screen.numberOfScreens} screens
                                       </Badge>
                                     )}
                                   </div>
@@ -1383,8 +1396,8 @@ export default function CreateCampaign() {
                                     <div className="flex items-center gap-2">
                                       <h3 className="font-semibold">{screen.name}</h3>
                                       {screen.isMultiScreen && screen.numberOfScreens && (
-                                        <Badge variant="secondary">
-                                          🖥️ {screen.numberOfScreens} screens
+                                        <Badge variant="default" className="bg-purple-600 hover:bg-purple-700">
+                                          🖥️ Multi-Venue: {screen.numberOfScreens} screens
                                         </Badge>
                                       )}
                                     </div>

@@ -318,7 +318,7 @@ export default function DiscoverScreens() {
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-medium truncate">{screen.name}</p>
                                 {screen.isMultiScreen && screen.numberOfScreens && (
-                                  <Badge variant="secondary" className="text-xs">
+                                  <Badge variant="default" className="text-xs bg-purple-600 hover:bg-purple-700">
                                     🖥️ {screen.numberOfScreens}
                                   </Badge>
                                 )}
@@ -403,8 +403,8 @@ export default function DiscoverScreens() {
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-lg">{screen.name}</CardTitle>
                       {screen.isMultiScreen && screen.numberOfScreens && (
-                        <Badge variant="secondary" className="text-xs">
-                          🖥️ {screen.numberOfScreens}
+                        <Badge variant="default" className="text-xs bg-purple-600 hover:bg-purple-700">
+                          🖥️ Multi-Venue: {screen.numberOfScreens}
                         </Badge>
                       )}
                     </div>
@@ -585,8 +585,8 @@ export default function DiscoverScreens() {
                           <div className="flex items-center gap-2 mb-1">
                             <h3 className="font-bold text-lg">{selectedScreen.name}</h3>
                             {selectedScreen.isMultiScreen && selectedScreen.numberOfScreens && (
-                              <Badge variant="secondary" className="text-xs">
-                                🖥️ {selectedScreen.numberOfScreens}
+                              <Badge variant="default" className="text-xs bg-purple-600 hover:bg-purple-700">
+                                🖥️ Multi-Venue: {selectedScreen.numberOfScreens}
                               </Badge>
                             )}
                           </div>
