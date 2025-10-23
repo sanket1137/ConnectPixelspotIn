@@ -1,0 +1,115 @@
+🎯 Pixelspot Campaign Creation Flow (Final — Optimized Order)
+STEP 1: Campaign Goal & Budget
+
+Objective: Start with intent and spending comfort.
+
+Fields:
+
+Select goal: Awareness | Store Visit | Product Launch
+
+Enter budget: ₹_______ (with slider or input)
+
+UI Copy Example:
+
+“Tell us your goal and budget — we’ll show what’s possible near you.”
+
+STEP 2: Choose Area
+
+Objective: Anchor campaign to a real location.
+
+Interactions:
+
+Search area / pincode or drop a pin on map
+
+Adjust radius (1–10 km)
+
+System detects available screens in that zone
+
+Once the area is set → show live estimate card:
+
+“In Indiranagar (3 km radius), ₹50,000 can reach ~1.2L people across 6 LED screens.”
+
+STEP 3: Set Duration
+
+Objective: Let user define how long they want the campaign to run — but offer automation.
+
+Fields:
+
+Select duration: Custom | Auto decide for me
+
+If “Auto” → system picks optimal number of days based on screen inventory and budget.
+
+If “Custom” → user selects number of days manually.
+
+UI Copy Example:
+
+“Want to maximize your impact? Let Pixelspot auto-plan your duration — or choose days manually.”
+
+STEP 4: Audience & Location Filters (Optional)
+
+Objective: Give power users more control, but keep it hidden by default.
+
+Expandable filters:
+
+Screen type (mall, corporate park, roadside, transit)
+
+Time preference (rush hour / all-day)
+
+Audience density (high-footfall / balanced)
+
+Audience type (office, residential, shopping area)
+
+Design Tip:
+Keep this collapsed — most users skip this step.
+
+STEP 5: Smart Plan Suggestions
+
+Objective: Present two clean options.
+
+Smart Plan (Auto-optimized)
+
+Example: “6 screens × 7 days”
+
+Based on their budget, area, and auto duration.
+
+CTA: “Looks Good → Continue”
+
+Customize Plan
+
+“Add/remove screens or adjust days manually.”
+
+Opens detailed view with checkboxes or map pins.
+
+Copy Example:
+
+“With your ₹50,000, you can either spread your reach for a week or go big for 2 days on premium screens.”
+
+STEP 6: Upload Creative & Review
+
+Objective: Finalize and request campaign.
+
+Sections:
+
+Upload creative (video/image)
+
+Auto-validate size + format
+
+Show mockup preview on a sample screen
+
+Then show Summary Card:
+
+🎯 Campaign Goal
+
+📍 Area + Radius
+
+📅 Duration
+
+💰 Budget
+
+👁️ Estimated Reach
+
+🖼 Creative Preview
+
+✅ Primary CTA: “Request Campaign”
+
+Secondary CTA: “Save as Draft”
