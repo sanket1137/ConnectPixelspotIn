@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Search, Plus, Check, ShoppingCart, Trash2, List, Map as MapIcon, X } from "lucide-react";
+import { MapPin, Search, Plus, Check, ShoppingCart, Trash2, List, Map as MapIcon, X, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { Screen } from "@shared/schema";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Sheet,
   SheetContent,
@@ -81,13 +82,75 @@ export default function DiscoverScreens() {
     queryKey: ["/api/screens", filters],
   });
 
-  const filteredScreens = screens.filter((screen) => {
-    if (filters.city && !screen.city.toLowerCase().includes(filters.city.toLowerCase())) return false;
-    if (filters.type && screen.type !== filters.type) return false;
-    if (filters.minPrice && screen.pricePerDay < parseInt(filters.minPrice)) return false;
-    if (filters.maxPrice && screen.pricePerDay > parseInt(filters.maxPrice)) return false;
-    return screen.status === "active";
-  });
+  // Tiered fallback strategy: progressively drop filters if no results
+  const getFilteredScreens = () => {
+    const activeScreens = screens.filter(s => s.status === "active");
+    
+    // Try strict match (all filters)
+    const applyFilters = (filtersToApply: typeof filters) => {
+      return activeScreens.filter((screen) => {
+        if (filtersToApply.city && !screen.city.toLowerCase().includes(filtersToApply.city.toLowerCase())) return false;
+        if (filtersToApply.type && screen.type !== filtersToApply.type) return false;
+        if (filtersToApply.minPrice && screen.pricePerDay < parseInt(filtersToApply.minPrice)) return false;
+        if (filtersToApply.maxPrice && screen.pricePerDay > parseInt(filtersToApply.maxPrice)) return false;
+        return true;
+      });
+    };
+    
+    let results = applyFilters(filters);
+    let relaxedFilters: string[] = [];
+    
+    // If no results, progressively drop filters (least important first)
+    if (results.length === 0 && (filters.city || filters.type || filters.minPrice || filters.maxPrice)) {
+      // Drop type filter (least important)
+      if (filters.type) {
+        const withoutType = { ...filters, type: "" };
+        results = applyFilters(withoutType);
+        if (results.length > 0) {
+          relaxedFilters.push("Screen Type");
+          return { results, relaxedFilters };
+        }
+      }
+      
+      // Drop maxPrice filter
+      if (filters.maxPrice) {
+        const withoutMaxPrice = { ...filters, type: "", maxPrice: "" };
+        results = applyFilters(withoutMaxPrice);
+        if (results.length > 0) {
+          if (filters.type) relaxedFilters.push("Screen Type");
+          relaxedFilters.push("Max Price");
+          return { results, relaxedFilters };
+        }
+      }
+      
+      // Drop minPrice filter
+      if (filters.minPrice) {
+        const withoutPriceFilters = { ...filters, type: "", minPrice: "", maxPrice: "" };
+        results = applyFilters(withoutPriceFilters);
+        if (results.length > 0) {
+          if (filters.type) relaxedFilters.push("Screen Type");
+          if (filters.maxPrice) relaxedFilters.push("Max Price");
+          relaxedFilters.push("Min Price");
+          return { results, relaxedFilters };
+        }
+      }
+      
+      // Last resort: show all active screens in city (or all if no city filter)
+      results = activeScreens.filter(s => 
+        !filters.city || s.city.toLowerCase().includes(filters.city.toLowerCase())
+      );
+      if (filters.type) relaxedFilters.push("Screen Type");
+      if (filters.maxPrice) relaxedFilters.push("Max Price");
+      if (filters.minPrice) relaxedFilters.push("Min Price");
+      if (!filters.city && results.length > 0) {
+        relaxedFilters.push("City");
+      }
+    }
+    
+    return { results, relaxedFilters };
+  };
+  
+  const { results: filteredScreens, relaxedFilters } = getFilteredScreens();
 
   const selectedScreens = screens.filter(s => selectedScreenIds.has(s.id));
 
@@ -284,6 +347,18 @@ export default function DiscoverScreens() {
           </div>
         </div>
       </div>
+
+      {/* Relaxed Filters Alert */}
+      {relaxedFilters.length > 0 && (
+        <div className="px-6 pt-4">
+          <Alert className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900" data-testid="alert-relaxed-filters">
+            <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
+            <AlertDescription className="text-sm text-yellow-800 dark:text-yellow-200">
+              <strong>No exact matches found.</strong> Showing results without: <strong>{relaxedFilters.join(", ")}</strong> filter{relaxedFilters.length > 1 ? "s" : ""}.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       {/* Content - List or Map View */}
       <div className="flex-1 overflow-hidden">
