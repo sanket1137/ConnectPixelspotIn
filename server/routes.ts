@@ -811,9 +811,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ reach: 0, impressions: 0 });
       }
       
-      // Reach = sum of (footfall × duration) for each screen
+      // Reach = sum of (footfall × numberOfScreens × duration) for each screen
       const totalReach = selectedScreens.reduce((sum, screen) => {
-        return sum + (screen.avgDailyFootfall * duration);
+        const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
+        return sum + (screen.avgDailyFootfall * screenMultiplier * duration);
       }, 0);
       
       // Impressions = reach × average dwell time slots

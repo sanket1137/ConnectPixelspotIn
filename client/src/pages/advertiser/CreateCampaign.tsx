@@ -390,7 +390,8 @@ export default function CreateCampaign() {
         const screen = screensInArea.find(s => s.id === screenId);
         if (!screen) throw new Error(`Screen ${screenId} not found`);
 
-        const price = screen.pricePerDay * duration;
+        const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
+        const price = screen.pricePerDay * screenMultiplier * duration;
 
         return apiRequest("POST", "/api/advertiser/bookings", {
           screenId,
@@ -576,7 +577,9 @@ export default function CreateCampaign() {
   const duration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
   const spentBudget = selectedScreenIds.reduce((sum, screenId) => {
     const screen = screensInArea.find(s => s.id === screenId);
-    return sum + (screen ? screen.pricePerDay * (duration || 1) : 0);
+    if (!screen) return sum;
+    const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
+    return sum + (screen.pricePerDay * screenMultiplier * (duration || 1));
   }, 0);
 
   return (
@@ -1196,6 +1199,11 @@ export default function CreateCampaign() {
                                       {index + 1}
                                     </span>
                                     <h4 className="font-semibold text-foreground">{screen.name}</h4>
+                                    {screen.isMultiScreen && screen.numberOfScreens && (
+                                      <Badge variant="secondary" className="ml-2">
+                                        🖥️ {screen.numberOfScreens} screens
+                                      </Badge>
+                                    )}
                                   </div>
                                   <div className="mt-2 space-y-1 text-sm text-muted-foreground ml-8">
                                     <div className="flex items-center gap-2">
@@ -1218,13 +1226,23 @@ export default function CreateCampaign() {
                                 </div>
                                 <div className="text-right">
                                   <div className="text-lg font-semibold text-primary">
-                                    ₹{(screen.pricePerDay * (duration || 1)).toLocaleString()}
+                                    ₹{(() => {
+                                      const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
+                                      return (screen.pricePerDay * screenMultiplier * (duration || 1)).toLocaleString();
+                                    })()}
                                   </div>
                                   <div className="text-xs text-muted-foreground">
-                                    ₹{screen.pricePerDay.toLocaleString()}/day × {duration || 1} days
+                                    {screen.isMultiScreen && screen.numberOfScreens ? (
+                                      <>₹{screen.pricePerDay.toLocaleString()}/day per screen × {screen.numberOfScreens} screens × {duration || 1} days</>
+                                    ) : (
+                                      <>₹{screen.pricePerDay.toLocaleString()}/day × {duration || 1} days</>
+                                    )}
                                   </div>
                                   <div className="mt-2 text-xs font-medium text-foreground">
-                                    ~{(screen.avgDailyFootfall * (duration || 1)).toLocaleString()} reach
+                                    ~{(() => {
+                                      const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
+                                      return (screen.avgDailyFootfall * screenMultiplier * (duration || 1)).toLocaleString();
+                                    })()} reach
                                   </div>
                                 </div>
                               </div>
@@ -1236,7 +1254,10 @@ export default function CreateCampaign() {
                             <div className="flex items-center justify-between text-lg font-semibold">
                               <span>Total Campaign Cost</span>
                               <span className="text-primary">
-                                ₹{filteredScreensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0).toLocaleString()}
+                                ₹{filteredScreensInArea.reduce((sum, s) => {
+                                  const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
+                                  return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
+                                }, 0).toLocaleString()}
                               </span>
                             </div>
                             <div className="flex items-center justify-between text-sm text-muted-foreground mt-1">
@@ -1245,14 +1266,23 @@ export default function CreateCampaign() {
                             </div>
                             <div className="flex items-center justify-between text-sm font-medium text-foreground mt-1">
                               <span>Remaining</span>
-                              <span className={totalBudget - filteredScreensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0) >= 0 ? "text-green-600" : "text-red-600"}>
-                                ₹{(totalBudget - filteredScreensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0)).toLocaleString()}
+                              <span className={totalBudget - filteredScreensInArea.reduce((sum, s) => {
+                                const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
+                                return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
+                              }, 0) >= 0 ? "text-green-600" : "text-red-600"}>
+                                ₹{(totalBudget - filteredScreensInArea.reduce((sum, s) => {
+                                  const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
+                                  return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
+                                }, 0)).toLocaleString()}
                               </span>
                             </div>
                             
                             {/* Budget Warning */}
                             {(() => {
-                              const totalCost = filteredScreensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0);
+                              const totalCost = filteredScreensInArea.reduce((sum, s) => {
+                                const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
+                                return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
+                              }, 0);
                               const overBudget = totalCost > totalBudget;
                               
                               if (overBudget) {
@@ -1350,7 +1380,14 @@ export default function CreateCampaign() {
                                     data-testid={`checkbox-screen-${screen.id}`}
                                   />
                                   <div className="flex-1">
-                                    <h3 className="font-semibold">{screen.name}</h3>
+                                    <div className="flex items-center gap-2">
+                                      <h3 className="font-semibold">{screen.name}</h3>
+                                      {screen.isMultiScreen && screen.numberOfScreens && (
+                                        <Badge variant="secondary">
+                                          🖥️ {screen.numberOfScreens} screens
+                                        </Badge>
+                                      )}
+                                    </div>
                                     <p className="text-sm text-muted-foreground">{screen.location}</p>
                                     <div className="flex gap-2 mt-2">
                                       <Badge variant="outline">{screen.venueCategory}</Badge>
@@ -1358,8 +1395,19 @@ export default function CreateCampaign() {
                                     </div>
                                   </div>
                                   <div className="text-right">
-                                    <p className="font-semibold">₹{screen.pricePerDay.toLocaleString()}/day</p>
-                                    <p className="text-sm text-muted-foreground">₹{(screen.pricePerDay * (duration || 1)).toLocaleString()} total</p>
+                                    <p className="font-semibold">
+                                      {screen.isMultiScreen && screen.numberOfScreens ? (
+                                        <>₹{screen.pricePerDay.toLocaleString()}/day × {screen.numberOfScreens} screens</>
+                                      ) : (
+                                        <>₹{screen.pricePerDay.toLocaleString()}/day</>
+                                      )}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                      ₹{(() => {
+                                        const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
+                                        return (screen.pricePerDay * screenMultiplier * (duration || 1)).toLocaleString();
+                                      })()} total
+                                    </p>
                                   </div>
                                 </div>
                               </CardContent>
