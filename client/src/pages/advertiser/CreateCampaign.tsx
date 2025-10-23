@@ -13,7 +13,13 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
-import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor as MonitorIcon, Upload, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign, Users, Clock, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor as MonitorIcon, Upload, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign, Users, Clock, AlertTriangle, Eye, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import type { Screen } from "@shared/schema";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -131,6 +137,7 @@ export default function CreateCampaign() {
   const [planMode, setPlanMode] = useState<"smart" | "customize">("smart");
   const [calculatedDuration, setCalculatedDuration] = useState<number | null>(null);
   const [estimatedReach, setEstimatedReach] = useState<{ reach: number; impressions: number; screenCount: number } | null>(null);
+  const [screenDetailsDialog, setScreenDetailsDialog] = useState<Screen | null>(null);
   
   // Map state
   const [mapCenter, setMapCenter] = useState(defaultCenter);
@@ -1204,7 +1211,7 @@ export default function CreateCampaign() {
                         </CardHeader>
                         <CardContent className="space-y-3">
                           {filteredScreensInArea.map((screen, index) => (
-                            <div key={screen.id} className="border rounded-lg p-4 space-y-2" data-testid={`screen-breakdown-${screen.id}`}>
+                            <div key={screen.id} className="border rounded-lg p-4 space-y-2 hover-elevate cursor-pointer" data-testid={`screen-breakdown-${screen.id}`} onClick={() => setScreenDetailsDialog(screen)}>
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2">
@@ -1217,6 +1224,7 @@ export default function CreateCampaign() {
                                         🖥️ Multi-Venue: {screen.numberOfScreens} screens
                                       </Badge>
                                     )}
+                                    <Eye className="h-4 w-4 ml-auto text-muted-foreground" />
                                   </div>
                                   <div className="mt-2 space-y-1 text-sm text-muted-foreground ml-8">
                                     <div className="flex items-center gap-2">
@@ -1392,7 +1400,7 @@ export default function CreateCampaign() {
                                     onCheckedChange={() => toggleScreen(screen.id)}
                                     data-testid={`checkbox-screen-${screen.id}`}
                                   />
-                                  <div className="flex-1">
+                                  <div className="flex-1 cursor-pointer" onClick={() => setScreenDetailsDialog(screen)}>
                                     <div className="flex items-center gap-2">
                                       <h3 className="font-semibold">{screen.name}</h3>
                                       {screen.isMultiScreen && screen.numberOfScreens && (
@@ -1400,6 +1408,7 @@ export default function CreateCampaign() {
                                           🖥️ Multi-Venue: {screen.numberOfScreens} screens
                                         </Badge>
                                       )}
+                                      <Eye className="h-4 w-4 ml-auto text-muted-foreground" />
                                     </div>
                                     <p className="text-sm text-muted-foreground">{screen.location}</p>
                                     <div className="flex gap-2 mt-2">
@@ -1655,6 +1664,192 @@ export default function CreateCampaign() {
           </Form>
         </CardContent>
       </Card>
+
+      {/* Screen Details Dialog */}
+      <Dialog open={!!screenDetailsDialog} onOpenChange={() => setScreenDetailsDialog(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          {screenDetailsDialog && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <DialogTitle className="text-2xl">{screenDetailsDialog.name}</DialogTitle>
+                    {screenDetailsDialog.isMultiScreen && screenDetailsDialog.numberOfScreens && (
+                      <Badge variant="default" className="bg-purple-600 hover:bg-purple-700">
+                        🖥️ Multi-Venue: {screenDetailsDialog.numberOfScreens} screens
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="space-y-6 mt-4">
+                {/* Images Gallery */}
+                {screenDetailsDialog.images && screenDetailsDialog.images.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-semibold">Images</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {screenDetailsDialog.images.map((image, idx) => (
+                        <img
+                          key={idx}
+                          src={image}
+                          alt={`${screenDetailsDialog.name} - Image ${idx + 1}`}
+                          className="w-full h-48 object-cover rounded-lg border"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://placehold.co/400x300/1a1a1a/666?text=No+Image';
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Basic Information */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold">Basic Information</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Type</p>
+                      <p className="font-semibold">{screenDetailsDialog.type}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Size</p>
+                      <p className="font-semibold">{screenDetailsDialog.size}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Resolution</p>
+                      <p className="font-semibold">{screenDetailsDialog.resolution}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Visibility</p>
+                      <p className="font-semibold">{screenDetailsDialog.visibility}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Location */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold">Location</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                      <div>
+                        <p className="font-semibold">{screenDetailsDialog.location}</p>
+                        <p className="text-muted-foreground">{screenDetailsDialog.city}, {screenDetailsDialog.state} - {screenDetailsDialog.pincode}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-3">
+                      <div>
+                        <p className="text-muted-foreground">Venue Category</p>
+                        <p className="font-semibold">{screenDetailsDialog.venueCategory}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Display Format</p>
+                        <p className="font-semibold">{screenDetailsDialog.displayFormat}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Audience Demographics */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold">Audience Demographics</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Daily Footfall</p>
+                      <p className="font-semibold">{screenDetailsDialog.avgDailyFootfall.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Gender Orientation</p>
+                      <p className="font-semibold">{screenDetailsDialog.genderOrientation}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Income Level</p>
+                      <p className="font-semibold">{screenDetailsDialog.incomeLevel}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">User Intent</p>
+                      <p className="font-semibold">{screenDetailsDialog.userIntent ? screenDetailsDialog.userIntent.join(", ") : "N/A"}</p>
+                    </div>
+                  </div>
+                  {screenDetailsDialog.detailedAgeGroups && screenDetailsDialog.detailedAgeGroups.length > 0 && (
+                    <div>
+                      <p className="text-muted-foreground mb-2">Age Groups</p>
+                      <div className="flex flex-wrap gap-2">
+                        {screenDetailsDialog.detailedAgeGroups.map((age) => (
+                          <Badge key={age} variant="outline">{age}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {screenDetailsDialog.lifestyleTags && screenDetailsDialog.lifestyleTags.length > 0 && (
+                    <div>
+                      <p className="text-muted-foreground mb-2">Lifestyle Tags</p>
+                      <div className="flex flex-wrap gap-2">
+                        {screenDetailsDialog.lifestyleTags.map((tag) => (
+                          <Badge key={tag} variant="secondary">{tag}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Technical Specs */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold">Technical Specifications</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Playback Slots/Hour</p>
+                      <p className="font-semibold">{screenDetailsDialog.playbackSlotsPerHour}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Avg Dwell Time</p>
+                      <p className="font-semibold">{screenDetailsDialog.avgDwellTime} minutes</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Time of Day Activity</p>
+                      <p className="font-semibold">{screenDetailsDialog.timeOfDayActivity ? screenDetailsDialog.timeOfDayActivity.join(", ") : "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Operating Hours</p>
+                      <p className="font-semibold">{screenDetailsDialog.operationalHours}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pricing */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold">Pricing</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Price Per Day</p>
+                      <p className="font-semibold text-primary text-lg">
+                        {screenDetailsDialog.isMultiScreen && screenDetailsDialog.numberOfScreens ? (
+                          <>₹{screenDetailsDialog.pricePerDay.toLocaleString()} × {screenDetailsDialog.numberOfScreens} screens</>
+                        ) : (
+                          <>₹{screenDetailsDialog.pricePerDay.toLocaleString()}</>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Min Booking Days</p>
+                      <p className="font-semibold">{screenDetailsDialog.minBookingDays} days</p>
+                    </div>
+                  </div>
+                  {screenDetailsDialog.isMultiScreen && screenDetailsDialog.numberOfScreens && (
+                    <Alert className="bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900">
+                      <AlertDescription className="text-sm">
+                        This is a multi-venue location with <strong>{screenDetailsDialog.numberOfScreens} screens</strong>. 
+                        Total daily cost: <strong>₹{(screenDetailsDialog.pricePerDay * screenDetailsDialog.numberOfScreens).toLocaleString()}</strong>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
