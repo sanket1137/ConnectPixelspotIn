@@ -156,6 +156,11 @@ export default function CreateCampaign() {
   const watchTargetCity = form.watch("targetCity");
   const watchDurationMode = form.watch("durationMode");
   const watchCustomDays = form.watch("customDays");
+  const watchVenueTypeFilters = form.watch("venueTypeFilters");
+  const watchTargetAgeGroups = form.watch("targetAgeGroups");
+  const watchTargetGender = form.watch("targetGender");
+  const watchTargetAffluence = form.watch("targetAffluence");
+  const watchTimePreference = form.watch("timePreference");
 
   // Fetch screens in area when area changes (filtered by budget)
   useEffect(() => {
@@ -230,6 +235,66 @@ export default function CreateCampaign() {
       calculateAutoDuration();
     }
   }, [watchDurationMode, selectedScreenIds, watchBudget, currentStep]);
+
+  // Apply demographic filters from Step 4 to screens
+  const filteredScreensInArea = screensInArea.filter((screen) => {
+    // Venue type filter
+    if (watchVenueTypeFilters && watchVenueTypeFilters.length > 0) {
+      if (!watchVenueTypeFilters.includes(screen.venueCategory || "")) {
+        return false;
+      }
+    }
+    
+    // Age groups filter - check if any target age group matches screen's age groups
+    if (watchTargetAgeGroups && watchTargetAgeGroups.length > 0) {
+      const screenAgeGroups = screen.detailedAgeGroups || [];
+      const hasMatchingAge = watchTargetAgeGroups.some(targetAge => 
+        screenAgeGroups.includes(targetAge)
+      );
+      if (!hasMatchingAge) {
+        return false;
+      }
+    }
+    
+    // Gender filter - map campaign gender to screen gender orientation
+    if (watchTargetGender && watchTargetGender !== "all") {
+      const genderMap: Record<string, string[]> = {
+        "male": ["Male Dominant", "Mixed Gender", "Family Oriented"],
+        "female": ["Female Dominant", "Mixed Gender", "Family Oriented"],
+      };
+      const acceptableGenders = genderMap[watchTargetGender] || [];
+      if (!acceptableGenders.includes(screen.genderOrientation || "")) {
+        return false;
+      }
+    }
+    
+    // Affluence filter - map campaign affluence to screen income level
+    if (watchTargetAffluence && watchTargetAffluence.length > 0) {
+      const affluenceMap: Record<string, string> = {
+        "Premium": "Premium Audience",
+        "Luxury": "Luxury Buyers",
+        "Mid": "Middle Income",
+        "Budget": "Budget Conscious",
+      };
+      const targetIncomeLevels = watchTargetAffluence.map(a => affluenceMap[a] || a);
+      if (!targetIncomeLevels.includes(screen.incomeLevel || "")) {
+        return false;
+      }
+    }
+    
+    // Time preference filter - check if any target time matches screen's time of day activity
+    if (watchTimePreference && watchTimePreference.length > 0) {
+      const screenTimeActivities = screen.timeOfDayActivity || [];
+      const hasMatchingTime = watchTimePreference.some(targetTime => 
+        screenTimeActivities.includes(targetTime)
+      );
+      if (!hasMatchingTime) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
 
   // Calculate reach estimate
   useEffect(() => {
@@ -762,8 +827,8 @@ export default function CreateCampaign() {
                               In {watchAreaType === "map" 
                                 ? `selected area (${watchRadius} km radius)` 
                                 : watchTargetCity}, ₹{totalBudget.toLocaleString()} can reach ~
-                              {screensInArea.reduce((sum, s) => sum + s.avgDailyFootfall, 0).toLocaleString()} people 
-                              across {screensInArea.length} LED screens.
+                              {filteredScreensInArea.reduce((sum, s) => sum + s.avgDailyFootfall, 0).toLocaleString()} people 
+                              across {filteredScreensInArea.length} LED screens.
                             </p>
                           </div>
                         </div>
@@ -1070,7 +1135,7 @@ export default function CreateCampaign() {
                       variant={planMode === "smart" ? "default" : "outline"}
                       onClick={() => {
                         setPlanMode("smart");
-                        setSelectedScreenIds(screensInArea.map(s => s.id));
+                        setSelectedScreenIds(filteredScreensInArea.map(s => s.id));
                       }}
                       className="flex-1"
                       data-testid="button-smart-plan"
@@ -1112,7 +1177,7 @@ export default function CreateCampaign() {
                           <CardTitle className="text-lg">Selected Screens Breakdown</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                          {screensInArea.map((screen, index) => (
+                          {filteredScreensInArea.map((screen, index) => (
                             <div key={screen.id} className="border rounded-lg p-4 space-y-2" data-testid={`screen-breakdown-${screen.id}`}>
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
@@ -1161,7 +1226,7 @@ export default function CreateCampaign() {
                             <div className="flex items-center justify-between text-lg font-semibold">
                               <span>Total Campaign Cost</span>
                               <span className="text-primary">
-                                ₹{screensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0).toLocaleString()}
+                                ₹{filteredScreensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0).toLocaleString()}
                               </span>
                             </div>
                             <div className="flex items-center justify-between text-sm text-muted-foreground mt-1">
@@ -1170,14 +1235,14 @@ export default function CreateCampaign() {
                             </div>
                             <div className="flex items-center justify-between text-sm font-medium text-foreground mt-1">
                               <span>Remaining</span>
-                              <span className={totalBudget - screensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0) >= 0 ? "text-green-600" : "text-red-600"}>
-                                ₹{(totalBudget - screensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0)).toLocaleString()}
+                              <span className={totalBudget - filteredScreensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0) >= 0 ? "text-green-600" : "text-red-600"}>
+                                ₹{(totalBudget - filteredScreensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0)).toLocaleString()}
                               </span>
                             </div>
                             
                             {/* Budget Warning */}
                             {(() => {
-                              const totalCost = screensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0);
+                              const totalCost = filteredScreensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0);
                               const overBudget = totalCost > totalBudget;
                               
                               if (overBudget) {
@@ -1265,7 +1330,7 @@ export default function CreateCampaign() {
                       {/* List View */}
                       {viewMode === "list" && (
                         <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                          {screensInArea.map((screen) => (
+                          {filteredScreensInArea.map((screen) => (
                             <Card key={screen.id} className={selectedScreenIds.includes(screen.id) ? "border-primary" : ""}>
                               <CardContent className="pt-6">
                                 <div className="flex items-start gap-4">
@@ -1301,7 +1366,7 @@ export default function CreateCampaign() {
                             center={markerPosition}
                             zoom={12}
                           >
-                            {screensInArea.map((screen) => (
+                            {filteredScreensInArea.map((screen) => (
                               <Marker
                                 key={screen.id}
                                 position={{
