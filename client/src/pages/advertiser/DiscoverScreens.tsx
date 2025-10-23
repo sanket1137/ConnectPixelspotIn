@@ -315,9 +315,22 @@ export default function DiscoverScreens() {
                         {selectedScreens.map((screen) => (
                           <div key={screen.id} className="flex items-center justify-between p-3 rounded-md bg-muted/50">
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{screen.name}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium truncate">{screen.name}</p>
+                                {screen.isMultiScreen && screen.numberOfScreens && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    🖥️ {screen.numberOfScreens}
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground">{screen.city}</p>
-                              <p className="text-xs font-semibold text-primary mt-1">₹{screen.pricePerDay.toLocaleString()}/day</p>
+                              <p className="text-xs font-semibold text-primary mt-1">
+                                {screen.isMultiScreen && screen.numberOfScreens ? (
+                                  <>₹{screen.pricePerDay.toLocaleString()}/day × {screen.numberOfScreens} screens</>
+                                ) : (
+                                  <>₹{screen.pricePerDay.toLocaleString()}/day</>
+                                )}
+                              </p>
                             </div>
                             <Button
                               variant="ghost"
@@ -387,7 +400,14 @@ export default function DiscoverScreens() {
                   </div>
 
                   <CardHeader className="gap-2 space-y-0 pb-4">
-                    <CardTitle className="text-lg">{screen.name}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-lg">{screen.name}</CardTitle>
+                      {screen.isMultiScreen && screen.numberOfScreens && (
+                        <Badge variant="secondary" className="text-xs">
+                          🖥️ {screen.numberOfScreens}
+                        </Badge>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <MapPin className="w-4 h-4" />
                       <span className="truncate">{screen.location}, {screen.city}</span>
@@ -401,7 +421,13 @@ export default function DiscoverScreens() {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
                         <p className="text-muted-foreground">Price/Day</p>
-                        <p className="font-semibold text-primary">₹{screen.pricePerDay.toLocaleString()}</p>
+                        <p className="font-semibold text-primary">
+                          {screen.isMultiScreen && screen.numberOfScreens ? (
+                            <>₹{screen.pricePerDay.toLocaleString()} × {screen.numberOfScreens}</>
+                          ) : (
+                            <>₹{screen.pricePerDay.toLocaleString()}</>
+                          )}
+                        </p>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <p className="text-muted-foreground">Min Booking</p>
@@ -556,7 +582,14 @@ export default function DiscoverScreens() {
 
                       <div className="space-y-3 px-1">
                         <div>
-                          <h3 className="font-bold text-lg mb-1">{selectedScreen.name}</h3>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-bold text-lg">{selectedScreen.name}</h3>
+                            {selectedScreen.isMultiScreen && selectedScreen.numberOfScreens && (
+                              <Badge variant="secondary" className="text-xs">
+                                🖥️ {selectedScreen.numberOfScreens}
+                              </Badge>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <MapPin className="h-4 w-4" />
                             <span>{selectedScreen.location}, {selectedScreen.city}</span>
@@ -570,7 +603,13 @@ export default function DiscoverScreens() {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
                             <p className="text-muted-foreground">Price/Day</p>
-                            <p className="font-semibold text-primary">₹{selectedScreen.pricePerDay.toLocaleString()}</p>
+                            <p className="font-semibold text-primary">
+                              {selectedScreen.isMultiScreen && selectedScreen.numberOfScreens ? (
+                                <>₹{selectedScreen.pricePerDay.toLocaleString()} × {selectedScreen.numberOfScreens}</>
+                              ) : (
+                                <>₹{selectedScreen.pricePerDay.toLocaleString()}</>
+                              )}
+                            </p>
                           </div>
                           <div className="flex items-center justify-between text-sm">
                             <p className="text-muted-foreground">Min Booking</p>
