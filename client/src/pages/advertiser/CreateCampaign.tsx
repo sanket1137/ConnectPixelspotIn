@@ -157,9 +157,12 @@ export default function CreateCampaign() {
   const watchDurationMode = form.watch("durationMode");
   const watchCustomDays = form.watch("customDays");
 
-  // Fetch screens in area when area changes
+  // Fetch screens in area when area changes (filtered by budget)
   useEffect(() => {
     const fetchScreensInArea = async () => {
+      const budget = watchBudget;
+      const duration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
+      
       if (watchAreaType === "map") {
         const lat = form.getValues("latitude");
         const lng = form.getValues("longitude");
@@ -167,7 +170,12 @@ export default function CreateCampaign() {
         
         if (lat && lng && radiusKm) {
           try {
-            const response = await apiRequest("GET", `/api/screens/in-area?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`);
+            let url = `/api/screens/in-area?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`;
+            // Only filter by budget if we have both budget and duration
+            if (budget && duration && currentStep >= 3) {
+              url += `&budget=${budget}&duration=${duration}`;
+            }
+            const response = await apiRequest("GET", url);
             const data = await response.json();
             setScreensInArea(data);
             if (planMode === "smart") {
@@ -179,7 +187,12 @@ export default function CreateCampaign() {
         }
       } else if (watchAreaType === "city" && watchTargetCity) {
         try {
-          const response = await apiRequest("GET", `/api/screens/in-area?city=${watchTargetCity}`);
+          let url = `/api/screens/in-area?city=${watchTargetCity}`;
+          // Only filter by budget if we have both budget and duration
+          if (budget && duration && currentStep >= 3) {
+            url += `&budget=${budget}&duration=${duration}`;
+          }
+          const response = await apiRequest("GET", url);
           const data = await response.json();
           setScreensInArea(data);
           if (planMode === "smart") {
@@ -194,7 +207,7 @@ export default function CreateCampaign() {
     if (currentStep >= 2) {
       fetchScreensInArea();
     }
-  }, [watchAreaType, watchRadius, watchTargetCity, currentStep]);
+  }, [watchAreaType, watchRadius, watchTargetCity, currentStep, watchBudget, calculatedDuration, watchDurationMode, watchCustomDays]);
 
   // Calculate duration when in auto mode
   useEffect(() => {

@@ -869,19 +869,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
       
-      // Filter by budget if provided (assume duration in days)
+      // Sort by footfall (descending) for better recommendations
+      screens.sort((a, b) => b.avgDailyFootfall - a.avgDailyFootfall);
+      
+      // Filter by budget if provided: select screens that fit within budget
       if (budget && duration) {
         const budgetAmount = parseInt(budget as string);
         const durationDays = parseInt(duration as string);
         
-        screens = screens.filter(screen => {
-          const totalCost = screen.pricePerDay * durationDays;
-          return totalCost <= budgetAmount;
-        });
+        // Greedy algorithm: pick screens sorted by footfall until budget is exhausted
+        const selectedScreens: typeof screens = [];
+        let remainingBudget = budgetAmount;
+        
+        for (const screen of screens) {
+          const screenCost = screen.pricePerDay * durationDays;
+          if (screenCost <= remainingBudget) {
+            selectedScreens.push(screen);
+            remainingBudget -= screenCost;
+          }
+        }
+        
+        screens = selectedScreens;
       }
-      
-      // Sort by footfall (descending) for better recommendations
-      screens.sort((a, b) => b.avgDailyFootfall - a.avgDailyFootfall);
       
       res.json(screens);
     } catch (error) {
