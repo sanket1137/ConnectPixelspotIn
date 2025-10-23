@@ -142,7 +142,9 @@ export default function CampaignDetails() {
   };
 
   const calculateCampaignStatus = () => {
-    if (!campaign || !campaign.bookings) return { text: "Unknown", variant: "secondary" as const };
+    if (!campaign || !campaign.bookings || !Array.isArray(campaign.bookings)) {
+      return { text: "Unknown", variant: "secondary" as const };
+    }
     
     const total = campaign.bookings.length;
     const approved = campaign.bookings.filter(b => 
@@ -238,9 +240,9 @@ export default function CampaignDetails() {
 
       {/* Bookings List */}
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold">Screen Bookings ({campaign.bookings.length})</h2>
+        <h2 className="text-2xl font-bold">Screen Bookings ({campaign.bookings?.length || 0})</h2>
 
-        {campaign.bookings.length === 0 ? (
+        {!campaign.bookings || campaign.bookings.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
               No bookings for this campaign
@@ -248,7 +250,7 @@ export default function CampaignDetails() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {campaign.bookings.map((booking) => (
+            {campaign.bookings?.map((booking) => (
               <Card key={booking.id} data-testid={`card-booking-${booking.id}`}>
                 <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-4">
                   <div className="flex items-start gap-4 flex-1">
