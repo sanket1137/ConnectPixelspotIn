@@ -757,6 +757,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Calculate auto-duration based on budget and screens
+  app.post("/api/campaign/calculate-duration", authenticate, async (req, res) => {
+    try {
+      const { budget, screenIds } = req.body;
+      
+      if (!budget || !screenIds || screenIds.length === 0) {
+        return res.status(400).json({ error: "Budget and screenIds required" });
+      }
+      
+      const screens = await storage.getActiveScreens();
+      const selectedScreens = screens.filter(s => screenIds.includes(s.id));
+      
+      if (selectedScreens.length === 0) {
+        return res.json({ days: 1, screensPerDay: 0 });
+      }
+      
+      // Calculate average screen cost
+      const avgCostPerDay = selectedScreens.reduce((sum, s) => sum + s.pricePerDay, 0) / selectedScreens.length;
+      
+      // Calculate total screen-days available with budget
+      const totalScreenDays = Math.floor(budget / avgCostPerDay);
+      
+      // Favor more screens over longer duration
+      // Strategy: Distribute days to maximize reach
+      const optimalDays = Math.max(1, Math.floor(totalScreenDays / selectedScreens.length));
+      
+      res.json({
+        days: optimalDays,
+        screensPerDay: selectedScreens.length,
+        totalScreenDays,
+        avgCostPerDay: Math.round(avgCostPerDay),
+      });
+    } catch (error) {
+      console.error("Calculate duration error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Calculate reach estimate
+  app.post("/api/campaign/calculate-reach", authenticate, async (req, res) => {
+    try {
+      const { screenIds, duration } = req.body;
+      
+      if (!screenIds || screenIds.length === 0 || !duration) {
+        return res.status(400).json({ error: "ScreenIds and duration required" });
+      }
+      
+      const screens = await storage.getActiveScreens();
+      const selectedScreens = screens.filter(s => screenIds.includes(s.id));
+      
+      if (selectedScreens.length === 0) {
+        return res.json({ reach: 0, impressions: 0 });
+      }
+      
+      // Reach = sum of (footfall × duration) for each screen
+      const totalReach = selectedScreens.reduce((sum, screen) => {
+        return sum + (screen.avgDailyFootfall * duration);
+      }, 0);
+      
+      // Impressions = reach × average dwell time slots
+      const avgSlots = selectedScreens.reduce((sum, s) => sum + s.playbackSlotsPerHour, 0) / selectedScreens.length;
+      const avgDwellMinutes = selectedScreens.reduce((sum, s) => sum + s.avgDwellTime, 0) / selectedScreens.length;
+      const impressions = Math.round(totalReach * (avgDwellMinutes / 60) * avgSlots);
+      
+      res.json({
+        reach: Math.round(totalReach),
+        impressions,
+        screenCount: selectedScreens.length,
+      });
+    } catch (error) {
+      console.error("Calculate reach error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get screens in area (map + radius OR city search)
   app.get("/api/screens/in-area", authenticate, async (req, res) => {
     try {
@@ -773,11 +848,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         screens = screens.filter(screen => {
           const R = 6371; // Earth's radius in km
-          const dLat = (screen.latitude - latitude) * Math.PI / 180;
-          const dLon = (screen.longitude - longitude) * Math.PI / 180;
+          const screenLat = parseFloat(screen.latitude.toString());
+          const screenLng = parseFloat(screen.longitude.toString());
+          
+          const dLat = (screenLat - latitude) * Math.PI / 180;
+          const dLon = (screenLng - longitude) * Math.PI / 180;
           const a = 
             Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(latitude * Math.PI / 180) * Math.cos(screen.latitude * Math.PI / 180) *
+            Math.cos(latitude * Math.PI / 180) * Math.cos(screenLat * Math.PI / 180) *
             Math.sin(dLon/2) * Math.sin(dLon/2);
           const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
           const distance = R * c;
