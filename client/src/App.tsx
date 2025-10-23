@@ -195,9 +195,9 @@ function AuthenticatedLayout() {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full">
+      <div className="flex min-h-screen w-full">
         <AppSidebar />
-        <main className="flex-1 overflow-auto bg-background">
+        <main className="flex-1 bg-background">
           <Router />
         </main>
       </div>
