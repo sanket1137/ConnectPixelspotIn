@@ -24,6 +24,7 @@ import {
   LogOut,
   TrendingUp,
   DollarSign,
+  Sparkles,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ export function AppSidebar() {
     { title: "Find Screens", url: "/advertiser/discover", icon: MapPin },
     { title: "My Campaigns", url: "/advertiser/campaigns", icon: FileText },
     { title: "Create Campaign", url: "/advertiser/campaigns/new", icon: PlusCircle },
+    { title: "AI Campaign Advisor", url: "/advertiser/ai-advisor", icon: Sparkles },
     { title: "Payments", url: "/advertiser/payments", icon: CreditCard },
   ];
 

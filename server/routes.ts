@@ -7,6 +7,7 @@ import type { User } from "@shared/schema";
 import { db } from "./db";
 import { bookings } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { getCampaignAdvice } from "./ai-advisor";
 
 // Extend Express Request to include user
 declare global {
@@ -1071,6 +1072,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Reject alternative dates error:", error);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ========== AI CAMPAIGN ADVISOR ROUTES ==========
+
+  // AI Campaign Advisor chat endpoint
+  app.post("/api/ai/campaign-advisor", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { messages } = req.body;
+
+      if (!messages || !Array.isArray(messages)) {
+        return res.status(400).json({ error: "Messages array is required" });
+      }
+
+      if (!process.env.OPENAI_API_KEY) {
+        return res.status(500).json({ error: "OpenAI API key not configured" });
+      }
+
+      const result = await getCampaignAdvice(messages, storage);
+      res.json(result);
+    } catch (error) {
+      console.error("AI Campaign Advisor error:", error);
+      res.status(500).json({ error: "Failed to get AI advice. Please try again." });
     }
   });
 

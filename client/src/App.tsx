@@ -28,6 +28,7 @@ import CampaignsList from "@/pages/advertiser/CampaignsList";
 import CampaignDetails from "@/pages/advertiser/CampaignDetails";
 import CreateCampaign from "@/pages/advertiser/CreateCampaign";
 import BookingManagement from "@/pages/advertiser/BookingManagement";
+import AICampaignAdvisor from "@/pages/advertiser/AICampaignAdvisor";
 import ComingSoon from "@/pages/ComingSoon";
 
 function RedirectToDashboard() {
@@ -162,6 +163,11 @@ function Router() {
       <Route path="/advertiser/bookings">
         <AuthGuard allowedRoles={["advertiser"]}>
           <BookingManagement />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/ai-advisor">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <AICampaignAdvisor />
         </AuthGuard>
       </Route>
       <Route path="/advertiser/payments">
