@@ -60,7 +60,64 @@ The platform supports three distinct user roles: Admin, Screen Owner, and Advert
 -   **Vite**: Frontend build tool.
 -   **Shadcn UI**: Component library.
 
-## Recent Changes (October 22, 2025)
+## Recent Changes (October 23, 2025)
+
+-   **Complete Campaign Creation Redesign**: Streamlined from 5 complex mandatory steps to 6 simplified steps with budget-first approach:
+    -   **Step 1: Campaign Goal & Budget** - Name, objective dropdown (5 options: Brand Awareness, Product Launch, Event Promotion, Seasonal Campaign, Local Promotion), and budget input
+    -   **Step 2: Choose Area** - Dual input method: 
+        - Option A: Interactive Google Map with draggable pin + radius slider (1-10 km)
+        - Option B: City search autocomplete from available screens
+        - Live estimate card showing reach across available LED screens
+    -   **Step 3: Set Duration** - Auto-optimization toggle OR custom days input
+        - Auto mode: Calls `/api/campaign/calculate-duration` to maximize reach
+        - Shows calculated end date based on start date
+    -   **Step 4: Audience & Location Filters** - Optional, collapsed by default
+        - Venue types, age groups, gender, income levels, time preference
+        - Reduces friction by making advanced targeting optional
+    -   **Step 5: Smart Plan Suggestions** - Binary choice between Smart Plan (auto) and Customize Plan
+        - **Smart Plan**: Shows all screens in area within budget, sorted by footfall
+        - **Detailed Screen Breakdown**: Each screen shows:
+            - Screen name with numbered badge (1, 2, 3...)
+            - Full address with city, state, pincode
+            - Screen type and resolution
+            - Daily footfall metrics
+            - Playback slots/hour and dwell time
+            - Per-day cost × duration = total cost
+            - Estimated individual screen reach
+        - **Total Summary**: Shows campaign cost, remaining budget (color-coded)
+        - **Customize Plan**: List/Map toggle for manual screen selection with checkboxes
+        - Google Maps integration with custom screen markers and InfoWindow popups
+    -   **Step 6: Upload Creative & Review** - Summary card with emoji icons and creative upload
+        - Shows: Goal 🎯, Area 📍, Duration 📅, Budget 💰, Reach 👁️, Screen count, Creative preview
+        - Primary CTA: "Create Campaign" / Secondary: "Save as Draft"
+
+-   **New Backend Endpoints**:
+    -   `GET /api/screens/in-area` - Supports map (lat/lng/radius) OR city-based targeting
+        - Uses Haversine formula for accurate distance calculation
+        - Filters by budget and duration if provided
+        - Returns screens sorted by footfall (descending)
+    -   `POST /api/campaign/calculate-duration` - Auto-calculates optimal campaign duration
+        - Input: budget, screenIds
+        - Output: days, screensPerDay, totalScreenDays, avgCostPerDay
+        - Strategy: Favors more screens over longer duration (wider reach)
+    -   `POST /api/campaign/calculate-reach` - Estimates campaign reach and impressions
+        - Input: screenIds, duration
+        - Output: reach (footfall × duration), impressions (reach × dwell × slots), screenCount
+
+-   **Schema Updates**:
+    -   Added `targetArea` JSON field to campaigns table: supports both map-based (lat/lng/radius) and city-based targeting
+    -   Made demographic fields optional (targetAgeGroups, targetGender, targetAffluence, etc.)
+    -   Added `budget` field to campaigns (mandatory)
+
+-   **Design Philosophy**:
+    -   Budget-first approach prevents sticker shock and reduces advertiser drop-off
+    -   Map + radius is primary area selection, city search as fallback
+    -   Auto-duration optimization suggests more screens with shorter durations for maximum reach
+    -   Optional filters hidden by default to reduce cognitive load
+    -   Smart Plan provides clear transparency on which screens are selected and their locations
+    -   Dual-view screen discovery (List/Map) maintained for flexibility
+
+## Previous Changes (October 22, 2025)
 -   **Schema Cleanup & Bug Fixes**:
     -   **Removed Duplicate Fields**: Cleaned up database schema by removing 4 legacy/duplicate fields:
         - Removed `primaryAgeGroups` (replaced by `detailedAgeGroups` with more granular age ranges)
