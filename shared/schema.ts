@@ -90,7 +90,19 @@ export const campaigns = pgTable("campaigns", {
   name: text("name").notNull(),
   objective: text("objective").notNull(), // brand_awareness, product_launch, event_promotion, etc.
   
-  // Targeting criteria
+  // New: Area-based targeting (map + radius OR city)
+  targetArea: jsonb("target_area").$type<{
+    type: 'map' | 'city';
+    // For map type:
+    latitude?: number;
+    longitude?: number;
+    radiusKm?: number;
+    // For city type:
+    city?: string;
+    state?: string;
+  }>(),
+  
+  // Legacy targeting criteria (kept for backward compatibility and optional filters)
   targetLocationType: text("target_location_type"), // city, state, india, pincodes
   targetCities: text("target_cities").array(), // Array of city names
   targetState: text("target_state"), // State name for state-level targeting

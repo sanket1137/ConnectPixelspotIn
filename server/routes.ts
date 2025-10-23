@@ -757,6 +757,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get screens in area (map + radius OR city search)
+  app.get("/api/screens/in-area", authenticate, async (req, res) => {
+    try {
+      const { lat, lng, radiusKm, city, budget, duration } = req.query;
+      
+      let screens = await storage.getActiveScreens();
+      
+      // Filter by area (map OR city)
+      if (lat && lng && radiusKm) {
+        // Map-based filtering using Haversine formula
+        const latitude = parseFloat(lat as string);
+        const longitude = parseFloat(lng as string);
+        const radius = parseFloat(radiusKm as string);
+        
+        screens = screens.filter(screen => {
+          const R = 6371; // Earth's radius in km
+          const dLat = (screen.latitude - latitude) * Math.PI / 180;
+          const dLon = (screen.longitude - longitude) * Math.PI / 180;
+          const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(latitude * Math.PI / 180) * Math.cos(screen.latitude * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          const distance = R * c;
+          
+          return distance <= radius;
+        });
+      } else if (city) {
+        // City-based filtering
+        screens = screens.filter(s => 
+          s.city.toLowerCase() === (city as string).toLowerCase()
+        );
+      }
+      
+      // Filter by budget if provided (assume duration in days)
+      if (budget && duration) {
+        const budgetAmount = parseInt(budget as string);
+        const durationDays = parseInt(duration as string);
+        
+        screens = screens.filter(screen => {
+          const totalCost = screen.pricePerDay * durationDays;
+          return totalCost <= budgetAmount;
+        });
+      }
+      
+      // Sort by footfall (descending) for better recommendations
+      screens.sort((a, b) => b.avgDailyFootfall - a.avgDailyFootfall);
+      
+      res.json(screens);
+    } catch (error) {
+      console.error("Get screens in area error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get campaigns (advertiser)
   app.get("/api/advertiser/campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
