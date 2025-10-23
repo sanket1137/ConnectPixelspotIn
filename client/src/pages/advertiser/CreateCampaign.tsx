@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
-import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor, Upload, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign } from "lucide-react";
+import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor as MonitorIcon, Upload, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign, Users, Clock } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Screen } from "@shared/schema";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -75,7 +75,7 @@ const steps = [
   { id: 2, name: "Choose Area", icon: MapPin },
   { id: 3, name: "Set Duration", icon: Calendar },
   { id: 4, name: "Filters", icon: Filter },
-  { id: 5, name: "Smart Plan", icon: Monitor },
+  { id: 5, name: "Smart Plan", icon: MonitorIcon },
   { id: 6, name: "Review", icon: Upload },
 ];
 
@@ -1078,19 +1078,93 @@ export default function CreateCampaign() {
 
                   {/* Smart Plan Preview */}
                   {planMode === "smart" && (
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-center space-y-2">
-                          <p className="text-4xl font-bold text-primary">{selectedScreenIds.length} screens × {duration} days</p>
-                          <p className="text-muted-foreground">
-                            Estimated Reach: <strong className="text-foreground">{estimatedReach?.reach.toLocaleString() || 0}</strong> people
-                          </p>
-                          <p className="text-muted-foreground">
-                            Total Impressions: <strong className="text-foreground">{estimatedReach?.impressions.toLocaleString() || 0}</strong>
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <div className="space-y-4">
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="text-center space-y-2">
+                            <p className="text-4xl font-bold text-primary">{selectedScreenIds.length} screens × {duration} days</p>
+                            <p className="text-muted-foreground">
+                              Estimated Reach: <strong className="text-foreground">{estimatedReach?.reach.toLocaleString() || 0}</strong> people
+                            </p>
+                            <p className="text-muted-foreground">
+                              Total Impressions: <strong className="text-foreground">{estimatedReach?.impressions.toLocaleString() || 0}</strong>
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Selected Screens Breakdown */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">Selected Screens Breakdown</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {screensInArea.map((screen, index) => (
+                            <div key={screen.id} className="border rounded-lg p-4 space-y-2" data-testid={`screen-breakdown-${screen.id}`}>
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
+                                      {index + 1}
+                                    </span>
+                                    <h4 className="font-semibold text-foreground">{screen.name}</h4>
+                                  </div>
+                                  <div className="mt-2 space-y-1 text-sm text-muted-foreground ml-8">
+                                    <div className="flex items-center gap-2">
+                                      <MapPin className="h-4 w-4" />
+                                      <span>{screen.location}, {screen.city}, {screen.state} - {screen.pincode}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <MonitorIcon className="h-4 w-4" />
+                                      <span>{screen.type} • {screen.resolution}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Users className="h-4 w-4" />
+                                      <span>Daily Footfall: {screen.avgDailyFootfall.toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Clock className="h-4 w-4" />
+                                      <span>{screen.playbackSlotsPerHour} slots/hour • {screen.avgDwellTime} min avg dwell time</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-lg font-semibold text-primary">
+                                    ₹{(screen.pricePerDay * (duration || 1)).toLocaleString()}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    ₹{screen.pricePerDay.toLocaleString()}/day × {duration || 1} days
+                                  </div>
+                                  <div className="mt-2 text-xs font-medium text-foreground">
+                                    ~{(screen.avgDailyFootfall * (duration || 1)).toLocaleString()} reach
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Total Summary */}
+                          <div className="border-t pt-4 mt-4">
+                            <div className="flex items-center justify-between text-lg font-semibold">
+                              <span>Total Campaign Cost</span>
+                              <span className="text-primary">
+                                ₹{screensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm text-muted-foreground mt-1">
+                              <span>Your Budget</span>
+                              <span>₹{totalBudget.toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm font-medium text-foreground mt-1">
+                              <span>Remaining</span>
+                              <span className={totalBudget - screensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0) >= 0 ? "text-green-600" : "text-red-600"}>
+                                ₹{(totalBudget - screensInArea.reduce((sum, s) => sum + (s.pricePerDay * (duration || 1)), 0)).toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
                   )}
 
                   {/* Customize Plan */}
