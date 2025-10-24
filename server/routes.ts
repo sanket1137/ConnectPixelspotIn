@@ -743,6 +743,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Booking not found" });
       }
 
+      // Send campaign live notifications to advertiser and screen owner
+      const [campaign, screen] = await Promise.all([
+        storage.getCampaign(booking.campaignId),
+        storage.getScreen(booking.screenId)
+      ]);
+
+      if (campaign && screen) {
+        const [advertiser, owner] = await Promise.all([
+          storage.getUser(campaign.advertiserId),
+          storage.getUser(screen.ownerId)
+        ]);
+
+        if (advertiser && owner) {
+          await notificationService.sendCampaignLiveEmails(
+            advertiser,
+            owner,
+            booking,
+            campaign,
+            screen
+          ).catch(err => console.error("Failed to send campaign live emails:", err));
+        }
+      }
+
       res.json(booking);
     } catch (error) {
       console.error("Admin approve booking error:", error);
