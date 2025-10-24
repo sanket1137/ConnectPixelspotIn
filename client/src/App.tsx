@@ -31,6 +31,7 @@ import BookingManagement from "@/pages/advertiser/BookingManagement";
 import AICampaignAdvisor from "@/pages/advertiser/AICampaignAdvisor";
 import ComingSoon from "@/pages/ComingSoon";
 import ProfileCompletion from "@/pages/ProfileCompletion";
+import EmailVerification from "@/pages/EmailVerification";
 import Profile from "@/pages/Profile";
 
 function RedirectToDashboard() {
@@ -42,6 +43,12 @@ function RedirectToDashboard() {
 
     if (!user) {
       setLocation("/login");
+      return;
+    }
+
+    // Check if email is verified
+    if (!user.emailVerified) {
+      setLocation("/verify-email");
       return;
     }
 
@@ -68,7 +75,10 @@ function Router() {
       {/* Public Routes */}
       <Route path="/login" component={Login} />
       
-      {/* Profile Completion Route (requires auth but not full profile) */}
+      {/* Email Verification Route (requires auth but not verified email) */}
+      <Route path="/verify-email" component={EmailVerification} />
+      
+      {/* Profile Completion Route (requires auth and verified email but not full profile) */}
       <Route path="/complete-profile" component={ProfileCompletion} />
       
       {/* Admin Routes */}
