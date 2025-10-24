@@ -1284,6 +1284,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         endDate: new Date(req.body.endDate),
       });
 
+      // Send notification to screen owner and admin
+      const [campaign, screen, admins] = await Promise.all([
+        storage.getCampaign(booking.campaignId),
+        storage.getScreen(booking.screenId),
+        storage.getUsersByRole("admin")
+      ]);
+
+      if (campaign && screen && admins.length > 0) {
+        const advertiser = req.user!;
+        const owner = await storage.getUser(screen.ownerId);
+        const admin = admins[0]; // Use first admin
+
+        if (owner) {
+          await notificationService.sendBookingRequestEmails(
+            advertiser,
+            owner,
+            admin,
+            booking,
+            campaign,
+            screen
+          ).catch(err => console.error("Failed to send booking request emails:", err));
+        }
+      }
+
       res.status(201).json(booking);
     } catch (error) {
       console.error("Create booking error:", error);
