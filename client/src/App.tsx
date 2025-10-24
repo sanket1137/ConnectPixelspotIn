@@ -31,6 +31,7 @@ import BookingManagement from "@/pages/advertiser/BookingManagement";
 import AICampaignAdvisor from "@/pages/advertiser/AICampaignAdvisor";
 import ComingSoon from "@/pages/ComingSoon";
 import ProfileCompletion from "@/pages/ProfileCompletion";
+import Profile from "@/pages/Profile";
 
 function RedirectToDashboard() {
   const { user, loading } = useAuth();
@@ -106,6 +107,11 @@ function Router() {
           <Settings />
         </AuthGuard>
       </Route>
+      <Route path="/admin/profile">
+        <AuthGuard allowedRoles={["admin"]}>
+          <Profile />
+        </AuthGuard>
+      </Route>
       
       {/* Screen Owner Routes */}
       <Route path="/owner">
@@ -141,6 +147,11 @@ function Router() {
             backLink="/owner"
             backLabel="Back to Dashboard"
           />
+        </AuthGuard>
+      </Route>
+      <Route path="/owner/profile">
+        <AuthGuard allowedRoles={["screen_owner"]}>
+          <Profile />
         </AuthGuard>
       </Route>
       
@@ -188,6 +199,11 @@ function Router() {
             backLink="/advertiser"
             backLabel="Back to Dashboard"
           />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/profile">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <Profile />
         </AuthGuard>
       </Route>
       

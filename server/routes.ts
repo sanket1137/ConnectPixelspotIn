@@ -297,6 +297,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update user profile (POST endpoint for Profile page)
+  app.post("/api/profile/update", authenticate, async (req, res) => {
+    try {
+      const { 
+        companyName, 
+        industry, 
+        gstNumber, 
+        address, 
+        city, 
+        state 
+      } = req.body;
+
+      const updateData: any = {};
+      if (companyName !== undefined) updateData.companyName = companyName;
+      if (industry !== undefined) updateData.industry = industry;
+      if (gstNumber !== undefined) updateData.gstNumber = gstNumber;
+      if (address !== undefined) updateData.address = address;
+      if (city !== undefined) updateData.city = city;
+      if (state !== undefined) updateData.state = state;
+
+      const user = await storage.updateUser(req.user!.id, updateData);
+
+      res.json({ user });
+    } catch (error) {
+      console.error("Update profile error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Send mobile OTP for profile update
+  app.post("/api/profile/send-mobile-otp", authenticate, async (req, res) => {
+    try {
+      const { mobileNumber } = req.body;
+      
+      if (!mobileNumber) {
+        return res.status(400).json({ error: "Mobile number is required" });
+      }
+
+      // Validate mobile number format (10 digits)
+      if (!/^\d{10}$/.test(mobileNumber)) {
+        return res.status(400).json({ error: "Invalid mobile number format" });
+      }
+
+      const code = storeOTP(mobileNumber, 'mobile', req.user!.id);
+      await sendMobileOTP(mobileNumber, code);
+
+      res.json({ success: true, message: "OTP sent to mobile" });
+    } catch (error) {
+      console.error("Send mobile OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Verify mobile OTP and update mobile number
+  app.post("/api/profile/verify-mobile-otp", authenticate, async (req, res) => {
+    try {
+      const { mobileNumber, otp } = req.body;
+      
+      if (!mobileNumber || !otp) {
+        return res.status(400).json({ error: "Mobile number and OTP are required" });
+      }
+
+      const isValid = verifyOTP(mobileNumber, otp);
+      
+      if (!isValid) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+
+      // Update mobile number and mark as verified
+      await storage.updateUser(req.user!.id, {
+        mobileNumber,
+        mobileVerified: true,
+      });
+
+      res.json({ success: true, message: "Mobile verified successfully" });
+    } catch (error) {
+      console.error("Verify mobile OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // DEV ONLY: Reset all user passwords (remove in production)
   app.post("/api/dev/reset-passwords", async (req, res) => {
     try {

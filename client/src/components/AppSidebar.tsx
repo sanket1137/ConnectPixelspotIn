@@ -25,6 +25,7 @@ import {
   TrendingUp,
   DollarSign,
   Sparkles,
+  UserCircle,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ export function AppSidebar() {
     { title: "Campaigns & Bookings", url: "/admin/bookings", icon: FileText },
     { title: "Analytics", url: "/admin/analytics", icon: TrendingUp },
     { title: "Settings", url: "/admin/settings", icon: Settings },
+    { title: "Profile", url: "/admin/profile", icon: UserCircle },
   ];
 
   const ownerItems = [
@@ -49,6 +51,7 @@ export function AppSidebar() {
     { title: "Add Screen", url: "/owner/screens/new", icon: PlusCircle },
     { title: "Booking Requests", url: "/owner/requests", icon: Calendar },
     { title: "Earnings", url: "/owner/earnings", icon: DollarSign },
+    { title: "Profile", url: "/owner/profile", icon: UserCircle },
   ];
 
   const advertiserItems = [
@@ -58,6 +61,7 @@ export function AppSidebar() {
     { title: "Create Campaign", url: "/advertiser/campaigns/new", icon: PlusCircle },
     { title: "AI Campaign Advisor", url: "/advertiser/ai-advisor", icon: Sparkles },
     { title: "Payments", url: "/advertiser/payments", icon: CreditCard },
+    { title: "Profile", url: "/advertiser/profile", icon: UserCircle },
   ];
 
   const items = isAdmin ? adminItems : isScreenOwner ? ownerItems : advertiserItems;
