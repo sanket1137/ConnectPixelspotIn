@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import blackLogo from "@assets/Untitled design_1761331115867.png";
+import blackLogo from "@assets/Untitled design (1)_1761332410674.png";
 
 export function AppSidebar() {
   const { user, signOut, isAdmin, isScreenOwner, isAdvertiser } = useAuth();
