@@ -19,6 +19,8 @@ The platform supports Admin, Screen Owner, and Advertiser roles, each with a ded
 
 **Key Features:**
 -   **Multi-Method Authentication**: Firebase-powered authentication with Google OAuth and email/password, including role selection during signup.
+-   **Profile Completion System**: Mandatory profile completion flow requiring mobile number (with OTP verification), company name, industry, address (city/state), and optional GST number. Google OAuth users have email auto-verified; manual signups require email OTP verification.
+-   **OTP Verification**: In-memory OTP system for email and mobile verification. Email/mobile OTPs are logged to console (production requires Twilio for SMS and SendGrid/Resend for email).
 -   **AI-Driven Campaign Creation**: A 6-step workflow for advertisers to create targeted campaigns, including goal, budget, area selection (map or city), duration, optional audience/location filters, smart plan suggestions, and creative upload.
 -   **Dual-View Screen Discovery**: Advertisers can switch between a list view and an interactive Google Maps view for screen selection, featuring custom SVG icons.
 -   **Multi-Step Booking Approval Workflow**: Bookings require approval from both the Screen Owner and an Admin, supporting alternative date negotiation and partial approvals.
@@ -35,8 +37,9 @@ The platform supports Admin, Screen Owner, and Advertiser roles, each with a ded
 -   **Responsiveness**: Optimized for various devices.
 
 **System Design Choices:**
--   **Database Schema**: Normalized schema for `Users`, `Screens`, `Campaigns`, `Bookings`, and `Payments`, designed for complex relationships and targeting. The `Screens` table includes extensive detail for location, audience, and commercial attributes.
--   **Authentication Flow**: Firebase for Google OAuth and email/password, with backend verification of ID tokens and mandatory role selection during signup.
+-   **Database Schema**: Normalized schema for `Users`, `Screens`, `Campaigns`, `Bookings`, and `Payments`, designed for complex relationships and targeting. The `Screens` table includes extensive detail for location, audience, and commercial attributes. Users table includes profile fields: mobileNumber, companyName, industry, gstNumber, address, city, state, with verification flags (emailVerified, mobileVerified, profileCompleted).
+-   **Authentication Flow**: Firebase for Google OAuth and email/password, with backend verification of ID tokens and mandatory role selection during signup. Profile completion is mandatory before dashboard access.
+-   **OTP System**: Simple in-memory OTP storage with 10-minute expiration. Console logging for development. Production integration pending for Twilio (SMS) - Replit integration was dismissed.
 -   **Design Philosophy**: Budget-first approach, primary map-based area selection with city search fallback, auto-duration optimization, optional filters hidden by default, and transparent smart plan suggestions.
 -   **Campaign Filter Mappings**: 
     - Age Groups: Array intersection between `targetAgeGroups` (campaign) and `detailedAgeGroups` (screen) - values: "Children (5-12)", "Teenagers (13-17)", "Young Adults (18-25)", "Adults (26-40)", "Middle Age (41-55)", "Seniors (55+)"

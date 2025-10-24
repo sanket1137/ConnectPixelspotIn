@@ -89,9 +89,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? role 
           : "advertiser";
         
+        // Auto-verify email for Google OAuth users
+        const isGoogleUser = decodedToken.firebase?.sign_in_provider === 'google.com';
+        
         user = await storage.createUser({
           firebaseUid: decodedToken.uid,
           email,
+          emailVerified: isGoogleUser, // Auto-verify for Google OAuth
           name,
           phone: null,
           role: userRole,

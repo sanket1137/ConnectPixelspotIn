@@ -30,6 +30,7 @@ import CreateCampaign from "@/pages/advertiser/CreateCampaign";
 import BookingManagement from "@/pages/advertiser/BookingManagement";
 import AICampaignAdvisor from "@/pages/advertiser/AICampaignAdvisor";
 import ComingSoon from "@/pages/ComingSoon";
+import ProfileCompletion from "@/pages/ProfileCompletion";
 
 function RedirectToDashboard() {
   const { user, loading } = useAuth();
@@ -40,6 +41,12 @@ function RedirectToDashboard() {
 
     if (!user) {
       setLocation("/login");
+      return;
+    }
+
+    // Check if profile is complete
+    if (!user.profileCompleted) {
+      setLocation("/complete-profile");
       return;
     }
 
@@ -59,6 +66,9 @@ function Router() {
       
       {/* Public Routes */}
       <Route path="/login" component={Login} />
+      
+      {/* Profile Completion Route (requires auth but not full profile) */}
+      <Route path="/complete-profile" component={ProfileCompletion} />
       
       {/* Admin Routes */}
       <Route path="/admin">
