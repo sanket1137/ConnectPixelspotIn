@@ -52,7 +52,7 @@ class AWSEmailService {
 
     try {
       const info = await this.transporter.sendMail({
-        from: `"PixelSpot" <${this.fromEmail}>`,
+        from: `"Pixelspot" <${this.fromEmail}>`,
         to: options.to,
         subject: options.subject,
         text: options.text,
@@ -85,8 +85,8 @@ class AWSEmailService {
     purpose: 'registration' | 'verification'
   ): Promise<{ success: boolean; message: string }> {
     const subject = purpose === 'registration'
-      ? 'Verify Your PixelSpot Account'
-      : 'PixelSpot Email Verification';
+      ? 'Verify Your Pixelspot Account'
+      : 'Pixelspot Email Verification';
 
     const html = this.generateOTPEmailHTML(otp, purpose);
     const text = this.generateOTPEmailText(otp, purpose);
@@ -118,7 +118,7 @@ class AWSEmailService {
 
   private generateOTPEmailHTML(otp: string, purpose: string): string {
     const title = purpose === 'registration' 
-      ? 'Welcome to PixelSpot!' 
+      ? 'Welcome to Pixelspot!' 
       : 'Verify Your Email';
     
     const message = purpose === 'registration'
@@ -159,7 +159,7 @@ class AWSEmailService {
     <body>
         <div class="container">
             <div class="header">
-                <h1 style="color: #2196f3; margin: 0;">PixelSpot</h1>
+                <h1 style="color: #2196f3; margin: 0;">Pixelspot</h1>
                 <p style="color: #666;">Digital Outdoor Advertising</p>
             </div>
             
@@ -177,11 +177,11 @@ class AWSEmailService {
             </div>
             
             <p><strong>Important:</strong> Never share this code. 
-               PixelSpot will never ask for it.</p>
+               Pixelspot will never ask for it.</p>
             
             <div style="text-align: center; color: #666; font-size: 14px; margin-top: 30px;">
                 <p>If you didn't request this, ignore this email.</p>
-                <p>&copy; 2025 PixelSpot. All rights reserved.</p>
+                <p>&copy; 2025 Pixelspot. All rights reserved.</p>
             </div>
         </div>
     </body>
@@ -191,17 +191,17 @@ class AWSEmailService {
 
   private generateOTPEmailText(otp: string, purpose: string): string {
     return `
-${purpose === 'registration' ? 'Welcome to PixelSpot!' : 'Verify Your Email'}
+${purpose === 'registration' ? 'Welcome to Pixelspot!' : 'Verify Your Email'}
 
 Your verification code: ${otp}
 
 This code expires in 10 minutes.
 
-Never share this code with anyone. PixelSpot will never ask for it.
+Never share this code with anyone. Pixelspot will never ask for it.
 
 If you didn't request this, ignore this email.
 
-© 2025 PixelSpot
+© 2025 Pixelspot
     `.trim();
   }
 }

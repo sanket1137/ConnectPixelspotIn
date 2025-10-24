@@ -124,7 +124,7 @@ class ComBirdsSMSService {
     }
 
     // Create OTP message (must match DLT template)
-    const otpMessage = `Your PixelSpot OTP for verification is: ${otp}. OTP is confidential, refrain from sharing it with anyone. By Edumarc Technologies`;
+    const otpMessage = `Your Pixelspot OTP for verification is: ${otp}. OTP is confidential, refrain from sharing it with anyone. By Edumarc Technologies`;
     
     const payload = {
       number: [cleanMobile],
