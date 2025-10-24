@@ -63,6 +63,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: "ok" });
   });
 
+  // DEV ONLY: Test OTP sending (no auth required)
+  app.post("/api/test/send-otp", async (req, res) => {
+    try {
+      const { mobile } = req.body;
+      
+      if (!mobile) {
+        return res.status(400).json({ error: "Mobile number is required" });
+      }
+
+      const code = storeOTP(mobile, 'mobile', mobile);
+      await sendMobileOTP(mobile, code);
+
+      res.json({ 
+        success: true, 
+        message: "OTP sent (check console for details)",
+        mobile: mobile
+      });
+    } catch (error) {
+      console.error("Test OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ========== AUTHENTICATION ROUTES ==========
   
   // Sign in / Sign up
