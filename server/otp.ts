@@ -80,7 +80,7 @@ class ComBirdsSMSService {
       userId: process.env.COMBIRDS_USER_ID || '',
       password: process.env.COMBIRDS_PASSWORD || '',
       senderId: process.env.COMBIRDS_HEADER || 'EDUMRC',
-      otpTemplateId: process.env.COMBIRDS_OTP_TEMPLATE_ID || '1707168926925165526',
+      otpTemplateId: '1707168926925165526', // Fixed DLT template ID
       baseUrl: 'https://smsapi.edumarcsms.com/api/v1'
     };
     
