@@ -958,6 +958,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Booking not found" });
       }
 
+      // Send notifications to advertiser and admin
+      const [campaign, screen, admins] = await Promise.all([
+        storage.getCampaign(booking.campaignId),
+        storage.getScreen(booking.screenId),
+        storage.getUsersByRole("admin")
+      ]);
+
+      if (campaign && screen && admins.length > 0) {
+        const advertiser = await storage.getUser(campaign.advertiserId);
+        const owner = req.user!;
+        const admin = admins[0];
+
+        if (advertiser) {
+          await notificationService.sendBookingOwnerApprovedEmails(
+            advertiser,
+            owner,
+            admin,
+            booking,
+            campaign,
+            screen
+          ).catch(err => console.error("Failed to send owner approval emails:", err));
+        }
+      }
+
       res.json(booking);
     } catch (error) {
       console.error("Approve booking error:", error);
@@ -975,6 +999,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Send notifications to advertiser and admin
+      const [campaign, screen, admins] = await Promise.all([
+        storage.getCampaign(booking.campaignId),
+        storage.getScreen(booking.screenId),
+        storage.getUsersByRole("admin")
+      ]);
+
+      if (campaign && screen && admins.length > 0) {
+        const advertiser = await storage.getUser(campaign.advertiserId);
+        const owner = req.user!;
+        const admin = admins[0];
+
+        if (advertiser) {
+          // Check if alternative dates were suggested
+          if (alternativeDates && alternativeDates.startDate && alternativeDates.endDate) {
+            await notificationService.sendAlternativeDatesEmails(
+              advertiser,
+              owner,
+              admin,
+              booking,
+              campaign,
+              screen,
+              alternativeDates,
+              reason || "Screen owner suggested alternative dates"
+            ).catch(err => console.error("Failed to send alternative dates emails:", err));
+          } else {
+            await notificationService.sendBookingOwnerRejectedEmails(
+              advertiser,
+              owner,
+              admin,
+              booking,
+              campaign,
+              screen,
+              reason || "Screen owner declined the booking"
+            ).catch(err => console.error("Failed to send rejection emails:", err));
+          }
+        }
       }
 
       res.json(booking);
