@@ -16,6 +16,18 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
       setLocation("/login");
     }
     
+    // Redirect to email verification if email is not verified
+    if (!loading && user && !user.emailVerified) {
+      setLocation("/verify-email");
+      return;
+    }
+    
+    // Redirect to profile completion if profile is not completed
+    if (!loading && user && user.emailVerified && !user.profileCompleted) {
+      setLocation("/profile-completion");
+      return;
+    }
+    
     if (!loading && user && allowedRoles && !allowedRoles.includes(user.role)) {
       // Redirect to appropriate dashboard based on role
       if (user.role === "admin") setLocation("/admin");
