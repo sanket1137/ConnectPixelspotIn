@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import whiteLogo from "@assets/white-logo-CaV1h5YH_1761331115868.png";
+import blackLogo from "@assets/Untitled design_1761331115867.png";
 
 export function AppSidebar() {
   const { user, signOut, isAdmin, isScreenOwner, isAdvertiser } = useAuth();
@@ -66,7 +66,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="p-6 border-b border-sidebar-border">
         <img 
-          src={whiteLogo} 
+          src={blackLogo} 
           alt="PixelSpot" 
           className="h-8 w-auto mb-2"
         />
