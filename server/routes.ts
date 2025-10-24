@@ -9,6 +9,7 @@ import { bookings } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { getCampaignAdvice } from "./ai-advisor";
 import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
+import { notificationService } from "./notifications";
 
 // Extend Express Request to include user
 declare global {
@@ -671,6 +672,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!screen) {
         return res.status(404).json({ error: "Screen not found" });
+      }
+
+      // Send approval email to screen owner
+      if (screen.ownerId) {
+        const owner = await storage.getUser(screen.ownerId);
+        if (owner) {
+          await notificationService.sendScreenApprovalEmail(owner, screen).catch(err => 
+            console.error("Failed to send screen approval email:", err)
+          );
+        }
       }
 
       res.json(screen);
