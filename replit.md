@@ -40,6 +40,13 @@ The platform supports Admin, Screen Owner, and Advertiser roles, each with a ded
 -   **Database Schema**: Normalized schema for `Users`, `Screens`, `Campaigns`, `Bookings`, and `Payments`, designed for complex relationships and targeting. The `Screens` table includes extensive detail for location, audience, and commercial attributes. Users table includes profile fields: mobileNumber, companyName, industry, gstNumber, address, city, state, with verification flags (emailVerified, mobileVerified, profileCompleted).
 -   **Authentication Flow**: Firebase for Google OAuth and email/password, with backend verification of ID tokens and mandatory role selection during signup. Profile completion is mandatory before dashboard access.
 -   **OTP System**: Simple in-memory OTP storage with 10-minute expiration. Mobile OTP delivery via ComBirds SMS API with DLT-compliant template. Email OTP delivery via AWS SES with professional HTML templates.
+-   **Email Notification System**: Automated email notifications for all booking workflow events using AWS SES:
+    - Screen Approval: Admin → Screen Owner when screen is approved
+    - Booking Request: Advertiser → Admin & Screen Owner when booking is created
+    - Owner Approval: Screen Owner → Advertiser & Admin when owner approves booking
+    - Owner Rejection: Screen Owner → Advertiser & Admin when booking is rejected
+    - Alternative Dates: Screen Owner → Advertiser & Admin when alternative dates are suggested
+    - Campaign Live: Admin → Advertiser & Screen Owner when booking is approved and campaign goes live
 -   **Design Philosophy**: Budget-first approach, primary map-based area selection with city search fallback, auto-duration optimization, optional filters hidden by default, and transparent smart plan suggestions.
 -   **Campaign Filter Mappings**: 
     - Age Groups: Array intersection between `targetAgeGroups` (campaign) and `detailedAgeGroups` (screen) - values: "Children (5-12)", "Teenagers (13-17)", "Young Adults (18-25)", "Adults (26-40)", "Middle Age (41-55)", "Seniors (55+)"
