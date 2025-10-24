@@ -168,6 +168,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
+  // Send email OTP (public - for email verification after signup)
+  app.post("/api/auth/send-email-otp", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Verify user exists
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Don't send OTP if already verified
+      if (user.emailVerified) {
+        return res.status(400).json({ error: "Email already verified" });
+      }
+
+      const code = storeOTP(email, 'email', user.id);
+      await sendEmailOTP(email, code);
+
+      res.json({ success: true, message: "OTP sent to email" });
+    } catch (error) {
+      console.error("Send email OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Verify email OTP (public - for email verification after signup)
+  app.post("/api/auth/verify-email-otp", async (req, res) => {
+    try {
+      const { email, code } = req.body;
+      
+      if (!email || !code) {
+        return res.status(400).json({ error: "Email and code are required" });
+      }
+
+      // Verify user exists
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const isValid = verifyOTP(email, code);
+      
+      if (!isValid) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+
+      // Mark email as verified
+      await storage.verifyUserEmail(user.id);
+
+      res.json({ success: true, message: "Email verified successfully" });
+    } catch (error) {
+      console.error("Verify email OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ========== OTP VERIFICATION ROUTES ==========
 
   // Send email OTP
