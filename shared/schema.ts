@@ -14,7 +14,7 @@ export const users = pgTable("users", {
   
   // Contact Information
   phone: text("phone"),
-  mobileNumber: text("mobile_number"),
+  mobileNumber: text("mobile_number").unique(),
   mobileVerified: boolean("mobile_verified").notNull().default(false),
   
   // Company/Business Information
