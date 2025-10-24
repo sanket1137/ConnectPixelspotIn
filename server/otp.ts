@@ -174,14 +174,9 @@ class ComBirdsSMSService {
 // Initialize SMS service
 const smsService = new ComBirdsSMSService();
 
-export function sendEmailOTP(email: string, code: string): Promise<void> {
-  // For now, just log the OTP
-  // In production, integrate with SendGrid or Resend
-  console.log(`📧 Email OTP for ${email}: ${code}`);
-  console.log(`This OTP will expire in 10 minutes`);
-  
-  // TODO: Send actual email using SendGrid/Resend
-  return Promise.resolve();
+export async function sendEmailOTP(email: string, code: string): Promise<void> {
+  const { emailService } = await import('./email');
+  await emailService.sendOTPEmail(email, code, 'verification');
 }
 
 export async function sendMobileOTP(mobile: string, code: string): Promise<void> {

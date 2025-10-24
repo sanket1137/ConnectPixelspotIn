@@ -1,0 +1,402 @@
+Complete AWS SES Email Setup Guide
+Here's everything for implementing AWS SES email service:
+
+1. AWS SES Overview
+Provider: Amazon Web Services - Simple Email Service (SES)
+SMTP Endpoint: email-smtp.ap-south-1.amazonaws.com
+Port: 587 (STARTTLS)
+Region: ap-south-1 (Mumbai, India)
+Cost: $0.10 per 1000 emails (outbound)
+
+2. Required Environment Variables
+# AWS SES Configuration
+AWS_SES_SMTP_USER=AKIAIOSFODNN7EXAMPLE
+AWS_SES_SMTP_PASSWORD=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+FRONTEND_URL=http://localhost:5000
+How to get credentials:
+
+Go to AWS Console
+Navigate to SES > SMTP Settings
+Click "Create SMTP Credentials"
+Copy SMTP Username (AWS_SES_SMTP_USER)
+Copy SMTP Password (AWS_SES_SMTP_PASSWORD) - shown only once!
+3. AWS SES Setup Process
+Step 1: Verify Email Addresses (Sandbox Mode)
+1. Go to SES Console > Verified Identities
+2. Click "Create Identity" > Email Address
+3. Enter: no-reply@pixelspot.in
+4. Check email inbox for verification link
+5. Click verification link
+Step 2: Verify Recipient Emails (Development)
+While in sandbox mode, you MUST verify ALL recipient emails:
+- Verify test email addresses individually
+- Or request production access (see Step 3)
+Step 3: Request Production Access
+1. SES Console > Account Dashboard
+2. Click "Request production access"
+3. Fill form:
+   - Mail type: Transactional
+   - Website URL: pixelspot.in
+   - Use case: OTP verification, booking confirmations
+   - Compliance: Yes to CAN-SPAM
+4. Wait 24-48 hours for approval
+4. NPM Packages Required
+npm install nodemailer @aws-sdk/client-sesv2
+npm install --save-dev @types/nodemailer
+package.json:
+
+{
+  "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.873.0",
+    "nodemailer": "^6.9.0"
+  }
+}
+5. AWS Email Service Implementation
+import nodemailer from 'nodemailer';
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+class AWSEmailService {
+  private transporter: nodemailer.Transporter | null = null;
+  private fromEmail = 'no-reply@pixelspot.in';
+  constructor() {
+    this.initializeService();
+  }
+  private initializeService() {
+    if (!process.env.AWS_SES_SMTP_USER || !process.env.AWS_SES_SMTP_PASSWORD) {
+      console.warn('AWS SES credentials not found. Running in mock mode.');
+      return;
+    }
+    try {
+      // Configure Nodemailer with AWS SES SMTP
+      this.transporter = nodemailer.createTransport({
+        host: 'email-smtp.ap-south-1.amazonaws.com',
+        port: 587,
+        secure: false, // Use STARTTLS
+        auth: {
+          user: process.env.AWS_SES_SMTP_USER,
+          pass: process.env.AWS_SES_SMTP_PASSWORD,
+        },
+        debug: false,
+      });
+      console.log('✅ AWS SES email service initialized');
+    } catch (error) {
+      console.error('❌ AWS SES initialization failed:', error);
+    }
+  }
+  async sendEmail(options: {
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+  }): Promise<boolean> {
+    // Mock mode if no credentials
+    if (!this.transporter) {
+      console.log('📧 [MOCK] Email sent to:', options.to);
+      console.log('📧 Subject:', options.subject);
+      return true;
+    }
+    try {
+      const info = await this.transporter.sendMail({
+        from: `"PixelSpot" <${this.fromEmail}>`,
+        to: options.to,
+        subject: options.subject,
+        text: options.text,
+        html: options.html,
+      });
+      console.log('✅ Email sent:', info.messageId);
+      return true;
+    } catch (error: any) {
+      // Handle unverified email error (sandbox mode)
+      if (error.message?.includes('Email address is not verified')) {
+        console.log('\n🚀 AWS SES UNVERIFIED EMAIL - DEV BYPASS');
+        console.log('==========================================');
+        console.log(`📧 Recipient: ${options.to}`);
+        console.log(`📋 Subject: ${options.subject}`);
+        console.log(`⚠️  Email would send if recipient was verified`);
+        console.log('==========================================\n');
+        return true; // Bypass for development
+      }
+      console.error('❌ Email send failed:', error);
+      return false;
+    }
+  }
+  async sendOTPEmail(
+    email: string,
+    otp: string,
+    purpose: 'registration' | 'password-reset'
+  ): Promise<{ success: boolean; message: string }> {
+    const subject = purpose === 'registration'
+      ? 'Verify Your PixelSpot Account'
+      : 'Reset Your PixelSpot Password';
+    const html = this.generateOTPEmailHTML(otp, purpose);
+    const text = this.generateOTPEmailText(otp, purpose);
+    try {
+      const result = await this.sendEmail({ to: email, subject, html, text });
+      
+      return {
+        success: result,
+        message: result 
+          ? `OTP sent to ${email}` 
+          : 'Failed to send email'
+      };
+    } catch (error: any) {
+      // Development mode fallback
+      if (error.message?.includes('Email address is not verified')) {
+        console.log(`📧 DEV MODE - OTP for ${email}: ${otp}`);
+        return {
+          success: true,
+          message: 'Development mode - Check server console for OTP'
+        };
+      }
+      return {
+        success: false,
+        message: 'Email service error'
+      };
+    }
+  }
+  private generateOTPEmailHTML(otp: string, purpose: string): string {
+    const title = purpose === 'registration' 
+      ? 'Welcome to PixelSpot!' 
+      : 'Reset Your Password';
+    
+    const message = purpose === 'registration'
+      ? 'Thank you for registering. Verify your email with this OTP:'
+      : 'You requested a password reset. Use this OTP:';
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>${title}</title>
+        <style>
+            body { font-family: Arial, sans-serif; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { 
+              text-align: center; 
+              background: #f8f9fa; 
+              padding: 20px; 
+              border-radius: 8px; 
+            }
+            .otp-box {
+              background: #e3f2fd;
+              border: 2px solid #2196f3;
+              border-radius: 8px;
+              padding: 20px;
+              text-align: center;
+              margin: 20px 0;
+            }
+            .otp-code {
+              font-size: 32px;
+              font-weight: bold;
+              color: #2196f3;
+              letter-spacing: 4px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 style="color: #2196f3; margin: 0;">PixelSpot</h1>
+                <p style="color: #666;">Digital Outdoor Advertising</p>
+            </div>
+            
+            <h2>${title}</h2>
+            <p>${message}</p>
+            
+            <div class="otp-box">
+                <p style="margin: 0 0 10px 0; font-weight: bold;">
+                  Your verification code:
+                </p>
+                <div class="otp-code">${otp}</div>
+                <p style="margin: 10px 0 0 0; font-size: 14px; color: #666;">
+                  Expires in 10 minutes
+                </p>
+            </div>
+            
+            <p><strong>Important:</strong> Never share this code. 
+               PixelSpot will never ask for it.</p>
+            
+            <div style="text-align: center; color: #666; font-size: 14px; margin-top: 30px;">
+                <p>If you didn't request this, ignore this email.</p>
+                <p>&copy; 2025 PixelSpot. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+  }
+  private generateOTPEmailText(otp: string, purpose: string): string {
+    return `
+${purpose === 'registration' ? 'Welcome to PixelSpot!' : 'Reset Your Password'}
+Your verification code: ${otp}
+This code expires in 10 minutes.
+Never share this code with anyone.
+If you didn't request this, ignore this email.
+© 2025 PixelSpot
+    `.trim();
+  }
+}
+export default new AWSEmailService();
+6. Booking Notification Emails
+// Booking request notification
+async sendBookingRequestNotification(params: {
+  screenOwnerEmail: string;
+  screenOwnerName: string;
+  advertiserName: string;
+  screenName: string;
+  campaignName: string;
+  startDate: string;
+  endDate: string;
+  requestedSlots: number;
+  totalAmount: number;
+  message?: string;
+  bookingId: number;
+}): Promise<boolean> {
+  const subject = `New Booking Request for ${params.screenName}`;
+  
+  const html = `
+  <div style="font-family: Arial; max-width: 600px; margin: 0 auto;">
+    <h2 style="color: #2563eb;">New Booking Request</h2>
+    
+    <p>Dear ${params.screenOwnerName},</p>
+    
+    <p>New booking request for <strong>${params.screenName}</strong></p>
+    
+    <div style="background: #f8fafc; padding: 20px; border-radius: 8px;">
+      <h3>Booking Details</h3>
+      <ul style="list-style: none; padding: 0;">
+        <li><strong>Advertiser:</strong> ${params.advertiserName}</li>
+        <li><strong>Campaign:</strong> ${params.campaignName}</li>
+        <li><strong>Start:</strong> ${new Date(params.startDate).toLocaleDateString()}</li>
+        <li><strong>End:</strong> ${new Date(params.endDate).toLocaleDateString()}</li>
+        <li><strong>Slots:</strong> ${params.requestedSlots}</li>
+        <li><strong>Amount:</strong> ₹${params.totalAmount.toLocaleString()}</li>
+      </ul>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${process.env.FRONTEND_URL}/bookings" 
+         style="background: #16a34a; color: white; padding: 12px 24px; 
+                text-decoration: none; border-radius: 6px; display: inline-block;">
+        Review Booking Request
+      </a>
+    </div>
+    
+    <p style="color: #64748b; font-size: 14px;">
+      Best regards,<br>PixelSpot Team
+    </p>
+  </div>
+  `;
+  
+  return this.sendEmail({
+    to: params.screenOwnerEmail,
+    subject,
+    html
+  });
+}
+7. API Integration
+// Send OTP via email
+app.post('/api/auth/send-otp', async (req, res) => {
+  const { email, purpose } = req.body;
+  
+  // Generate OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  // Store in database
+  await storage.createOtpVerification({
+    email,
+    otp,
+    purpose,
+    deliveryMethod: 'email',
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+  });
+  
+  // Send email
+  const result = await emailService.sendOTPEmail(email, otp, purpose);
+  
+  res.json(result);
+});
+8. Environment-Specific Behavior
+Development Mode (No Credentials):
+if (!process.env.AWS_SES_SMTP_USER) {
+  console.log('📧 [MOCK] Email to:', email);
+  console.log('🔐 OTP:', otp);
+  return true; // Simulate success
+}
+Sandbox Mode (Unverified Recipients):
+catch (error) {
+  if (error.message.includes('Email address is not verified')) {
+    console.log('⚠️  Recipient not verified in SES sandbox');
+    console.log('📧 Email:', email);
+    console.log('🔐 OTP:', otp);
+    return true; // Bypass for development
+  }
+}
+Production Mode:
+// All emails send normally after production access approved
+console.log('✅ Email sent:', messageId);
+9. Testing AWS SES Connection
+async testConnection(): Promise<boolean> {
+  try {
+    const testResult = await this.transporter.verify();
+    console.log('✅ AWS SES connection verified');
+    return testResult;
+  } catch (error) {
+    console.error('❌ AWS SES connection failed:', error);
+    return false;
+  }
+}
+Test command:
+
+# Verify SMTP credentials work
+curl --url 'smtps://email-smtp.ap-south-1.amazonaws.com:587' \
+  --ssl-reqd \
+  --mail-from 'no-reply@pixelspot.in' \
+  --mail-rcpt 'test@example.com' \
+  --user 'SMTP_USER:SMTP_PASSWORD'
+10. Important AWS SES Limits
+Limit	Sandbox	Production
+Sending Rate	1 email/sec	14 emails/sec (default)
+Daily Quota	200 emails/day	50,000+ emails/day
+Recipients	Verified only	Any email
+Sender Email	Verified only	Verified domain/email
+11. Common Issues & Solutions
+Issue: "Email address is not verified"
+Solution:
+1. Go to SES Console > Verified Identities
+2. Add recipient email addresses
+3. Click verification link in inbox
+4. Or request production access
+Issue: "Daily sending quota exceeded"
+Solution:
+1. SES Console > Account Dashboard
+2. Check current quota
+3. Request quota increase
+4. Or upgrade to production access
+Issue: "SMTP authentication failed"
+Solution:
+1. Regenerate SMTP credentials in SES
+2. Update environment variables
+3. Restart application
+12. Cost Optimization
+Free Tier:
+
+62,000 emails/month if sending from EC2
+3,000 emails/month from other services
+Paid Pricing:
+
+$0.10 per 1,000 emails (outbound)
+$0.12 per GB attachment data
+No minimum fees
+Example Costs:
+
+10,000 OTP emails/month = $1.00
+50,000 booking notifications/month = $5.00
+100,000 emails/month = $10.00
+Complete Workflow
+1. User requests OTP → Backend generates 6-digit code
+2. Backend stores OTP in database (10-min expiry)
+3. Backend calls AWS SES via Nodemailer
+4. SES validates sender/recipient
+5. Email delivered to user inbox
+6. User enters OTP → Backend verifies
+7. Success → Allow registration/password reset
