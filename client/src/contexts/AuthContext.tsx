@@ -103,6 +103,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role,
       });
       
+      // Automatically send email OTP for verification (manual signup only)
+      try {
+        await apiRequest("POST", "/api/auth/send-email-otp", {
+          email: result.user.email,
+        });
+      } catch (error) {
+        console.error("Failed to send email OTP:", error);
+      }
+      
       return response;
     },
     onSuccess: () => {
