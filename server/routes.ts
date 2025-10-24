@@ -63,8 +63,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: "ok" });
   });
 
-  // DEV ONLY: Test OTP sending (no auth required)
-  app.post("/api/test/send-otp", async (req, res) => {
+  // DEV ONLY: Test mobile OTP sending (no auth required)
+  app.post("/api/test/send-mobile-otp", async (req, res) => {
     try {
       const { mobile } = req.body;
       
@@ -77,11 +77,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ 
         success: true, 
-        message: "OTP sent (check console for details)",
-        mobile: mobile
+        message: "Mobile OTP sent (check your phone)",
+        mobile: mobile,
+        otp: code
       });
     } catch (error) {
-      console.error("Test OTP error:", error);
+      console.error("Test mobile OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // DEV ONLY: Test email OTP sending (no auth required)
+  app.post("/api/test/send-email-otp", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      const code = storeOTP(email, 'email', email);
+      await sendEmailOTP(email, code);
+
+      res.json({ 
+        success: true, 
+        message: "Email OTP sent (check your inbox/console)",
+        email: email,
+        otp: code
+      });
+    } catch (error) {
+      console.error("Test email OTP error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
