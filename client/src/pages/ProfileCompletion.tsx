@@ -97,10 +97,7 @@ export default function ProfileCompletion() {
 
   const sendOTPMutation = useMutation({
     mutationFn: async (mobile: string) => {
-      return await apiRequest("/api/otp/send-mobile", {
-        method: "POST",
-        body: JSON.stringify({ mobile }),
-      });
+      return await apiRequest("POST", "/api/otp/send-mobile", { mobile });
     },
     onSuccess: () => {
       setOtpSent(true);
@@ -120,10 +117,7 @@ export default function ProfileCompletion() {
 
   const verifyOTPMutation = useMutation({
     mutationFn: async ({ mobile, code }: { mobile: string; code: string }) => {
-      return await apiRequest("/api/otp/verify-mobile", {
-        method: "POST",
-        body: JSON.stringify({ mobile, code }),
-      });
+      return await apiRequest("POST", "/api/otp/verify-mobile", { mobile, code });
     },
     onSuccess: () => {
       setMobileVerified(true);
@@ -144,12 +138,9 @@ export default function ProfileCompletion() {
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
-      return await apiRequest("/api/profile", {
-        method: "PUT",
-        body: JSON.stringify({
-          ...data,
-          name: user?.name,
-        }),
+      return await apiRequest("PUT", "/api/profile", {
+        ...data,
+        name: user?.name,
       });
     },
     onSuccess: () => {

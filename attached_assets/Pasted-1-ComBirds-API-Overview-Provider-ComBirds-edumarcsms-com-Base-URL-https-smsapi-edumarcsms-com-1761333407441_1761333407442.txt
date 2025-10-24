@@ -1,0 +1,286 @@
+1. ComBirds API Overview
+Provider: ComBirds (edumarcsms.com)
+Base URL: https://smsapi.edumarcsms.com/api/v1
+Cost: ₹0.15-0.25 per SMS
+Region: Indian SMS delivery (10-digit mobile numbers)
+
+2. Required Environment Variables
+# ComBirds SMS Configuration
+COMBIRDS_API_KEY=your_api_key_from_dashboard
+COMBIRDS_USER_ID=your_user_id  
+COMBIRDS_PASSWORD=your_password
+COMBIRDS_HEADER=EDUMRC (or your approved sender ID)
+COMBIRDS_OTP_API_KEY=1707168926925165526 (DLT template ID for OTP)
+How to get credentials:
+
+Register at ComBirds.com
+Verify business documents
+Get DLT template approved (mandatory in India)
+Copy API credentials from dashboard
+3. API Endpoints
+A. Send SMS (OTP)
+POST https://smsapi.edumarcsms.com/api/v1/sendsms
+Headers:
+
+{
+  "Content-Type": "application/json",
+  "apikey": "YOUR_API_KEY"
+}
+Request Body:
+
+{
+  "number": ["9876543210"],
+  "message": "Your PixelSpot OTP for verification is: 123456. OTP is confidential, refrain from sharing it with anyone. By Edumarc Technologies",
+  "senderId": "EDUMRC",
+  "templateId": "1707168926925165526"
+}
+Response (Success):
+
+{
+  "success": true,
+  "data": {
+    "msg": "SMS Submitted Successfully",
+    "transactionId": "unique_transaction_id"
+  }
+}
+B. Check Balance
+GET https://smsapi.edumarcsms.com/api/v1/balance
+Headers:
+
+{
+  "apikey": "YOUR_API_KEY"
+}
+4. Mobile Number Validation
+Format Required: Indian 10-digit numbers starting with 6, 7, 8, or 9
+
+Validation Logic:
+
+function validateMobileNumber(mobile) {
+  // Remove spaces, dashes, country code
+  const cleaned = mobile.replace(/[\s\-\+]/g, '').replace(/^91/, '');
+  
+  // Must be 10 digits starting with 6-9
+  if (!/^[6-9]\d{9}$/.test(cleaned)) {
+    return {
+      isValid: false,
+      cleaned: '',
+      error: 'Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9'
+    };
+  }
+  return { isValid: true, cleaned };
+}
+Examples:
+
+✅ 9876543210 → Valid
+✅ +919876543210 → Cleaned to 9876543210
+✅ 91-9876-543-210 → Cleaned to 9876543210
+❌ 5876543210 → Invalid (starts with 5)
+❌ 987654321 → Invalid (9 digits)
+5. SMS Service Class Implementation
+interface SMSConfig {
+  apiKey: string;
+  userId: string;
+  password: string;
+  senderId: string;
+  otpTemplateId: string;
+  baseUrl: string;
+}
+class SMSService {
+  private config: SMSConfig;
+  private initialized = false;
+  constructor() {
+    this.config = {
+      apiKey: process.env.COMBIRDS_OTP_API_KEY || '',
+      userId: process.env.COMBIRDS_USER_ID || '',
+      password: process.env.COMBIRDS_PASSWORD || '',
+      senderId: process.env.COMBIRDS_HEADER || 'EDUMRC',
+      otpTemplateId: '1707168926925165526',
+      baseUrl: 'https://smsapi.edumarcsms.com/api/v1'
+    };
+    this.initialized = !!(this.config.apiKey && this.config.userId && this.config.password);
+  }
+  async sendOTP(mobile: string, otp: string, purpose: 'registration' | 'password-reset') {
+    // Validate mobile number
+    const validation = this.validateMobileNumber(mobile);
+    if (!validation.isValid) {
+      return { success: false, message: validation.error };
+    }
+    const cleanMobile = validation.cleaned;
+    // Create OTP message (must match DLT template)
+    const otpMessage = `Your PixelSpot OTP for verification is: ${otp}. OTP is confidential, refrain from sharing it with anyone. By Edumarc Technologies`;
+    
+    const payload = {
+      number: [cleanMobile],
+      message: otpMessage,
+      senderId: this.config.senderId,
+      templateId: this.config.otpTemplateId
+    };
+    try {
+      const response = await fetch(`${this.config.baseUrl}/sendsms`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': this.config.apiKey
+        },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (response.ok && result.data?.msg?.includes('SMS Submitted')) {
+        console.log(`✅ SMS sent to +91 ${cleanMobile}`);
+        return {
+          success: true,
+          message: `OTP sent to +91 ${cleanMobile}`,
+          messageId: result.data.transactionId
+        };
+      } else {
+        return {
+          success: false,
+          message: 'Failed to send SMS',
+          error: result.message
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: 'SMS service error',
+        error: error.message
+      };
+    }
+  }
+}
+6. OTP Service Integration
+class OTPService {
+  async generateAndSendOTP(mobile: string, purpose: string, storage: any) {
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    // Validate mobile
+    const validation = smsService.validateMobileNumber(mobile);
+    if (!validation.isValid) {
+      return { success: false, message: validation.error };
+    }
+    // Store OTP in database
+    await storage.createOtpVerification({
+      mobile: validation.cleaned,
+      otp,
+      purpose,
+      deliveryMethod: 'mobile',
+      verified: false,
+      attempts: 0,
+      maxAttempts: 5,
+      expiresAt
+    });
+    // Send SMS
+    const smsResult = await smsService.sendOTP(validation.cleaned, otp, purpose);
+    
+    return smsResult;
+  }
+  async verifyOTP(mobile: string, otp: string, purpose: string, storage: any) {
+    // Get OTP record from database
+    const otpRecord = await storage.getValidOtpVerification(mobile, purpose, 'mobile');
+    if (!otpRecord) {
+      return { success: false, message: 'OTP not found or expired' };
+    }
+    if (otpRecord.verified) {
+      return { success: false, message: 'OTP already used' };
+    }
+    if (otpRecord.attempts >= otpRecord.maxAttempts) {
+      return { success: false, message: 'Maximum attempts exceeded' };
+    }
+    if (new Date() > new Date(otpRecord.expiresAt)) {
+      return { success: false, message: 'OTP expired' };
+    }
+    // Increment attempts
+    await storage.incrementOtpAttempts(otpRecord.id);
+    // Verify OTP
+    if (otpRecord.otp !== otp) {
+      return {
+        success: false,
+        message: `Invalid OTP. ${otpRecord.maxAttempts - otpRecord.attempts - 1} attempts remaining`
+      };
+    }
+    // Mark as verified
+    await storage.markOtpAsVerified(otpRecord.id);
+    return {
+      success: true,
+      message: 'OTP verified successfully',
+      mobile: mobile
+    };
+  }
+}
+7. Database Schema
+CREATE TABLE otp_verifications (
+  id SERIAL PRIMARY KEY,
+  email VARCHAR(255),
+  mobile VARCHAR(15),
+  otp VARCHAR(6) NOT NULL,
+  purpose VARCHAR(50) NOT NULL,  -- 'registration' or 'password-reset'
+  delivery_method VARCHAR(10) NOT NULL,  -- 'email' or 'mobile'
+  verified BOOLEAN DEFAULT FALSE,
+  attempts INTEGER DEFAULT 0,
+  max_attempts INTEGER DEFAULT 5,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_otp_mobile ON otp_verifications(mobile);
+CREATE INDEX idx_otp_email ON otp_verifications(email);
+8. API Routes
+// Send OTP
+app.post('/api/auth/send-otp', async (req, res) => {
+  const { emailOrMobile, purpose, deliveryMethod } = req.body;
+  
+  const result = await otpService.generateAndSendOTP(
+    emailOrMobile,
+    purpose,
+    deliveryMethod,
+    storage
+  );
+  
+  res.json(result);
+});
+// Verify OTP
+app.post('/api/auth/verify-otp', async (req, res) => {
+  const { emailOrMobile, otp, purpose, deliveryMethod } = req.body;
+  
+  const result = await otpService.verifyOTP(
+    emailOrMobile,
+    otp,
+    purpose,
+    deliveryMethod,
+    storage
+  );
+  
+  res.json(result);
+});
+9. Important Notes
+DLT Template Requirements (India):
+Message must EXACTLY match approved DLT template
+Template ID must be included in API request
+Any deviation = SMS rejected by telecom operators
+Rate Limiting:
+Max 1 OTP per mobile every 60 seconds
+Max 5 verification attempts per OTP
+10-minute OTP validity
+Error Handling:
+Always validate mobile before sending
+Store transaction IDs for tracking
+Log all SMS attempts for debugging
+Provide fallback to console in development mode
+Testing:
+// Mock mode (no credentials)
+console.log(`📱 Mobile: +91 ${mobile}`);
+console.log(`🔐 OTP: ${otp}`);
+// Production mode (live SMS)
+✅ SMS sent to +91 9876543210
+📱 Transaction ID: ABC123XYZ
+10. Complete Workflow
+1. User enters mobile number → Frontend validates format
+2. Frontend calls POST /api/auth/send-otp
+3. Backend generates 6-digit OTP
+4. Backend stores OTP in database (10-min expiry)
+5. Backend calls ComBirds API → Live SMS delivered
+6. User receives SMS on phone → Enters OTP
+7. Frontend calls POST /api/auth/verify-otp
+8. Backend validates OTP against database
+9. If valid → Mark as verified, allow registration
+10. If invalid → Increment attempts, show remaining
