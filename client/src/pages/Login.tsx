@@ -98,9 +98,11 @@ export default function Login() {
           {/* Hero Section */}
           <div className="space-y-8">
             <div className="space-y-4">
-              <h1 className="text-5xl lg:text-6xl font-bold text-foreground font-serif tracking-tight">
-                PixelSpot
-              </h1>
+              <img 
+                src="/attached_assets/Untitled design_1761331115867.png" 
+                alt="PixelSpot" 
+                className="h-16 w-auto"
+              />
               <p className="text-xl text-primary font-semibold">
                 India's Smartest Outdoor Advertising Network
               </p>

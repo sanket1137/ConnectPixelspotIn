@@ -64,7 +64,11 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-6 border-b border-sidebar-border">
-        <h1 className="text-2xl font-bold text-sidebar-foreground font-serif">PixelSpot</h1>
+        <img 
+          src="/attached_assets/white-logo-CaV1h5YH_1761331115868.png" 
+          alt="PixelSpot" 
+          className="h-8 w-auto mb-2"
+        />
         <p className="text-xs text-muted-foreground mt-1">
           {isAdmin ? "Admin Portal" : isScreenOwner ? "Screen Owner Portal" : "Advertiser Portal"}
         </p>
