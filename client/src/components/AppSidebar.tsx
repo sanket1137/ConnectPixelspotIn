@@ -68,8 +68,7 @@ export function AppSidebar() {
         <img 
           src={blackLogo} 
           alt="PixelSpot" 
-          className="h-8 mb-2"
-          style={{ width: 'auto', maxWidth: '100%' }}
+          className="w-40 h-auto mb-2"
         />
         <p className="text-xs text-muted-foreground mt-1">
           {isAdmin ? "Admin Portal" : isScreenOwner ? "Screen Owner Portal" : "Advertiser Portal"}
