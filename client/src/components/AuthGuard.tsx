@@ -24,7 +24,7 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
     
     // Redirect to profile completion if profile is not completed
     if (!loading && user && user.emailVerified && !user.profileCompleted) {
-      setLocation("/profile-completion");
+      setLocation("/complete-profile");
       return;
     }
     
