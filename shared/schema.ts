@@ -9,8 +9,27 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   firebaseUid: text("firebase_uid").notNull().unique(),
   email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
   name: text("name").notNull(),
+  
+  // Contact Information
   phone: text("phone"),
+  mobileNumber: text("mobile_number"),
+  mobileVerified: boolean("mobile_verified").notNull().default(false),
+  
+  // Company/Business Information
+  companyName: text("company_name"),
+  industry: text("industry"),
+  gstNumber: text("gst_number"),
+  
+  // Address
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  
+  // Profile Status
+  profileCompleted: boolean("profile_completed").notNull().default(false),
+  
   role: text("role").notNull().default("advertiser"), // admin, screen_owner, advertiser
   status: text("status").notNull().default("active"), // active, inactive, pending
   createdAt: timestamp("created_at").defaultNow().notNull(),
