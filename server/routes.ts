@@ -8,6 +8,7 @@ import { db } from "./db";
 import { bookings } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { getCampaignAdvice } from "./ai-advisor";
+import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
 
 // Extend Express Request to include user
 declare global {
@@ -113,6 +114,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sign out
   app.post("/api/auth/signout", (req, res) => {
     res.json({ success: true });
+  });
+
+  // ========== OTP VERIFICATION ROUTES ==========
+
+  // Send email OTP
+  app.post("/api/otp/send-email", authenticate, async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      const code = storeOTP(email, 'email', email);
+      await sendEmailOTP(email, code);
+
+      res.json({ success: true, message: "OTP sent to email" });
+    } catch (error) {
+      console.error("Send email OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Verify email OTP
+  app.post("/api/otp/verify-email", authenticate, async (req, res) => {
+    try {
+      const { email, code } = req.body;
+      
+      if (!email || !code) {
+        return res.status(400).json({ error: "Email and code are required" });
+      }
+
+      const isValid = verifyOTP(email, code);
+      
+      if (!isValid) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+
+      // Mark email as verified
+      await storage.verifyUserEmail(req.user!.id);
+
+      res.json({ success: true, message: "Email verified successfully" });
+    } catch (error) {
+      console.error("Verify email OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Send mobile OTP
+  app.post("/api/otp/send-mobile", authenticate, async (req, res) => {
+    try {
+      const { mobile } = req.body;
+      
+      if (!mobile) {
+        return res.status(400).json({ error: "Mobile number is required" });
+      }
+
+      const code = storeOTP(mobile, 'mobile', mobile);
+      await sendMobileOTP(mobile, code);
+
+      res.json({ success: true, message: "OTP sent to mobile" });
+    } catch (error) {
+      console.error("Send mobile OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Verify mobile OTP
+  app.post("/api/otp/verify-mobile", authenticate, async (req, res) => {
+    try {
+      const { mobile, code } = req.body;
+      
+      if (!mobile || !code) {
+        return res.status(400).json({ error: "Mobile and code are required" });
+      }
+
+      const isValid = verifyOTP(mobile, code);
+      
+      if (!isValid) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+
+      // Mark mobile as verified
+      await storage.verifyUserMobile(req.user!.id);
+
+      res.json({ success: true, message: "Mobile verified successfully" });
+    } catch (error) {
+      console.error("Verify mobile OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Update user profile
+  app.put("/api/profile", authenticate, async (req, res) => {
+    try {
+      const { 
+        name, 
+        companyName, 
+        industry, 
+        gstNumber, 
+        address, 
+        city, 
+        state, 
+        mobileNumber 
+      } = req.body;
+
+      const updateData: any = {};
+      if (name) updateData.name = name;
+      if (companyName) updateData.companyName = companyName;
+      if (industry) updateData.industry = industry;
+      if (gstNumber) updateData.gstNumber = gstNumber;
+      if (address) updateData.address = address;
+      if (city) updateData.city = city;
+      if (state) updateData.state = state;
+      if (mobileNumber) updateData.mobileNumber = mobileNumber;
+
+      // Check if profile is complete
+      const isComplete = !!(name && mobileNumber && companyName && city && state && address);
+      if (isComplete) {
+        updateData.profileCompleted = true;
+      }
+
+      const user = await storage.updateUser(req.user!.id, updateData);
+
+      res.json({ user });
+    } catch (error) {
+      console.error("Update profile error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // DEV ONLY: Reset all user passwords (remove in production)

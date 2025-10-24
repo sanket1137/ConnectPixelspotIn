@@ -16,7 +16,10 @@ export interface IStorage {
   getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   updateUserRole(id: string, role: string): Promise<User | undefined>;
+  verifyUserEmail(id: string): Promise<User | undefined>;
+  verifyUserMobile(id: string): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
   
   // Screen methods
@@ -82,8 +85,23 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    return user || undefined;
+  }
+
   async updateUserRole(id: string, role: string): Promise<User | undefined> {
     const [user] = await db.update(users).set({ role }).where(eq(users.id, id)).returning();
+    return user || undefined;
+  }
+
+  async verifyUserEmail(id: string): Promise<User | undefined> {
+    const [user] = await db.update(users).set({ emailVerified: true }).where(eq(users.id, id)).returning();
+    return user || undefined;
+  }
+
+  async verifyUserMobile(id: string): Promise<User | undefined> {
+    const [user] = await db.update(users).set({ mobileVerified: true }).where(eq(users.id, id)).returning();
     return user || undefined;
   }
 
