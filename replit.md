@@ -39,7 +39,7 @@ The platform supports Admin, Screen Owner, and Advertiser roles, each with a ded
 **System Design Choices:**
 -   **Database Schema**: Normalized schema for `Users`, `Screens`, `Campaigns`, `Bookings`, and `Payments`, designed for complex relationships and targeting. The `Screens` table includes extensive detail for location, audience, and commercial attributes. Users table includes profile fields: mobileNumber, companyName, industry, gstNumber, address, city, state, with verification flags (emailVerified, mobileVerified, profileCompleted).
 -   **Authentication Flow**: Firebase for Google OAuth and email/password, with backend verification of ID tokens and mandatory role selection during signup. Profile completion is mandatory before dashboard access.
--   **OTP System**: Simple in-memory OTP storage with 10-minute expiration. Console logging for development. Production integration pending for Twilio (SMS) - Replit integration was dismissed.
+-   **OTP System**: Simple in-memory OTP storage with 10-minute expiration. Mobile OTP delivery via ComBirds SMS API with DLT-compliant template. Email OTP uses console logging (production integration pending for SendGrid/Resend).
 -   **Design Philosophy**: Budget-first approach, primary map-based area selection with city search fallback, auto-duration optimization, optional filters hidden by default, and transparent smart plan suggestions.
 -   **Campaign Filter Mappings**: 
     - Age Groups: Array intersection between `targetAgeGroups` (campaign) and `detailedAgeGroups` (screen) - values: "Children (5-12)", "Teenagers (13-17)", "Young Adults (18-25)", "Adults (26-40)", "Middle Age (41-55)", "Seniors (55+)"
@@ -52,6 +52,7 @@ The platform supports Admin, Screen Owner, and Advertiser roles, each with a ded
 -   **Database**: PostgreSQL (Neon)
 -   **ORM**: Drizzle ORM
 -   **Authentication**: Firebase Authentication (Google OAuth, Email/Password)
+-   **SMS Gateway**: ComBirds API (Indian SMS delivery with DLT template)
 -   **Maps**: Google Maps API (@react-google-maps/api)
 -   **Payments**: Stripe
 -   **Storage**: Replit Object Storage
