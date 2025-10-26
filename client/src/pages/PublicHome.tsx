@@ -61,6 +61,7 @@ export default function PublicHome() {
   const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [showCities, setShowCities] = useState(true);
+  const [mapZoom, setMapZoom] = useState<number>(5);
 
   // Fetch public screens
   const { data: screens = [], isLoading: screensLoading } = useQuery<Screen[]>({
@@ -435,7 +436,20 @@ export default function PublicHome() {
                     <GoogleMap
                       mapContainerStyle={mapContainerStyle}
                       center={defaultCenter}
-                      zoom={5}
+                      zoom={mapZoom}
+                      onZoomChanged={() => {
+                        const map = (window as any).google?.maps;
+                        if (map) {
+                          const zoom = (document.querySelector('[role="region"]') as any)?.querySelector('div')?.getAttribute('aria-label');
+                          // We'll use a ref instead
+                        }
+                      }}
+                      onLoad={(map) => {
+                        map.addListener('zoom_changed', () => {
+                          const newZoom = map.getZoom() || 5;
+                          setMapZoom(newZoom);
+                        });
+                      }}
                       options={{
                         zoomControl: true,
                         streetViewControl: false,
@@ -450,8 +464,8 @@ export default function PublicHome() {
                         ]
                       }}
                     >
-                      {/* Heatmap Layer */}
-                      {typeof google !== 'undefined' && filteredScreens.length > 0 && (
+                      {/* Heatmap Layer - Show when zoomed OUT (zoom <= 9) */}
+                      {typeof google !== 'undefined' && filteredScreens.length > 0 && mapZoom <= 9 && (
                         <HeatmapLayer
                           data={filteredScreens.map((screen) => {
                             const lat = parseFloat(screen.latitude as string);
@@ -464,7 +478,7 @@ export default function PublicHome() {
                           })}
                           options={{
                             radius: 45,
-                            opacity: 0.6,
+                            opacity: 0.7,
                             dissipating: true,
                             maxIntensity: 10,
                             gradient: [
@@ -479,8 +493,8 @@ export default function PublicHome() {
                         />
                       )}
                       
-                      {/* Clickable Markers */}
-                      {filteredScreens.map((screen) => {
+                      {/* Clickable Markers - Show when zoomed IN (zoom > 9) */}
+                      {mapZoom > 9 && filteredScreens.map((screen) => {
                         const isHovered = hoveredScreen === screen.id;
                         const isSelected = selectedScreen?.id === screen.id;
                         return (
@@ -495,11 +509,11 @@ export default function PublicHome() {
                             onMouseOut={() => setHoveredScreen(null)}
                             icon={{
                               path: 'M 0, 0 m -6, 0 a 6,6 0 1,0 12,0 a 6,6 0 1,0 -12,0',
-                              fillColor: isSelected ? '#22c55e' : isHovered ? '#a78bfa' : '#ffffff',
+                              fillColor: isSelected ? '#22c55e' : isHovered ? '#a78bfa' : '#8b5cf6',
                               fillOpacity: 1,
-                              strokeColor: isSelected ? '#16a34a' : '#8b5cf6',
-                              strokeWeight: 3,
-                              scale: isHovered || isSelected ? 2.2 : 1.8,
+                              strokeColor: '#ffffff',
+                              strokeWeight: 2,
+                              scale: isHovered || isSelected ? 3 : 2.5,
                             }}
                             zIndex={isSelected ? 1000 : isHovered ? 999 : 1}
                           />
