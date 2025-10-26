@@ -158,9 +158,9 @@ export default function ManageBookings() {
   const getStatusBadge = (booking: BookingWithDetails) => {
     switch (booking.status) {
       case "pending_owner":
-        return <Badge variant="secondary">Pending Owner</Badge>;
+        return <Badge variant="secondary" className="bg-orange-500/20 text-orange-700 dark:text-orange-400">Pending Owner</Badge>;
       case "owner_approved":
-        return <Badge className="bg-yellow-500">Awaiting Admin</Badge>;
+        return <Badge className="bg-green-500/20 text-green-700 dark:text-green-400">✓ Owner Approved</Badge>;
       case "approved":
         return <Badge className="bg-green-600"><CheckCircle className="mr-1 h-3 w-3" />Approved</Badge>;
       case "active":
@@ -210,6 +210,22 @@ export default function ManageBookings() {
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Price:</span>
             <span className="font-bold text-primary">₹{booking.price.toLocaleString()}</span>
+          </div>
+
+          {/* Owner approval status indicator */}
+          <div className="flex items-center gap-2 text-xs pt-2">
+            <span className="text-muted-foreground">Owner Status:</span>
+            {booking.ownerApproved ? (
+              <span className="text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
+                <Check className="h-3 w-3" />
+                Approved
+              </span>
+            ) : (
+              <span className="text-orange-600 dark:text-orange-400 font-medium flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                Pending Approval
+              </span>
+            )}
           </div>
 
           {/* Show warning when admin is bypassing owner approval */}
