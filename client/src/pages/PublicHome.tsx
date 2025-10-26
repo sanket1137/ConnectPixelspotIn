@@ -138,66 +138,81 @@ export default function PublicHome() {
       </header>
 
       {/* Hero Section */}
-      <div className="bg-gradient-to-br from-primary/10 via-background to-background border-b">
-        <div className="container mx-auto px-4 py-16">
-          <div className="max-w-4xl mx-auto text-center space-y-6">
-            <h1 className="text-5xl md:text-6xl font-bold text-foreground" data-testid="text-hero-title">
-              India's Largest Digital
-              <br />
-              <span className="text-primary">Out-of-Home</span> Advertising Network
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto" data-testid="text-hero-subtitle">
-              Discover premium DOOH screens across India. Book instantly, launch campaigns in minutes, and track real-time performance.
-            </p>
+      <div className="bg-gradient-to-br from-primary/10 via-background to-background border-b overflow-hidden relative">
+        <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]" />
+        <div className="container mx-auto px-4 py-20 md:py-28 relative">
+          <div className="max-w-5xl mx-auto text-center space-y-8">
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
+              <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold leading-tight" data-testid="text-hero-title">
+                India's Largest Digital
+                <br />
+                <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent animate-gradient bg-300%">
+                  Out-of-Home
+                </span>{' '}
+                Advertising Network
+              </h1>
+            </div>
+            <div className="animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200">
+              <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed" data-testid="text-hero-subtitle">
+                Discover premium DOOH screens across India. Book instantly, launch campaigns in minutes, and track real-time performance.
+              </p>
+            </div>
             
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 max-w-3xl mx-auto">
-              <Card className="hover-elevate">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-300">
+              <Card className="hover-elevate border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
                 <CardContent className="pt-6 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2">
-                    <MapPin className="w-5 h-5 text-primary" />
-                    <p className="text-3xl font-bold text-foreground">{cityCount}</p>
+                    <div className="p-2 rounded-full bg-primary/10">
+                      <MapPin className="w-5 h-5 text-primary" />
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">Cities Covered</p>
+                  <p className="text-4xl font-bold text-foreground mb-1">{cityCount}</p>
+                  <p className="text-sm text-muted-foreground font-medium">Cities Covered</p>
                 </CardContent>
               </Card>
               
-              <Card className="hover-elevate">
+              <Card className="hover-elevate border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
                 <CardContent className="pt-6 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2">
-                    <Monitor className="w-5 h-5 text-primary" />
-                    <p className="text-3xl font-bold text-foreground">{screens.length}</p>
+                    <div className="p-2 rounded-full bg-primary/10">
+                      <Monitor className="w-5 h-5 text-primary" />
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">Live Screens</p>
+                  <p className="text-4xl font-bold text-foreground mb-1">{screens.length}</p>
+                  <p className="text-sm text-muted-foreground font-medium">Live Screens</p>
                 </CardContent>
               </Card>
               
-              <Card className="hover-elevate">
+              <Card className="hover-elevate border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
                 <CardContent className="pt-6 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2">
-                    <Eye className="w-5 h-5 text-primary" />
-                    <p className="text-3xl font-bold text-foreground">{(totalImpressions / 1000000).toFixed(1)}M+</p>
+                    <div className="p-2 rounded-full bg-primary/10">
+                      <Users className="w-5 h-5 text-primary" />
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">Daily Impressions</p>
+                  <p className="text-4xl font-bold text-foreground mb-1">500+</p>
+                  <p className="text-sm text-muted-foreground font-medium">Advertisers Onboard</p>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="flex items-center justify-center gap-4 pt-4">
+            <div className="flex items-center justify-center gap-4 pt-6 animate-in fade-in slide-in-from-bottom-7 duration-1000 delay-500">
               <Link href="/register?role=advertiser">
-                <Button size="lg" data-testid="button-hero-cta">
-                  <Sparkles className="w-5 h-5 mr-2" />
+                <Button size="lg" className="text-lg px-8 h-14 group" data-testid="button-hero-cta">
+                  <Sparkles className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" />
                   Start Advertising
-                  <ArrowRight className="w-5 h-5 ml-2" />
+                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
               <Button 
                 size="lg" 
                 variant="outline"
+                className="text-lg px-8 h-14 group"
                 onClick={() => window.scrollTo({ top: 800, behavior: 'smooth' })}
                 data-testid="button-hero-explore"
               >
-                <Search className="w-5 h-5 mr-2" />
+                <Search className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
                 Explore Screens
               </Button>
             </div>
@@ -207,46 +222,56 @@ export default function PublicHome() {
 
       {/* City Cards Section */}
       {showCities && cities.length > 0 && (
-        <div className="container mx-auto px-4 py-12">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold mb-2">Browse by City</h2>
-            <p className="text-muted-foreground">Select a city to discover available screens</p>
+        <div className="container mx-auto px-4 py-16 bg-gradient-to-b from-background to-primary/5">
+          <div className="text-center mb-10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+            <h2 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-to-r from-foreground to-foreground/60 bg-clip-text text-transparent">
+              Browse by City
+            </h2>
+            <p className="text-lg text-muted-foreground">Select a city to discover available screens</p>
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {cities.map((city) => (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200">
+            {cities.map((city, index) => (
               <Card 
                 key={city} 
-                className="hover-elevate cursor-pointer group overflow-hidden"
+                className="hover-elevate active-elevate-2 cursor-pointer group overflow-hidden border-primary/10"
                 onClick={() => handleCityClick(city)}
                 data-testid={`card-city-${city}`}
+                style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="relative h-32 bg-gradient-to-br from-primary/20 to-primary/5 overflow-hidden">
+                <div className="relative h-36 bg-gradient-to-br from-primary/20 to-primary/5 overflow-hidden">
                   {CITY_IMAGES[city] && (
                     <img 
                       src={CITY_IMAGES[city]} 
                       alt={city}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                     />
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  <div className="absolute bottom-2 left-2 right-2">
-                    <h3 className="text-white font-semibold text-lg">{city}</h3>
-                    <p className="text-white/80 text-sm">{cityCounts[city]} screens</p>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <h3 className="text-white font-bold text-lg mb-0.5 drop-shadow-lg">{city}</h3>
+                    <div className="flex items-center gap-1.5">
+                      <Monitor className="w-3.5 h-3.5 text-white/90" />
+                      <p className="text-white/90 text-sm font-medium">{cityCounts[city]} screens</p>
+                    </div>
+                  </div>
+                  <div className="absolute top-3 right-3 bg-primary/90 backdrop-blur-sm text-white px-2 py-1 rounded-full text-xs font-semibold">
+                    Explore
                   </div>
                 </div>
               </Card>
             ))}
           </div>
           
-          <div className="text-center mt-6">
+          <div className="text-center mt-8 animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-300">
             <Button 
               variant="ghost" 
+              className="group text-base"
               onClick={() => setShowCities(false)}
               data-testid="button-view-all"
             >
               View All Screens on Map
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
           </div>
         </div>
