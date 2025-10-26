@@ -23,7 +23,7 @@ The platform supports Admin, Screen Owner, and Advertiser roles, each with a ded
 -   **OTP Verification**: In-memory OTP system for email and mobile verification. Email/mobile OTPs are logged to console (production requires Twilio for SMS and SendGrid/Resend for email).
 -   **AI-Driven Campaign Creation**: A 6-step workflow for advertisers to create targeted campaigns, including goal, budget, area selection (map or city), duration, optional audience/location filters, smart plan suggestions, and creative upload.
 -   **Dual-View Screen Discovery**: Advertisers can switch between a list view and an interactive Google Maps view for screen selection, featuring custom SVG icons.
--   **Multi-Step Booking Approval Workflow**: Bookings require approval from both the Screen Owner and an Admin, supporting alternative date negotiation and partial approvals.
+-   **Multi-Step Booking Approval Workflow**: Bookings typically require approval from both the Screen Owner and an Admin. Admins have the ability to bypass screen owner approval and approve bookings directly if needed. The workflow supports alternative date negotiation and partial approvals.
 -   **Comprehensive Screen Data Model**: Detailed categorization of screens with identity, location/context, audience demographics (userIntent, userMood, age groups, gender, income levels, lifestyle tags), and commercial data for granular targeting.
 -   **Role-Based Access Control**: Ensures secure and appropriate feature access for all user roles.
 -   **File Uploads**: Integration with Replit Object Storage for managing screen images and campaign creatives.

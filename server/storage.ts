@@ -268,8 +268,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async approveBookingByAdmin(id: string): Promise<Booking | undefined> {
+    // Admin can approve bookings regardless of owner approval status
+    // This allows admin to bypass screen owner approval if needed
     const [booking] = await db.update(bookings).set({ 
-      approvedByAdmin: true, 
+      approvedByAdmin: true,
+      ownerApproved: true, // Auto-approve on behalf of owner when admin approves
       status: "approved" 
     }).where(eq(bookings.id, id)).returning();
     return booking || undefined;

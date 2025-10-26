@@ -174,7 +174,9 @@ export default function ManageBookings() {
     }
   };
 
-  const pendingApproval = bookings.filter(b => b.status === "owner_approved");
+  // Admin can approve bookings regardless of owner approval status
+  // Include both "pending_owner" and "owner_approved" in awaiting approval tab
+  const pendingApproval = bookings.filter(b => b.status === "owner_approved" || b.status === "pending_owner");
   const approvedBookings = bookings.filter(b => b.status === "approved" || b.status === "active");
   const rejectedBookings = bookings.filter(b => b.status === "rejected" || b.status === "owner_rejected");
 
@@ -209,6 +211,14 @@ export default function ManageBookings() {
             <span className="text-muted-foreground">Price:</span>
             <span className="font-bold text-primary">₹{booking.price.toLocaleString()}</span>
           </div>
+
+          {/* Show warning when admin is bypassing owner approval */}
+          {booking.status === "pending_owner" && showApprovalActions && (
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md p-2 text-xs text-yellow-700 dark:text-yellow-500">
+              <AlertCircle className="h-3 w-3 inline mr-1" />
+              <strong>Bypassing Owner Approval:</strong> Approving this will automatically approve on behalf of the screen owner.
+            </div>
+          )}
 
           <div className="flex gap-2 pt-3">
             <Button
