@@ -33,47 +33,17 @@ import ComingSoon from "@/pages/ComingSoon";
 import ProfileCompletion from "@/pages/ProfileCompletion";
 import EmailVerification from "@/pages/EmailVerification";
 import Profile from "@/pages/Profile";
-
-function RedirectToDashboard() {
-  const { user, loading } = useAuth();
-  const [, setLocation] = useLocation();
-
-  React.useEffect(() => {
-    if (loading) return;
-
-    if (!user) {
-      setLocation("/login");
-      return;
-    }
-
-    // Check if email is verified
-    if (!user.emailVerified) {
-      setLocation("/verify-email");
-      return;
-    }
-
-    // Check if profile is complete
-    if (!user.profileCompleted) {
-      setLocation("/complete-profile");
-      return;
-    }
-
-    if (user.role === "admin") setLocation("/admin");
-    else if (user.role === "screen_owner") setLocation("/owner");
-    else setLocation("/advertiser");
-  }, [user, loading, setLocation]);
-
-  return null;
-}
+import PublicHome from "@/pages/PublicHome";
 
 function Router() {
   return (
     <Switch>
-      {/* Root - Redirect to appropriate dashboard */}
-      <Route path="/" component={RedirectToDashboard} />
+      {/* Public Home Page (no authentication required) */}
+      <Route path="/" component={PublicHome} />
       
       {/* Public Routes */}
       <Route path="/login" component={Login} />
+      <Route path="/register" component={Login} />
       
       {/* Email Verification Route (requires auth but not verified email) */}
       <Route path="/verify-email" component={EmailVerification} />
