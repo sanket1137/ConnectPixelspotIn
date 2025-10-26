@@ -713,15 +713,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const bookings = await storage.getAllBookings();
       
-      // Enrich with screen and campaign details
+      // Enrich with screen, campaign, advertiser, and owner details
       const enrichedBookings = await Promise.all(
         bookings.map(async (booking) => {
           const screen = await storage.getScreen(booking.screenId);
           const campaign = await storage.getCampaign(booking.campaignId);
+          
+          // Get advertiser and screen owner details
+          let advertiser = null;
+          let owner = null;
+          
+          if (campaign) {
+            advertiser = await storage.getUser(campaign.advertiserId);
+          }
+          
+          if (screen) {
+            owner = await storage.getUser(screen.ownerId);
+          }
+          
           return {
             ...booking,
             screen,
             campaign,
+            advertiser: advertiser ? {
+              id: advertiser.id,
+              name: advertiser.name,
+              email: advertiser.email,
+              mobileNumber: advertiser.mobileNumber,
+              companyName: advertiser.companyName,
+            } : null,
+            owner: owner ? {
+              id: owner.id,
+              name: owner.name,
+              email: owner.email,
+              mobileNumber: owner.mobileNumber,
+              companyName: owner.companyName,
+            } : null,
           };
         })
       );

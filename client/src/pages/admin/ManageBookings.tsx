@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, DollarSign, Check, X, Monitor, AlertCircle, CheckCircle, Edit } from "lucide-react";
+import { Calendar, DollarSign, Check, X, Monitor, AlertCircle, CheckCircle, Edit, Eye, User, Building, Phone, Mail } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -38,12 +38,27 @@ interface BookingWithDetails {
     name: string;
     objective: string;
   };
+  advertiser: {
+    id: string;
+    name: string;
+    email: string;
+    mobileNumber: string | null;
+    companyName: string | null;
+  } | null;
+  owner: {
+    id: string;
+    name: string;
+    email: string;
+    mobileNumber: string | null;
+    companyName: string | null;
+  } | null;
 }
 
 export default function ManageBookings() {
   const { toast } = useToast();
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [editDatesDialogOpen, setEditDatesDialogOpen] = useState(false);
+  const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingWithDetails | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
   const [editStartDate, setEditStartDate] = useState("");
@@ -237,6 +252,18 @@ export default function ManageBookings() {
           )}
 
           <div className="flex gap-2 pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSelectedBooking(booking);
+                setViewDetailsDialogOpen(true);
+              }}
+              data-testid={`button-view-details-${booking.id}`}
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              View Details
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -475,6 +502,171 @@ export default function ManageBookings() {
               data-testid="button-confirm-edit-dates"
             >
               {updateDatesMutation.isPending ? "Updating..." : "Update Dates"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Details Dialog */}
+      <Dialog open={viewDetailsDialogOpen} onOpenChange={setViewDetailsDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="dialog-view-details">
+          <DialogHeader>
+            <DialogTitle>Booking Details</DialogTitle>
+            <DialogDescription>
+              Complete information about this booking request
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedBooking && (
+            <div className="space-y-6 py-4">
+              {/* Advertiser Information */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <User className="h-5 w-5 text-primary" />
+                  Advertiser Information
+                </h3>
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  {selectedBooking.advertiser ? (
+                    <>
+                      <div className="flex items-start gap-2">
+                        <User className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm text-muted-foreground">Name</p>
+                          <p className="font-medium">{selectedBooking.advertiser.name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Mail className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm text-muted-foreground">Email</p>
+                          <p className="font-medium">
+                            <a href={`mailto:${selectedBooking.advertiser.email}`} className="text-primary hover:underline">
+                              {selectedBooking.advertiser.email}
+                            </a>
+                          </p>
+                        </div>
+                      </div>
+                      {selectedBooking.advertiser.mobileNumber && (
+                        <div className="flex items-start gap-2">
+                          <Phone className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm text-muted-foreground">Mobile</p>
+                            <p className="font-medium">
+                              <a href={`tel:${selectedBooking.advertiser.mobileNumber}`} className="text-primary hover:underline">
+                                {selectedBooking.advertiser.mobileNumber}
+                              </a>
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {selectedBooking.advertiser.companyName && (
+                        <div className="flex items-start gap-2">
+                          <Building className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm text-muted-foreground">Company</p>
+                            <p className="font-medium">{selectedBooking.advertiser.companyName}</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No advertiser information available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Screen Owner Information */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Monitor className="h-5 w-5 text-primary" />
+                  Screen Owner Information
+                </h3>
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  {selectedBooking.owner ? (
+                    <>
+                      <div className="flex items-start gap-2">
+                        <User className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm text-muted-foreground">Name</p>
+                          <p className="font-medium">{selectedBooking.owner.name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Mail className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm text-muted-foreground">Email</p>
+                          <p className="font-medium">
+                            <a href={`mailto:${selectedBooking.owner.email}`} className="text-primary hover:underline">
+                              {selectedBooking.owner.email}
+                            </a>
+                          </p>
+                        </div>
+                      </div>
+                      {selectedBooking.owner.mobileNumber && (
+                        <div className="flex items-start gap-2">
+                          <Phone className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm text-muted-foreground">Mobile</p>
+                            <p className="font-medium">
+                              <a href={`tel:${selectedBooking.owner.mobileNumber}`} className="text-primary hover:underline">
+                                {selectedBooking.owner.mobileNumber}
+                              </a>
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {selectedBooking.owner.companyName && (
+                        <div className="flex items-start gap-2">
+                          <Building className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm text-muted-foreground">Company</p>
+                            <p className="font-medium">{selectedBooking.owner.companyName}</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No owner information available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Booking Summary */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold">Booking Summary</h3>
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Campaign</span>
+                    <span className="font-medium">{selectedBooking.campaign.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Screen</span>
+                    <span className="font-medium">{selectedBooking.screen.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Location</span>
+                    <span className="font-medium">{selectedBooking.screen.location}, {selectedBooking.screen.city}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Duration</span>
+                    <span className="font-medium">{formatDate(selectedBooking.startDate)} - {formatDate(selectedBooking.endDate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Price</span>
+                    <span className="font-bold text-primary">₹{selectedBooking.price.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Status</span>
+                    <span>{getStatusBadge(selectedBooking)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setViewDetailsDialogOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
