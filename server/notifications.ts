@@ -52,20 +52,19 @@ class NotificationService {
     campaign: Campaign,
     screen: Screen
   ): Promise<void> {
-    // Email to Screen Owner
+    // Email to Screen Owner (NO advertiser contact details)
     const ownerSubject = '📬 New Booking Request - Pixelspot';
     const ownerHtml = this.generateHTML({
       title: 'New Booking Request',
       greeting: `Hi ${owner.name},`,
       mainMessage: `You have received a new booking request for your screen <strong>${screen.name}</strong>.`,
       details: [
-        { label: 'Advertiser', value: advertiser.name },
         { label: 'Campaign', value: campaign.name },
         { label: 'Screen', value: screen.name },
         { label: 'Duration', value: `${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}` },
         { label: 'Amount', value: `₹${booking.totalAmount}` },
       ],
-      actionText: 'Please review and respond to this booking request.',
+      actionText: 'Please review and respond to this booking request. Contact details will be shared after admin approval.',
       ctaText: 'Review Booking Request',
       ctaLink: 'https://pixelspot.in/owner/requests',
     });
@@ -73,7 +72,7 @@ class NotificationService {
     const ownerText = this.generateText({
       title: 'New Booking Request',
       greeting: `Hi ${owner.name},`,
-      mainMessage: `New booking request for ${screen.name} from ${advertiser.name}`,
+      mainMessage: `New booking request for ${screen.name}`,
       details: `Campaign: ${campaign.name}\nDuration: ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}\nAmount: ₹${booking.totalAmount}`,
     });
 
@@ -338,14 +337,13 @@ class NotificationService {
       details: `Duration: ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}`,
     });
 
-    // Email to Screen Owner
+    // Email to Screen Owner (NO advertiser contact details)
     const ownerSubject = '🎉 New Campaign Going Live on Your Screen - Pixelspot';
     const ownerHtml = this.generateHTML({
       title: 'Campaign Going Live',
       greeting: `Hi ${owner.name},`,
       mainMessage: `A new campaign is now live on your screen <strong>${screen.name}</strong>!`,
       details: [
-        { label: 'Advertiser', value: advertiser.name },
         { label: 'Campaign', value: campaign.name },
         { label: 'Screen', value: screen.name },
         { label: 'Duration', value: `${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}` },
