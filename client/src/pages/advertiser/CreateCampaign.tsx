@@ -140,6 +140,7 @@ export default function CreateCampaign() {
   const [screenDetailsDialog, setScreenDetailsDialog] = useState<Screen | null>(null);
   const [campaignCreated, setCampaignCreated] = useState(false);
   const [campaignDrafted, setCampaignDrafted] = useState(false);
+  const [skipDurationRecalc, setSkipDurationRecalc] = useState(false);
   
   // Map state
   const [mapCenter, setMapCenter] = useState(defaultCenter);
@@ -247,7 +248,7 @@ export default function CreateCampaign() {
   // Calculate duration when in auto mode
   useEffect(() => {
     const calculateAutoDuration = async () => {
-      if (watchDurationMode === "auto" && selectedScreenIds.length > 0 && watchBudget) {
+      if (watchDurationMode === "auto" && selectedScreenIds.length > 0 && watchBudget && !skipDurationRecalc) {
         try {
           const response = await apiRequest("POST", "/api/campaign/calculate-duration", {
             budget: watchBudget,
@@ -261,10 +262,10 @@ export default function CreateCampaign() {
       }
     };
 
-    if (currentStep >= 3 && watchDurationMode === "auto") {
+    if (currentStep >= 3 && watchDurationMode === "auto" && !skipDurationRecalc) {
       calculateAutoDuration();
     }
-  }, [watchDurationMode, selectedScreenIds, watchBudget, currentStep]);
+  }, [watchDurationMode, selectedScreenIds, watchBudget, currentStep, skipDurationRecalc]);
 
   // Apply demographic filters from Step 4 to screens
   const filteredScreensInArea = screensInArea.filter((screen) => {
@@ -1409,7 +1410,11 @@ export default function CreateCampaign() {
                                           variant="destructive"
                                           size="sm"
                                           onClick={() => {
+                                            // Prevent duration recalculation when adjusting budget
+                                            setSkipDurationRecalc(true);
                                             form.setValue("budget", suggestedBudget);
+                                            // Reset the flag after a short delay
+                                            setTimeout(() => setSkipDurationRecalc(false), 100);
                                           }}
                                           className="mt-2"
                                           data-testid="button-increase-budget"
