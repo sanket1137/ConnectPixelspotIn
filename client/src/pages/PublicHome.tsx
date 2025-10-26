@@ -112,14 +112,12 @@ export default function PublicHome() {
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between">
             <Link href="/">
-              <div className="bg-primary px-4 py-2 rounded-md">
-                <img 
-                  src={whiteLogo} 
-                  alt="Pixelspot" 
-                  className="h-8 w-auto cursor-pointer"
-                  data-testid="img-logo"
-                />
-              </div>
+              <img 
+                src={whiteLogo} 
+                alt="Pixelspot" 
+                className="h-10 w-auto cursor-pointer"
+                data-testid="img-logo"
+              />
             </Link>
             
             <div className="flex items-center gap-3">
@@ -589,10 +587,8 @@ export default function PublicHome() {
       <footer className="border-t bg-muted/30">
         <div className="container mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-primary px-3 py-2 rounded-md">
-                <img src={whiteLogo} alt="Pixelspot" className="h-6 w-auto" />
-              </div>
+            <div className="flex items-center gap-2">
+              <img src={whiteLogo} alt="Pixelspot" className="h-8 w-auto" />
               <p className="text-sm text-muted-foreground">© 2025 Pixelspot. All rights reserved.</p>
             </div>
             <div className="flex items-center gap-6">
