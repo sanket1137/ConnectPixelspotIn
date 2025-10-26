@@ -11,9 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ObjectUploader } from "@/components/ObjectUploader";
-import type { UploadResult } from "@uppy/core";
-import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor as MonitorIcon, Upload, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign, Users, Clock, AlertTriangle, Eye, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor as MonitorIcon, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign, Users, Clock, AlertTriangle, Eye, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -72,6 +70,9 @@ const createCampaignSchema = z.object({
   // Dates (calculated from duration)
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
+  
+  // Creative URL
+  creativeUrl: z.string().url("Please enter a valid URL").min(1, "Creative link is required"),
 });
 
 type CreateCampaignForm = z.infer<typeof createCampaignSchema>;
@@ -82,7 +83,7 @@ const steps = [
   { id: 3, name: "Set Duration", icon: Calendar },
   { id: 4, name: "Filters", icon: Filter },
   { id: 5, name: "Smart Plan", icon: MonitorIcon },
-  { id: 6, name: "Review", icon: Upload },
+  { id: 6, name: "Review", icon: Check },
 ];
 
 const objectives = [
@@ -176,6 +177,7 @@ export default function CreateCampaign() {
       timePreference: [],
       startDate: new Date().toISOString().split('T')[0],
       endDate: "",
+      creativeUrl: "",
     },
   });
 
@@ -407,7 +409,7 @@ export default function CreateCampaign() {
         endDate: endDate.toISOString(),
         budget: data.budget,
         estimatedBudget: data.budget,
-        creativeUrl: uploadedCreativeURL || null,
+        creativeUrl: data.creativeUrl || null,
       });
       
       const campaign = await campaignResponse.json();
@@ -453,34 +455,6 @@ export default function CreateCampaign() {
       });
     },
   });
-
-  const handleGetUploadParameters = async () => {
-    const response = await apiRequest("POST", "/api/objects/upload", {});
-    const data = await response.json();
-    return {
-      method: "PUT" as const,
-      url: data.uploadURL,
-    };
-  };
-
-  const handleUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
-    if (result.successful && result.successful.length > 0) {
-      const uploadedFile = result.successful[0];
-      const fileURL = uploadedFile.uploadURL;
-
-      const response = await apiRequest("PUT", "/api/objects/entity", {
-        fileURL,
-        entityType: "campaign",
-      });
-      const data = await response.json();
-      setUploadedCreativeURL(data.objectPath);
-
-      toast({
-        title: "Creative Uploaded",
-        description: "Campaign creative uploaded successfully.",
-      });
-    }
-  };
 
   const onSubmit = (data: CreateCampaignForm) => {
     if (currentStep !== steps.length) {
@@ -1426,7 +1400,7 @@ export default function CreateCampaign() {
                                             // Lock the current duration and screens to prevent recalculation
                                             // This ensures we ONLY increase the budget without changing anything else
                                             const currentDuration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
-                                            setLockedDuration(currentDuration);
+                                            setLockedDuration(currentDuration ?? null);
                                             setSkipScreenRefetch(true);
                                             
                                             // Increase the budget
@@ -1671,38 +1645,51 @@ export default function CreateCampaign() {
                 </div>
               )}
 
-              {/* Step 6: Upload Creative & Review */}
+              {/* Step 6: Creative & Review */}
               {currentStep === 6 && (
                 <div className="space-y-6">
                   <div>
-                    <h2 className="text-2xl font-semibold mb-2">Upload Creative & Review</h2>
+                    <h2 className="text-2xl font-semibold mb-2">Submit Creative & Review</h2>
                     <p className="text-muted-foreground">
-                      Upload your creative assets and review your campaign before launching.
+                      Provide your creative link and review your campaign before launching.
                     </p>
                   </div>
 
-                  {/* Creative Upload */}
+                  {/* Creative URL Input */}
                   <Card>
                     <CardHeader>
                       <CardTitle>Campaign Creative</CardTitle>
-                      <CardDescription>Upload your image or video creative (recommended: 1920x1080)</CardDescription>
+                      <CardDescription>
+                        Provide a publicly available link to your creative image or video (recommended: 1920x1080)
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <ObjectUploader
-                        onComplete={handleUploadComplete}
-                        onGetUploadParameters={handleGetUploadParameters}
-                        allowedFileTypes={["image/*", "video/*"]}
-                        maxFileSize={50 * 1024 * 1024}
-                        buttonTestId="button-upload-creative"
-                      >
-                        <Upload className="mr-2 h-4 w-4" />
-                        Upload Creative
-                      </ObjectUploader>
-                      {uploadedCreativeURL && (
+                      <FormField
+                        control={form.control}
+                        name="creativeUrl"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Creative URL</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                type="url"
+                                placeholder="https://example.com/your-creative.jpg"
+                                data-testid="input-creative-url"
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Enter a publicly accessible URL for your image or video creative
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {form.watch("creativeUrl") && (
                         <Alert className="mt-4">
                           <Check className="h-4 w-4" />
                           <AlertDescription>
-                            Creative uploaded successfully!
+                            Creative URL added successfully!
                           </AlertDescription>
                         </Alert>
                       )}
@@ -1750,14 +1737,18 @@ export default function CreateCampaign() {
                         </div>
                       </div>
 
-                      {uploadedCreativeURL && (
+                      {form.watch("creativeUrl") && (
                         <div>
                           <p className="text-sm text-muted-foreground mb-2">🖼 Creative Preview</p>
                           <div className="border rounded-lg overflow-hidden">
                             <img 
-                              src={`/objects${uploadedCreativeURL}`} 
+                              src={form.watch("creativeUrl")} 
                               alt="Campaign creative" 
-                              className="w-full h-auto"
+                              className="w-full h-auto max-h-96 object-contain"
+                              onError={(e) => {
+                                // Hide broken image if URL is invalid
+                                e.currentTarget.style.display = 'none';
+                              }}
                             />
                           </div>
                         </div>
