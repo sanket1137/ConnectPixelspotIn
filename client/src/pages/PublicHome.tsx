@@ -412,26 +412,29 @@ export default function PublicHome() {
                         fullscreenControl: true,
                       }}
                     >
-                      {filteredScreens.map((screen) => (
-                        <Marker
-                          key={screen.id}
-                          position={{
-                            lat: parseFloat(screen.latitude as string),
-                            lng: parseFloat(screen.longitude as string),
-                          }}
-                          onClick={() => handleMarkerClick(screen.id)}
-                          onMouseOver={() => setHoveredScreen(screen.id)}
-                          onMouseOut={() => setHoveredScreen(null)}
-                          icon={{
-                            path: google.maps.SymbolPath.CIRCLE,
-                            fillColor: hoveredScreen === screen.id ? '#22c55e' : '#8b5cf6',
-                            fillOpacity: 1,
-                            strokeColor: '#ffffff',
-                            strokeWeight: 2,
-                            scale: hoveredScreen === screen.id ? 12 : 10,
-                          }}
-                        />
-                      ))}
+                      {filteredScreens.map((screen) => {
+                        const isHovered = hoveredScreen === screen.id;
+                        return (
+                          <Marker
+                            key={screen.id}
+                            position={{
+                              lat: parseFloat(screen.latitude as string),
+                              lng: parseFloat(screen.longitude as string),
+                            }}
+                            onClick={() => handleMarkerClick(screen.id)}
+                            onMouseOver={() => setHoveredScreen(screen.id)}
+                            onMouseOut={() => setHoveredScreen(null)}
+                            icon={{
+                              path: 'M 0, 0 m -5, 0 a 5,5 0 1,0 10,0 a 5,5 0 1,0 -10,0',
+                              fillColor: isHovered ? '#22c55e' : '#8b5cf6',
+                              fillOpacity: 1,
+                              strokeColor: '#ffffff',
+                              strokeWeight: 2,
+                              scale: isHovered ? 2.4 : 2,
+                            }}
+                          />
+                        );
+                      })}
                     </GoogleMap>
                   </LoadScript>
                 </CardContent>
