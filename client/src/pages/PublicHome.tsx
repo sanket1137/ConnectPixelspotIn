@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { GoogleMap, LoadScript, HeatmapLayer, Marker, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,8 +10,6 @@ import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filte
 import { Link } from 'wouter';
 import type { Screen } from '@shared/schema';
 import blackLogo from "@assets/Untitled design_1761331115867.png";
-
-const libraries: ("visualization")[] = ["visualization"];
 
 interface PublicScreensResponse {
   cities: string[];
@@ -58,10 +56,8 @@ export default function PublicHome() {
   const [selectedVenue, setSelectedVenue] = useState<string>('All Venues');
   const [budgetRange, setBudgetRange] = useState<number[]>([0, 50000]);
   const [hoveredScreen, setHoveredScreen] = useState<string | null>(null);
-  const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [showCities, setShowCities] = useState(true);
-  const [mapZoom, setMapZoom] = useState<number>(5);
 
   // Fetch public screens
   const { data: screens = [], isLoading: screensLoading } = useQuery<Screen[]>({
@@ -429,74 +425,20 @@ export default function PublicHome() {
             {viewMode === 'map' && (
               <Card>
                 <CardContent className="p-0">
-                  <LoadScript 
-                    googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}
-                    libraries={libraries}
-                  >
+                  <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}>
                     <GoogleMap
                       mapContainerStyle={mapContainerStyle}
                       center={defaultCenter}
-                      zoom={mapZoom}
-                      onZoomChanged={() => {
-                        const map = (window as any).google?.maps;
-                        if (map) {
-                          const zoom = (document.querySelector('[role="region"]') as any)?.querySelector('div')?.getAttribute('aria-label');
-                          // We'll use a ref instead
-                        }
-                      }}
-                      onLoad={(map) => {
-                        map.addListener('zoom_changed', () => {
-                          const newZoom = map.getZoom() || 5;
-                          setMapZoom(newZoom);
-                        });
-                      }}
+                      zoom={5}
                       options={{
                         zoomControl: true,
                         streetViewControl: false,
                         mapTypeControl: false,
                         fullscreenControl: true,
-                        styles: [
-                          {
-                            featureType: "all",
-                            elementType: "labels",
-                            stylers: [{ visibility: "on" }]
-                          }
-                        ]
                       }}
                     >
-                      {/* Heatmap Layer - Show when zoomed OUT (zoom <= 9) */}
-                      {typeof google !== 'undefined' && filteredScreens.length > 0 && mapZoom <= 9 && (
-                        <HeatmapLayer
-                          data={filteredScreens.map((screen) => {
-                            const lat = parseFloat(screen.latitude as string);
-                            const lng = parseFloat(screen.longitude as string);
-                            const weight = Math.log10(screen.avgDailyFootfall || 1000) * 3;
-                            return {
-                              location: new google.maps.LatLng(lat, lng),
-                              weight: weight
-                            };
-                          })}
-                          options={{
-                            radius: 45,
-                            opacity: 0.7,
-                            dissipating: true,
-                            maxIntensity: 10,
-                            gradient: [
-                              'rgba(0, 255, 255, 0)',
-                              'rgba(139, 92, 246, 0.5)',
-                              'rgba(124, 58, 237, 0.65)',
-                              'rgba(109, 40, 217, 0.75)',
-                              'rgba(91, 33, 182, 0.85)',
-                              'rgba(76, 29, 149, 0.95)',
-                            ]
-                          }}
-                        />
-                      )}
-                      
-                      {/* Clickable Markers - Show when zoomed IN (zoom > 9) */}
-                      {mapZoom > 9 && filteredScreens.map((screen) => {
+                      {filteredScreens.map((screen) => {
                         const isHovered = hoveredScreen === screen.id;
-                        const isSelected = selectedScreen?.id === screen.id;
                         return (
                           <Marker
                             key={screen.id}
@@ -504,63 +446,20 @@ export default function PublicHome() {
                               lat: parseFloat(screen.latitude as string),
                               lng: parseFloat(screen.longitude as string),
                             }}
-                            onClick={() => setSelectedScreen(screen)}
+                            onClick={() => handleMarkerClick(screen.id)}
                             onMouseOver={() => setHoveredScreen(screen.id)}
                             onMouseOut={() => setHoveredScreen(null)}
                             icon={{
-                              path: 'M 0, 0 m -6, 0 a 6,6 0 1,0 12,0 a 6,6 0 1,0 -12,0',
-                              fillColor: isSelected ? '#22c55e' : isHovered ? '#a78bfa' : '#8b5cf6',
+                              path: 'M 0, 0 m -5, 0 a 5,5 0 1,0 10,0 a 5,5 0 1,0 -10,0',
+                              fillColor: isHovered ? '#22c55e' : '#8b5cf6',
                               fillOpacity: 1,
                               strokeColor: '#ffffff',
                               strokeWeight: 2,
-                              scale: isHovered || isSelected ? 3 : 2.5,
+                              scale: isHovered ? 2.4 : 2,
                             }}
-                            zIndex={isSelected ? 1000 : isHovered ? 999 : 1}
                           />
                         );
                       })}
-                      
-                      {/* Info Window */}
-                      {selectedScreen && (
-                        <InfoWindow
-                          position={{
-                            lat: parseFloat(selectedScreen.latitude as string),
-                            lng: parseFloat(selectedScreen.longitude as string),
-                          }}
-                          onCloseClick={() => setSelectedScreen(null)}
-                        >
-                          <div className="p-3 max-w-xs" style={{ color: '#000' }}>
-                            <h3 className="font-bold text-base mb-2">{selectedScreen.name}</h3>
-                            <div className="space-y-1.5 text-sm">
-                              <div className="flex items-center gap-2">
-                                <MapPin className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#8b5cf6' }} />
-                                <span>{selectedScreen.venueName}, {selectedScreen.city}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Users className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#8b5cf6' }} />
-                                <span>{selectedScreen.avgDailyFootfall?.toLocaleString()} daily views</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Monitor className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#8b5cf6' }} />
-                                <span>{selectedScreen.displayFormat} • {selectedScreen.category}</span>
-                              </div>
-                              <div className="flex items-center gap-2 pt-2 border-t">
-                                <DollarSign className="w-4 h-4 flex-shrink-0" style={{ color: '#8b5cf6' }} />
-                                <span className="font-bold text-base" style={{ color: '#8b5cf6' }}>
-                                  ₹{selectedScreen.pricePerDay.toLocaleString()}/day
-                                </span>
-                              </div>
-                            </div>
-                            <a 
-                              href="/register?role=advertiser"
-                              className="block mt-3 text-center bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-md text-sm transition-colors"
-                              style={{ backgroundColor: '#8b5cf6' }}
-                            >
-                              Book Now
-                            </a>
-                          </div>
-                        </InfoWindow>
-                      )}
                     </GoogleMap>
                   </LoadScript>
                 </CardContent>
