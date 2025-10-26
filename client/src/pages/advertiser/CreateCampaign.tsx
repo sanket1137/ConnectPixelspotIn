@@ -1410,7 +1410,6 @@ export default function CreateCampaign() {
                                           size="sm"
                                           onClick={() => {
                                             form.setValue("budget", suggestedBudget);
-                                            setCurrentStep(1);
                                           }}
                                           className="mt-2"
                                           data-testid="button-increase-budget"
