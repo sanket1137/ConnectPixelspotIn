@@ -9,7 +9,7 @@ import { Mail, Shield, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import blackLogo from "@assets/Untitled design_1761331115867.png";
+import whiteLogo from "@assets/pixelspot-white-logo.png";
 
 export default function EmailVerification() {
   const { user, loading } = useAuth();
@@ -121,7 +121,7 @@ export default function EmailVerification() {
       <Card className="w-full max-w-md p-8 space-y-6 shadow-xl">
         <div className="flex justify-center">
           <img 
-            src={blackLogo} 
+            src={whiteLogo} 
             alt="Pixelspot" 
             className="h-12 w-auto"
           />
