@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
+import { GoogleMap, LoadScript, HeatmapLayer } from '@react-google-maps/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,8 @@ import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filte
 import { Link } from 'wouter';
 import type { Screen } from '@shared/schema';
 import blackLogo from "@assets/Untitled design_1761331115867.png";
+
+const libraries: ("visualization")[] = ["visualization"];
 
 interface PublicScreensResponse {
   cities: string[];
@@ -425,7 +427,10 @@ export default function PublicHome() {
             {viewMode === 'map' && (
               <Card>
                 <CardContent className="p-0">
-                  <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}>
+                  <LoadScript 
+                    googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}
+                    libraries={libraries}
+                  >
                     <GoogleMap
                       mapContainerStyle={mapContainerStyle}
                       center={defaultCenter}
@@ -435,31 +440,42 @@ export default function PublicHome() {
                         streetViewControl: false,
                         mapTypeControl: false,
                         fullscreenControl: true,
+                        styles: [
+                          {
+                            featureType: "all",
+                            elementType: "labels",
+                            stylers: [{ visibility: "on" }]
+                          }
+                        ]
                       }}
                     >
-                      {filteredScreens.map((screen) => {
-                        const isHovered = hoveredScreen === screen.id;
-                        return (
-                          <Marker
-                            key={screen.id}
-                            position={{
-                              lat: parseFloat(screen.latitude as string),
-                              lng: parseFloat(screen.longitude as string),
-                            }}
-                            onClick={() => handleMarkerClick(screen.id)}
-                            onMouseOver={() => setHoveredScreen(screen.id)}
-                            onMouseOut={() => setHoveredScreen(null)}
-                            icon={{
-                              path: 'M 0, 0 m -5, 0 a 5,5 0 1,0 10,0 a 5,5 0 1,0 -10,0',
-                              fillColor: isHovered ? '#22c55e' : '#8b5cf6',
-                              fillOpacity: 1,
-                              strokeColor: '#ffffff',
-                              strokeWeight: 2,
-                              scale: isHovered ? 2.4 : 2,
-                            }}
-                          />
-                        );
-                      })}
+                      {typeof google !== 'undefined' && (
+                        <HeatmapLayer
+                          data={filteredScreens.map((screen) => {
+                            const lat = parseFloat(screen.latitude as string);
+                            const lng = parseFloat(screen.longitude as string);
+                            const weight = Math.log10(screen.avgDailyFootfall || 1000) * 3;
+                            return {
+                              location: new google.maps.LatLng(lat, lng),
+                              weight: weight
+                            };
+                          })}
+                          options={{
+                            radius: 50,
+                            opacity: 0.75,
+                            dissipating: true,
+                            maxIntensity: 10,
+                            gradient: [
+                              'rgba(0, 255, 255, 0)',
+                              'rgba(139, 92, 246, 0.6)',
+                              'rgba(124, 58, 237, 0.75)',
+                              'rgba(109, 40, 217, 0.85)',
+                              'rgba(91, 33, 182, 0.95)',
+                              'rgba(76, 29, 149, 1)',
+                            ]
+                          }}
+                        />
+                      )}
                     </GoogleMap>
                   </LoadScript>
                 </CardContent>
