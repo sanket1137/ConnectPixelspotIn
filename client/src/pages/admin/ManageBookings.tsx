@@ -186,12 +186,14 @@ export default function ManageBookings() {
             <Monitor className="w-5 h-5 text-primary" />
           </div>
           <div className="flex-1">
-            <CardTitle className="text-lg">{booking.screen.name}</CardTitle>
+            <CardTitle className="text-lg">
+              {booking.screen?.name || "Screen Deleted"}
+            </CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              {booking.screen.location}, {booking.screen.city}
+              {booking.screen ? `${booking.screen.location}, ${booking.screen.city}` : "Screen no longer available"}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Campaign: {booking.campaign.name}
+              Campaign: {booking.campaign?.name || "Unknown Campaign"}
             </p>
           </div>
         </div>
