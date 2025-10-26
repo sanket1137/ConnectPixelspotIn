@@ -69,12 +69,14 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-6 border-b border-sidebar-border">
-        <img 
-          src={whiteLogo} 
-          alt="PixelSpot" 
-          className="w-40 h-auto mb-2"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
+        <div className="bg-primary px-4 py-3 rounded-lg mb-3">
+          <img 
+            src={whiteLogo} 
+            alt="PixelSpot" 
+            className="w-36 h-auto"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
           {isAdmin ? "Admin Portal" : isScreenOwner ? "Screen Owner Portal" : "Advertiser Portal"}
         </p>
       </SidebarHeader>

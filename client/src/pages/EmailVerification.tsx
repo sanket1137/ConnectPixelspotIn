@@ -120,11 +120,13 @@ export default function EmailVerification() {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/10 flex items-center justify-center p-6">
       <Card className="w-full max-w-md p-8 space-y-6 shadow-xl">
         <div className="flex justify-center">
-          <img 
-            src={whiteLogo} 
-            alt="Pixelspot" 
-            className="h-12 w-auto"
-          />
+          <div className="bg-primary px-6 py-3 rounded-lg">
+            <img 
+              src={whiteLogo} 
+              alt="Pixelspot" 
+              className="h-10 w-auto"
+            />
+          </div>
         </div>
 
         <div className="text-center space-y-2">

@@ -106,11 +106,13 @@ export default function Login() {
           {/* Hero Section */}
           <div className="space-y-8">
             <div className="space-y-4">
-              <img 
-                src={whiteLogo} 
-                alt="PixelSpot" 
-                className="h-16 w-auto"
-              />
+              <div className="bg-primary px-6 py-3 rounded-lg inline-block">
+                <img 
+                  src={whiteLogo} 
+                  alt="PixelSpot" 
+                  className="h-12 w-auto"
+                />
+              </div>
               <p className="text-xl text-primary font-semibold">
                 India's Smartest Outdoor Advertising Network
               </p>
