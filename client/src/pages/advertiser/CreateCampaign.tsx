@@ -1270,62 +1270,87 @@ export default function CreateCampaign() {
                           </CardHeader>
                           <CardContent className="space-y-3 max-h-[600px] overflow-y-auto">
                           {filteredScreensInArea.map((screen, index) => (
-                            <div key={screen.id} className="border rounded-lg p-4 space-y-2 hover-elevate cursor-pointer" data-testid={`screen-breakdown-${screen.id}`} onClick={() => setScreenDetailsDialog(screen)}>
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-                                      {index + 1}
-                                    </span>
-                                    <h4 className="font-semibold text-foreground">{screen.name}</h4>
-                                    {screen.isMultiScreen && screen.numberOfScreens && (
-                                      <Badge variant="default" className="ml-2 bg-purple-600 hover:bg-purple-700">
-                                        🖥️ Multi-Venue: {screen.numberOfScreens} screens
-                                      </Badge>
-                                    )}
-                                    <Eye className="h-4 w-4 ml-auto text-muted-foreground" />
-                                  </div>
-                                  <div className="mt-2 space-y-1 text-sm text-muted-foreground ml-8">
-                                    <div className="flex items-center gap-2">
-                                      <MapPin className="h-4 w-4" />
-                                      <span>{screen.location}, {screen.city}, {screen.state} - {screen.pincode}</span>
+                            <div 
+                              key={screen.id} 
+                              className="border rounded-lg p-4 space-y-3 hover-elevate" 
+                              data-testid={`screen-breakdown-${screen.id}`}
+                              onMouseEnter={() => setSelectedMapScreen(screen)}
+                              onMouseLeave={() => setSelectedMapScreen(null)}
+                            >
+                              {/* Header with Number and Name */}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-3 flex-1">
+                                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium shrink-0">
+                                    {index + 1}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="font-semibold text-foreground">{screen.name}</h4>
+                                      {screen.isMultiScreen && screen.numberOfScreens && (
+                                        <Badge variant="default" className="bg-purple-600 hover:bg-purple-700 text-xs">
+                                          {screen.numberOfScreens} screens
+                                        </Badge>
+                                      )}
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <MonitorIcon className="h-4 w-4" />
-                                      <span>{screen.type} • {screen.resolution}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Users className="h-4 w-4" />
-                                      <span>Daily Footfall: {screen.avgDailyFootfall.toLocaleString()}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Clock className="h-4 w-4" />
-                                      <span>{screen.playbackSlotsPerHour} slots/hour • {screen.avgDwellTime} min avg dwell time</span>
-                                    </div>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                      {screen.location}
+                                    </p>
                                   </div>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-right shrink-0">
                                   <div className="text-lg font-semibold text-primary">
                                     ₹{(() => {
                                       const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
                                       return (screen.pricePerDay * screenMultiplier * (duration || 1)).toLocaleString();
                                     })()}
                                   </div>
-                                  <div className="text-xs text-muted-foreground">
+                                  <div className="text-xs text-muted-foreground whitespace-nowrap">
                                     {screen.isMultiScreen && screen.numberOfScreens ? (
-                                      <>₹{screen.pricePerDay.toLocaleString()}/day per screen × {screen.numberOfScreens} screens × {duration || 1} days</>
+                                      <>₹{screen.pricePerDay.toLocaleString()}/day × {screen.numberOfScreens}</>
                                     ) : (
-                                      <>₹{screen.pricePerDay.toLocaleString()}/day × {duration || 1} days</>
-                                    )}
-                                  </div>
-                                  <div className="mt-2 text-xs font-medium text-foreground">
-                                    ~{(() => {
-                                      const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-                                      return (screen.avgDailyFootfall * screenMultiplier * (duration || 1)).toLocaleString();
-                                    })()} reach
+                                      <>₹{screen.pricePerDay.toLocaleString()}/day</>
+                                    )} × {duration || 1} days
                                   </div>
                                 </div>
                               </div>
+
+                              {/* Screen Details */}
+                              <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="truncate">{screen.avgDailyFootfall.toLocaleString()} daily footfall</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="truncate">{screen.playbackSlotsPerHour} slots/hour</span>
+                                </div>
+                              </div>
+
+                              {/* Estimated Reach */}
+                              <div className="pt-2 border-t">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-muted-foreground">Estimated Reach</span>
+                                  <span className="text-sm font-medium text-foreground">
+                                    ~{(() => {
+                                      const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
+                                      return (screen.avgDailyFootfall * screenMultiplier * (duration || 1)).toLocaleString();
+                                    })()} people
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* View Details Button */}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="w-full"
+                                onClick={() => setScreenDetailsDialog(screen)}
+                                data-testid={`button-view-details-${screen.id}`}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </Button>
                             </div>
                           ))}
                           
@@ -1441,11 +1466,11 @@ export default function CreateCampaign() {
                                       onClick={() => setScreenDetailsDialog(screen)}
                                       icon={{
                                         path: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
-                                        fillColor: "#8b5cf6",
+                                        fillColor: selectedMapScreen?.id === screen.id ? "#22c55e" : "#8b5cf6",
                                         fillOpacity: 1,
                                         strokeColor: "#ffffff",
-                                        strokeWeight: 2,
-                                        scale: 1.5,
+                                        strokeWeight: selectedMapScreen?.id === screen.id ? 3 : 2,
+                                        scale: selectedMapScreen?.id === screen.id ? 2 : 1.5,
                                       }}
                                     />
                                   ))}
