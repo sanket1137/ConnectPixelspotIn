@@ -17,6 +17,7 @@ export default function EmailVerification() {
   const { toast } = useToast();
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [autoSendAttempted, setAutoSendAttempted] = useState(false);
 
   useEffect(() => {
     // If user is already verified or not logged in, redirect
@@ -31,6 +32,14 @@ export default function EmailVerification() {
       }
     }
   }, [user, loading, setLocation]);
+
+  // Auto-send OTP when page loads (for users coming from registration)
+  useEffect(() => {
+    if (user && !user.emailVerified && !otpSent && !autoSendAttempted) {
+      setAutoSendAttempted(true);
+      sendOtpMutation.mutate();
+    }
+  }, [user, otpSent, autoSendAttempted]);
 
   // Send OTP mutation
   const sendOtpMutation = useMutation({
@@ -136,22 +145,30 @@ export default function EmailVerification() {
           </div>
 
           {!otpSent ? (
-            <Button
-              onClick={handleSendOtp}
-              disabled={sendOtpMutation.isPending}
-              size="lg"
-              className="w-full"
-              data-testid="button-send-email-otp"
-            >
-              {sendOtpMutation.isPending ? (
-                "Sending..."
-              ) : (
-                <>
-                  <Mail className="mr-2 h-4 w-4" />
-                  Send Verification Code
-                </>
+            <div className="space-y-4">
+              {sendOtpMutation.isPending && (
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                  Sending verification code...
+                </div>
               )}
-            </Button>
+              <Button
+                onClick={handleSendOtp}
+                disabled={sendOtpMutation.isPending}
+                size="lg"
+                className="w-full"
+                data-testid="button-send-email-otp"
+              >
+                {sendOtpMutation.isPending ? (
+                  "Sending..."
+                ) : (
+                  <>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Send Verification Code
+                  </>
+                )}
+              </Button>
+            </div>
           ) : (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div className="space-y-2">
