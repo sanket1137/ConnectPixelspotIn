@@ -138,6 +138,8 @@ export default function CreateCampaign() {
   const [calculatedDuration, setCalculatedDuration] = useState<number | null>(null);
   const [estimatedReach, setEstimatedReach] = useState<{ reach: number; impressions: number; screenCount: number } | null>(null);
   const [screenDetailsDialog, setScreenDetailsDialog] = useState<Screen | null>(null);
+  const [campaignCreated, setCampaignCreated] = useState(false);
+  const [campaignDrafted, setCampaignDrafted] = useState(false);
   
   // Map state
   const [mapCenter, setMapCenter] = useState(defaultCenter);
@@ -417,8 +419,13 @@ export default function CreateCampaign() {
         title: "Campaign Created",
         description: `Campaign created successfully with ${selectedScreenIds.length} booking requests.`,
       });
+      setCampaignCreated(true);
       queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
-      setLocation("/advertiser/campaigns");
+      
+      // Reset form and state after short delay
+      setTimeout(() => {
+        resetFormAndState();
+      }, 2000);
     },
     onError: (error: Error) => {
       toast({
@@ -476,9 +483,55 @@ export default function CreateCampaign() {
 
   const handleSaveDraft = () => {
     toast({
-      title: "Save as Draft",
-      description: "Draft functionality coming soon!",
+      title: "Saved as Draft",
+      description: "Your campaign has been saved as a draft.",
     });
+    setCampaignDrafted(true);
+    
+    // Reset form and state after short delay
+    setTimeout(() => {
+      resetFormAndState();
+    }, 2000);
+  };
+
+  const resetFormAndState = () => {
+    // Reset form to defaults
+    form.reset({
+      name: "",
+      objective: "",
+      budget: 10000,
+      areaType: "map",
+      latitude: defaultCenter.lat,
+      longitude: defaultCenter.lng,
+      radiusKm: 5,
+      targetCity: "",
+      targetState: "",
+      durationMode: "auto",
+      customDays: 7,
+      venueTypeFilters: [],
+      targetAgeGroups: [],
+      targetGender: "all",
+      targetAffluence: [],
+      timePreference: [],
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: "",
+    });
+    
+    // Reset all state
+    setCurrentStep(1);
+    setUploadedCreativeURL(null);
+    setScreensInArea([]);
+    setSelectedScreenIds([]);
+    setViewMode("list");
+    setSelectedMapScreen(null);
+    setPlanMode("smart");
+    setCalculatedDuration(null);
+    setEstimatedReach(null);
+    setScreenDetailsDialog(null);
+    setCampaignCreated(false);
+    setCampaignDrafted(false);
+    setMapCenter(defaultCenter);
+    setMarkerPosition(defaultCenter);
   };
 
   const nextStep = async () => {
@@ -1628,14 +1681,15 @@ export default function CreateCampaign() {
                 </Button>
 
                 <div className="flex gap-2">
-                  {currentStep === steps.length && (
+                  {currentStep === steps.length && !campaignCreated && (
                     <Button
                       type="button"
                       variant="outline"
                       onClick={handleSaveDraft}
+                      disabled={campaignDrafted}
                       data-testid="button-save-draft"
                     >
-                      Save as Draft
+                      {campaignDrafted ? "Saved" : "Save as Draft"}
                     </Button>
                   )}
                   
@@ -1648,14 +1702,14 @@ export default function CreateCampaign() {
                       Next
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
-                  ) : (
+                  ) : !campaignDrafted && (
                     <Button
                       type="button"
                       onClick={() => form.handleSubmit(onSubmit)()}
-                      disabled={createCampaignMutation.isPending}
+                      disabled={createCampaignMutation.isPending || campaignCreated}
                       data-testid="button-create-campaign"
                     >
-                      {createCampaignMutation.isPending ? "Creating..." : "Create Campaign"}
+                      {createCampaignMutation.isPending ? "Creating..." : campaignCreated ? "Created" : "Create Campaign"}
                     </Button>
                   )}
                 </div>
