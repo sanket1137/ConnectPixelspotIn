@@ -174,9 +174,9 @@ export default function ManageBookings() {
     }
   };
 
-  // Admin can approve bookings regardless of owner approval status
-  // Include both "pending_owner" and "owner_approved" in awaiting approval tab
-  const pendingApproval = bookings.filter(b => b.status === "owner_approved" || b.status === "pending_owner");
+  // Separate bookings by approval stage
+  const pendingOwnerApproval = bookings.filter(b => b.status === "pending_owner");
+  const pendingAdminApproval = bookings.filter(b => b.status === "owner_approved");
   const approvedBookings = bookings.filter(b => b.status === "approved" || b.status === "active");
   const rejectedBookings = bookings.filter(b => b.status === "rejected" || b.status === "owner_rejected");
 
@@ -292,10 +292,13 @@ export default function ManageBookings() {
           </CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="pending" className="space-y-6">
+        <Tabs defaultValue="pending-owner" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="pending" data-testid="tab-pending">
-              Awaiting Approval ({pendingApproval.length})
+            <TabsTrigger value="pending-owner" data-testid="tab-pending-owner">
+              Awaiting Owner Approval ({pendingOwnerApproval.length})
+            </TabsTrigger>
+            <TabsTrigger value="pending-admin" data-testid="tab-pending-admin">
+              Awaiting Admin Approval ({pendingAdminApproval.length})
             </TabsTrigger>
             <TabsTrigger value="approved" data-testid="tab-approved">
               Approved ({approvedBookings.length})
@@ -308,16 +311,30 @@ export default function ManageBookings() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="pending">
-            {pendingApproval.length === 0 ? (
+          <TabsContent value="pending-owner">
+            {pendingOwnerApproval.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-muted-foreground">
-                  No bookings awaiting approval
+                  No bookings awaiting screen owner approval
                 </CardContent>
               </Card>
             ) : (
               <div className="grid gap-4">
-                {pendingApproval.map(booking => renderBookingCard(booking, true))}
+                {pendingOwnerApproval.map(booking => renderBookingCard(booking, true))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="pending-admin">
+            {pendingAdminApproval.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  No bookings awaiting admin approval
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {pendingAdminApproval.map(booking => renderBookingCard(booking, true))}
               </div>
             )}
           </TabsContent>
