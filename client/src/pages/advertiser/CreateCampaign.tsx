@@ -141,6 +141,7 @@ export default function CreateCampaign() {
   const [campaignCreated, setCampaignCreated] = useState(false);
   const [campaignDrafted, setCampaignDrafted] = useState(false);
   const [skipDurationRecalc, setSkipDurationRecalc] = useState(false);
+  const [skipScreenRefetch, setSkipScreenRefetch] = useState(false);
   
   // Map state
   const [mapCenter, setMapCenter] = useState(defaultCenter);
@@ -191,6 +192,11 @@ export default function CreateCampaign() {
 
   // Fetch screens in area when area changes (filtered by budget)
   useEffect(() => {
+    // Skip screen refetch if flag is set (e.g., when manually increasing budget)
+    if (skipScreenRefetch) {
+      return;
+    }
+
     const fetchScreensInArea = async () => {
       const budget = watchBudget;
       // Use calculated duration in auto mode (fallback to default 7 days if not calculated yet)
@@ -243,7 +249,7 @@ export default function CreateCampaign() {
     if (currentStep >= 2) {
       fetchScreensInArea();
     }
-  }, [watchAreaType, watchRadius, watchTargetCity, currentStep, watchBudget, calculatedDuration, watchDurationMode, watchCustomDays]);
+  }, [watchAreaType, watchRadius, watchTargetCity, currentStep, watchBudget, calculatedDuration, watchDurationMode, watchCustomDays, skipScreenRefetch]);
 
   // Calculate duration when in auto mode
   useEffect(() => {
@@ -1410,11 +1416,16 @@ export default function CreateCampaign() {
                                           variant="destructive"
                                           size="sm"
                                           onClick={() => {
-                                            // Prevent duration recalculation when adjusting budget
+                                            // Prevent both duration recalculation AND screen refetching when adjusting budget
+                                            // This ensures we only increase the budget without changing the selected screens
                                             setSkipDurationRecalc(true);
+                                            setSkipScreenRefetch(true);
                                             form.setValue("budget", suggestedBudget);
-                                            // Reset the flag after a short delay
-                                            setTimeout(() => setSkipDurationRecalc(false), 100);
+                                            // Reset the flags after a short delay
+                                            setTimeout(() => {
+                                              setSkipDurationRecalc(false);
+                                              setSkipScreenRefetch(false);
+                                            }, 100);
                                           }}
                                           className="mt-2"
                                           data-testid="button-increase-budget"
