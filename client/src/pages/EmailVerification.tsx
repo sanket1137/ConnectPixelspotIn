@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Mail, Shield, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import blackLogo from "@assets/Untitled design_1761331115867.png";
 
 export default function EmailVerification() {
@@ -74,13 +74,17 @@ export default function EmailVerification() {
         code,
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: "Email Verified",
         description: "Your email has been verified successfully!",
       });
-      // Reload user data and redirect
-      window.location.reload();
+      // Invalidate auth cache and reload
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      // Small delay to ensure cache is cleared, then reload
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
     },
     onError: (error: any) => {
       toast({
