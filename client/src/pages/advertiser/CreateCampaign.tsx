@@ -142,6 +142,7 @@ export default function CreateCampaign() {
   const [campaignDrafted, setCampaignDrafted] = useState(false);
   const [skipDurationRecalc, setSkipDurationRecalc] = useState(false);
   const [skipScreenRefetch, setSkipScreenRefetch] = useState(false);
+  const [lockedDuration, setLockedDuration] = useState<number | null>(null);
   
   // Map state
   const [mapCenter, setMapCenter] = useState(defaultCenter);
@@ -253,6 +254,12 @@ export default function CreateCampaign() {
 
   // Calculate duration when in auto mode
   useEffect(() => {
+    // If duration is locked (e.g., after clicking "Increase Budget"), don't recalculate
+    if (lockedDuration !== null) {
+      setCalculatedDuration(lockedDuration);
+      return;
+    }
+
     const calculateAutoDuration = async () => {
       if (watchDurationMode === "auto" && selectedScreenIds.length > 0 && watchBudget && !skipDurationRecalc) {
         try {
@@ -271,7 +278,7 @@ export default function CreateCampaign() {
     if (currentStep >= 3 && watchDurationMode === "auto" && !skipDurationRecalc) {
       calculateAutoDuration();
     }
-  }, [watchDurationMode, selectedScreenIds, watchBudget, currentStep, skipDurationRecalc]);
+  }, [watchDurationMode, selectedScreenIds, watchBudget, currentStep, skipDurationRecalc, lockedDuration]);
 
   // Apply demographic filters from Step 4 to screens
   const filteredScreensInArea = screensInArea.filter((screen) => {
@@ -1416,14 +1423,17 @@ export default function CreateCampaign() {
                                           variant="destructive"
                                           size="sm"
                                           onClick={() => {
-                                            // Prevent both duration recalculation AND screen refetching when adjusting budget
-                                            // This ensures we only increase the budget without changing the selected screens
-                                            setSkipDurationRecalc(true);
+                                            // Lock the current duration and screens to prevent recalculation
+                                            // This ensures we ONLY increase the budget without changing anything else
+                                            const currentDuration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
+                                            setLockedDuration(currentDuration);
                                             setSkipScreenRefetch(true);
+                                            
+                                            // Increase the budget
                                             form.setValue("budget", suggestedBudget);
-                                            // Reset the flags after a short delay
+                                            
+                                            // Reset screen refetch flag after a brief delay
                                             setTimeout(() => {
-                                              setSkipDurationRecalc(false);
                                               setSkipScreenRefetch(false);
                                             }, 100);
                                           }}
