@@ -29,6 +29,8 @@ export interface IStorage {
   getAllScreens(): Promise<Screen[]>;
   getActiveScreens(): Promise<Screen[]>;
   getApprovedScreens(): Promise<Screen[]>;
+  getPublicScreens(): Promise<Screen[]>;
+  getDistinctCities(): Promise<string[]>;
   createScreen(screen: InsertScreen): Promise<Screen>;
   updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined>;
   updateScreenStatus(id: string, status: string): Promise<Screen | undefined>;
@@ -134,6 +136,24 @@ export class DatabaseStorage implements IStorage {
 
   async getApprovedScreens(): Promise<Screen[]> {
     return await db.select().from(screens).where(eq(screens.status, "approved"));
+  }
+
+  async getPublicScreens(): Promise<Screen[]> {
+    // Return only approved screens for public viewing
+    return await db.select().from(screens).where(eq(screens.status, "approved")).orderBy(desc(screens.createdAt));
+  }
+
+  async getDistinctCities(): Promise<string[]> {
+    // Get distinct cities from approved screens
+    const result = await db
+      .selectDistinct({ city: screens.city })
+      .from(screens)
+      .where(eq(screens.status, "approved"));
+    
+    return result
+      .map(r => r.city)
+      .filter((city): city is string => city !== null)
+      .sort();
   }
 
   async createScreen(insertScreen: InsertScreen): Promise<Screen> {

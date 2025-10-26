@@ -64,6 +64,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: "ok" });
   });
 
+  // Get public screens (approved only, no contact info)
+  app.get("/api/public/screens", async (req, res) => {
+    try {
+      const screens = await storage.getPublicScreens();
+      
+      // Remove owner contact information for public viewing
+      const publicScreens = screens.map(screen => ({
+        ...screen,
+        // Remove sensitive owner info - they'll only see it after booking
+        ownerId: undefined,
+      }));
+      
+      res.json(publicScreens);
+    } catch (error) {
+      console.error("Get public screens error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get distinct cities from approved screens
+  app.get("/api/public/cities", async (req, res) => {
+    try {
+      const cities = await storage.getDistinctCities();
+      res.json({ cities, count: cities.length });
+    } catch (error) {
+      console.error("Get cities error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // DEV ONLY: Test mobile OTP sending (no auth required)
   app.post("/api/test/send-mobile-otp", async (req, res) => {
     try {
