@@ -192,7 +192,9 @@ export default function CreateCampaign() {
   useEffect(() => {
     const fetchScreensInArea = async () => {
       const budget = watchBudget;
-      const duration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
+      // Use calculated duration in auto mode (fallback to default 7 days if not calculated yet)
+      // Use custom days in custom mode
+      const duration = watchDurationMode === "auto" ? (calculatedDuration || 7) : watchCustomDays;
       
       if (watchAreaType === "map") {
         const lat = form.getValues("latitude");
@@ -202,8 +204,9 @@ export default function CreateCampaign() {
         if (lat && lng && radiusKm) {
           try {
             let url = `/api/screens/in-area?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`;
-            // Only filter by budget if we have both budget and duration
-            if (budget && duration && currentStep >= 3) {
+            // Apply budget filter from Step 2 onwards if we have both budget and duration
+            // This ensures consistent screen counts across all steps
+            if (budget && duration && currentStep >= 2) {
               url += `&budget=${budget}&duration=${duration}`;
             }
             const response = await apiRequest("GET", url);
@@ -219,8 +222,9 @@ export default function CreateCampaign() {
       } else if (watchAreaType === "city" && watchTargetCity) {
         try {
           let url = `/api/screens/in-area?city=${watchTargetCity}`;
-          // Only filter by budget if we have both budget and duration
-          if (budget && duration && currentStep >= 3) {
+          // Apply budget filter from Step 2 onwards if we have both budget and duration
+          // This ensures consistent screen counts across all steps
+          if (budget && duration && currentStep >= 2) {
             url += `&budget=${budget}&duration=${duration}`;
           }
           const response = await apiRequest("GET", url);
