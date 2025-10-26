@@ -25,6 +25,11 @@ export default function Login() {
   const [selectedRole, setSelectedRole] = useState<"screen_owner" | "advertiser" | null>(null);
   const { toast } = useToast();
   
+  // Check for role parameter in URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const roleParam = urlParams.get('role');
+  const defaultTab = roleParam === 'advertiser' ? 'signup' : 'login';
+  
   // Login form state
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -33,7 +38,9 @@ export default function Login() {
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
-  const [signupRole, setSignupRole] = useState<"screen_owner" | "advertiser">("advertiser");
+  const [signupRole, setSignupRole] = useState<"screen_owner" | "advertiser">(
+    roleParam === 'advertiser' ? 'advertiser' : 'advertiser'
+  );
 
   useEffect(() => {
     if (user) {
@@ -147,7 +154,7 @@ export default function Login() {
 
           {/* Login/Signup Card */}
           <Card className="p-8 shadow-xl">
-            <Tabs defaultValue="login" className="space-y-6">
+            <Tabs defaultValue={defaultTab} className="space-y-6">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login" data-testid="tab-login">Login</TabsTrigger>
                 <TabsTrigger value="signup" data-testid="tab-signup">Sign Up</TabsTrigger>
