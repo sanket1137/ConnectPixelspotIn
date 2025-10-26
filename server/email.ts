@@ -132,13 +132,27 @@ class AWSEmailService {
         <meta charset="utf-8">
         <title>${title}</title>
         <style>
-            body { font-family: Arial, sans-serif; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            body { font-family: Arial, sans-serif; color: #333; background: #f5f5f5; margin: 0; padding: 0; }
+            .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
             .header { 
               text-align: center; 
-              background: #f8f9fa; 
-              padding: 20px; 
-              border-radius: 8px; 
+              background: #000000; 
+              padding: 30px 20px; 
+            }
+            .logo-text {
+              font-size: 36px;
+              font-weight: bold;
+              color: #ffffff;
+              margin: 0;
+              letter-spacing: 1px;
+            }
+            .tagline {
+              color: #cccccc;
+              margin: 8px 0 0 0;
+              font-size: 14px;
+            }
+            .content {
+              padding: 30px 20px;
             }
             .otp-box {
               background: #e3f2fd;
@@ -159,9 +173,10 @@ class AWSEmailService {
     <body>
         <div class="container">
             <div class="header">
-                <h1 style="color: #2196f3; margin: 0;">Pixelspot</h1>
-                <p style="color: #666;">Digital Outdoor Advertising</p>
+                <h1 class="logo-text">Pixelspot</h1>
+                <p class="tagline">Digital Outdoor Advertising</p>
             </div>
+            <div class="content">
             
             <h2>${title}</h2>
             <p>${message}</p>
@@ -179,9 +194,10 @@ class AWSEmailService {
             <p><strong>Important:</strong> Never share this code. 
                Pixelspot will never ask for it.</p>
             
-            <div style="text-align: center; color: #666; font-size: 14px; margin-top: 30px;">
+            <div style="text-align: center; color: #666; font-size: 14px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
                 <p>If you didn't request this, ignore this email.</p>
                 <p>&copy; 2025 Pixelspot. All rights reserved.</p>
+            </div>
             </div>
         </div>
     </body>

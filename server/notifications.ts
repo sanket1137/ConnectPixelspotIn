@@ -400,12 +400,24 @@ class NotificationService {
         <title>${options.title}</title>
         <style>
             body { font-family: Arial, sans-serif; color: #333; background: #f5f5f5; margin: 0; padding: 0; }
-            .container { max-width: 600px; margin: 20px auto; background: #fff; border-radius: 8px; overflow: hidden; }
+            .container { max-width: 600px; margin: 20px auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
             .header { 
               text-align: center; 
-              background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+              background: #000000;
               padding: 30px 20px; 
               color: white;
+            }
+            .logo-text {
+              font-size: 36px;
+              font-weight: bold;
+              color: #ffffff;
+              margin: 0;
+              letter-spacing: 1px;
+            }
+            .tagline {
+              color: #cccccc;
+              margin: 8px 0 0 0;
+              font-size: 14px;
             }
             .content { padding: 30px; }
             .details-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
@@ -425,8 +437,8 @@ class NotificationService {
     <body>
         <div class="container">
             <div class="header">
-                <h1 style="margin: 0; font-size: 32px;">Pixelspot</h1>
-                <p style="margin: 10px 0 0 0; opacity: 0.9;">Digital Outdoor Advertising</p>
+                <h1 class="logo-text">Pixelspot</h1>
+                <p class="tagline">Digital Outdoor Advertising</p>
             </div>
             
             <div class="content">
