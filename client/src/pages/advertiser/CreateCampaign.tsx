@@ -1261,12 +1261,14 @@ export default function CreateCampaign() {
                         </CardContent>
                       </Card>
 
-                      {/* Selected Screens Breakdown */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Selected Screens Breakdown</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
+                      {/* Side-by-side: List and Map */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* Selected Screens Breakdown */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">Selected Screens Breakdown</CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-3 max-h-[600px] overflow-y-auto">
                           {filteredScreensInArea.map((screen, index) => (
                             <div key={screen.id} className="border rounded-lg p-4 space-y-2 hover-elevate cursor-pointer" data-testid={`screen-breakdown-${screen.id}`} onClick={() => setScreenDetailsDialog(screen)}>
                               <div className="flex items-start justify-between">
@@ -1399,37 +1401,66 @@ export default function CreateCampaign() {
                             })()}
                           </div>
                         </CardContent>
-                      </Card>
+                        </Card>
+
+                        {/* Map View */}
+                        {isLoaded && (
+                          <Card>
+                            <CardHeader>
+                              <CardTitle className="text-lg">Screen Locations</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="h-[600px] rounded-lg overflow-hidden border">
+                                <GoogleMap
+                                  mapContainerStyle={{ width: '100%', height: '100%' }}
+                                  center={
+                                    watchAreaType === "map" 
+                                      ? { lat: form.getValues("latitude") || 12.9716, lng: form.getValues("longitude") || 77.5946 }
+                                      : filteredScreensInArea.length > 0
+                                        ? { lat: parseFloat(filteredScreensInArea[0].latitude.toString()), lng: parseFloat(filteredScreensInArea[0].longitude.toString()) }
+                                        : { lat: 12.9716, lng: 77.5946 }
+                                  }
+                                  zoom={watchAreaType === "map" ? 12 : 11}
+                                  options={{
+                                    zoomControl: true,
+                                    mapTypeControl: false,
+                                    scaleControl: true,
+                                    streetViewControl: false,
+                                    rotateControl: false,
+                                    fullscreenControl: true,
+                                  }}
+                                >
+                                  {/* Show selected screens on map */}
+                                  {filteredScreensInArea.map((screen) => (
+                                    <Marker
+                                      key={screen.id}
+                                      position={{
+                                        lat: parseFloat(screen.latitude.toString()),
+                                        lng: parseFloat(screen.longitude.toString()),
+                                      }}
+                                      onClick={() => setScreenDetailsDialog(screen)}
+                                      icon={{
+                                        path: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
+                                        fillColor: "#8b5cf6",
+                                        fillOpacity: 1,
+                                        strokeColor: "#ffffff",
+                                        strokeWeight: 2,
+                                        scale: 1.5,
+                                      }}
+                                    />
+                                  ))}
+                                </GoogleMap>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
                     </div>
                   )}
 
                   {/* Customize Plan */}
                   {planMode === "customize" && (
                     <div className="space-y-4">
-                      {/* View Toggle */}
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant={viewMode === "list" ? "default" : "outline"}
-                          onClick={() => setViewMode("list")}
-                          size="sm"
-                          data-testid="button-view-list"
-                        >
-                          <ListIcon className="mr-2 h-4 w-4" />
-                          List View
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={viewMode === "map" ? "default" : "outline"}
-                          onClick={() => setViewMode("map")}
-                          size="sm"
-                          data-testid="button-view-map"
-                        >
-                          <MapIcon className="mr-2 h-4 w-4" />
-                          Map View
-                        </Button>
-                      </div>
-
                       {/* Budget Indicator */}
                       <Card>
                         <CardContent className="pt-6">
@@ -1445,9 +1476,15 @@ export default function CreateCampaign() {
                         </CardContent>
                       </Card>
 
-                      {/* List View */}
-                      {viewMode === "list" && (
-                        <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                      {/* Side-by-side: List and Map */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* List View */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">Available Screens</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-3 max-h-[600px] overflow-y-auto">
                           {filteredScreensInArea.map((screen) => (
                             <Card key={screen.id} className={selectedScreenIds.includes(screen.id) ? "border-primary" : ""}>
                               <CardContent className="pt-6">
@@ -1492,62 +1529,71 @@ export default function CreateCampaign() {
                               </CardContent>
                             </Card>
                           ))}
-                        </div>
-                      )}
+                            </div>
+                          </CardContent>
+                        </Card>
 
-                      {/* Map View */}
-                      {viewMode === "map" && isLoaded && (
-                        <div className="border rounded-lg overflow-hidden">
-                          <GoogleMap
-                            mapContainerStyle={mapContainerStyle}
-                            center={markerPosition}
-                            zoom={12}
-                          >
-                            {filteredScreensInArea.map((screen) => (
-                              <Marker
-                                key={screen.id}
-                                position={{
-                                  lat: parseFloat(screen.latitude.toString()),
-                                  lng: parseFloat(screen.longitude.toString()),
-                                }}
-                                onClick={() => setSelectedMapScreen(screen)}
-                                icon={{
-                                  path: window.google.maps.SymbolPath.CIRCLE,
-                                  scale: 8,
-                                  fillColor: selectedScreenIds.includes(screen.id) ? "#3b82f6" : "#6b7280",
-                                  fillOpacity: 1,
-                                  strokeColor: "#ffffff",
-                                  strokeWeight: 2,
-                                }}
-                              />
-                            ))}
-                            
-                            {selectedMapScreen && (
-                              <InfoWindow
-                                position={{
-                                  lat: parseFloat(selectedMapScreen.latitude.toString()),
-                                  lng: parseFloat(selectedMapScreen.longitude.toString()),
-                                }}
-                                onCloseClick={() => setSelectedMapScreen(null)}
-                              >
-                                <div className="p-2">
-                                  <h3 className="font-semibold">{selectedMapScreen.name}</h3>
-                                  <p className="text-sm text-muted-foreground mb-2">{selectedMapScreen.location}</p>
-                                  <p className="text-sm font-medium">₹{selectedMapScreen.pricePerDay.toLocaleString()}/day</p>
-                                  <Button
-                                    size="sm"
-                                    className="mt-2 w-full"
-                                    onClick={() => toggleScreen(selectedMapScreen.id)}
-                                    data-testid={`button-toggle-screen-${selectedMapScreen.id}`}
-                                  >
-                                    {selectedScreenIds.includes(selectedMapScreen.id) ? "Remove" : "Add"}
-                                  </Button>
-                                </div>
-                              </InfoWindow>
-                            )}
-                          </GoogleMap>
-                        </div>
-                      )}
+                        {/* Map View */}
+                        {isLoaded && (
+                          <Card>
+                            <CardHeader>
+                              <CardTitle className="text-lg">Screen Locations</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="h-[600px] rounded-lg overflow-hidden border">
+                                <GoogleMap
+                                  mapContainerStyle={{ width: '100%', height: '100%' }}
+                                  center={markerPosition}
+                                  zoom={12}
+                                >
+                                  {filteredScreensInArea.map((screen) => (
+                                    <Marker
+                                      key={screen.id}
+                                      position={{
+                                        lat: parseFloat(screen.latitude.toString()),
+                                        lng: parseFloat(screen.longitude.toString()),
+                                      }}
+                                      onClick={() => setSelectedMapScreen(screen)}
+                                      icon={{
+                                        path: window.google.maps.SymbolPath.CIRCLE,
+                                        scale: 8,
+                                        fillColor: selectedScreenIds.includes(screen.id) ? "#3b82f6" : "#6b7280",
+                                        fillOpacity: 1,
+                                        strokeColor: "#ffffff",
+                                        strokeWeight: 2,
+                                      }}
+                                    />
+                                  ))}
+                                  
+                                  {selectedMapScreen && (
+                                    <InfoWindow
+                                      position={{
+                                        lat: parseFloat(selectedMapScreen.latitude.toString()),
+                                        lng: parseFloat(selectedMapScreen.longitude.toString()),
+                                      }}
+                                      onCloseClick={() => setSelectedMapScreen(null)}
+                                    >
+                                      <div className="p-2">
+                                        <h3 className="font-semibold">{selectedMapScreen.name}</h3>
+                                        <p className="text-sm text-muted-foreground mb-2">{selectedMapScreen.location}</p>
+                                        <p className="text-sm font-medium">₹{selectedMapScreen.pricePerDay.toLocaleString()}/day</p>
+                                        <Button
+                                          size="sm"
+                                          className="mt-2 w-full"
+                                          onClick={() => toggleScreen(selectedMapScreen.id)}
+                                          data-testid={`button-toggle-screen-${selectedMapScreen.id}`}
+                                        >
+                                          {selectedScreenIds.includes(selectedMapScreen.id) ? "Remove" : "Add"}
+                                        </Button>
+                                      </div>
+                                    </InfoWindow>
+                                  )}
+                                </GoogleMap>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
 
                       {/* Reach Stats */}
                       {estimatedReach && (
