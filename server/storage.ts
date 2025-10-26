@@ -21,6 +21,7 @@ export interface IStorage {
   verifyUserEmail(id: string): Promise<User | undefined>;
   verifyUserMobile(id: string): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
+  getUsersByRole(role: string): Promise<User[]>;
   
   // Screen methods
   getScreen(id: string): Promise<Screen | undefined>;
@@ -107,6 +108,10 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return await db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async getUsersByRole(role: string): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.role, role));
   }
 
   // Screen methods
