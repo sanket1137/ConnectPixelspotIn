@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import whiteLogo from "@assets/pixelspot-white-logo.png";
+import logo from "@assets/pixelspot-logo.png";
 
 export default function Login() {
   const { user, signInWithGoogle, signInWithEmail, signUpWithEmail, loading } = useAuth();
@@ -107,7 +107,7 @@ export default function Login() {
           <div className="space-y-8">
             <div className="space-y-4">
               <img 
-                src={whiteLogo} 
+                src={logo} 
                 alt="PixelSpot" 
                 className="h-16 w-auto"
               />

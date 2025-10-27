@@ -9,7 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Eye, Building2 } from 'lucide-react';
 import { Link } from 'wouter';
 import type { Screen } from '@shared/schema';
-import whiteLogo from "@assets/pixelspot-white-logo.png";
+import logo from "@assets/pixelspot-logo.png";
 
 interface PublicScreensResponse {
   cities: string[];
@@ -113,7 +113,7 @@ export default function PublicHome() {
           <div className="flex h-16 items-center justify-between">
             <Link href="/">
               <img 
-                src={whiteLogo} 
+                src={logo} 
                 alt="Pixelspot" 
                 className="h-10 w-auto cursor-pointer"
                 data-testid="img-logo"
@@ -594,7 +594,7 @@ export default function PublicHome() {
         <div className="container mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <img src={whiteLogo} alt="Pixelspot" className="h-8 w-auto" />
+              <img src={logo} alt="Pixelspot" className="h-8 w-auto" />
               <p className="text-sm text-muted-foreground">© 2025 Pixelspot. All rights reserved.</p>
             </div>
             <div className="flex items-center gap-6">
