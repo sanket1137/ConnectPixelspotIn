@@ -142,19 +142,25 @@ export default function PublicHome() {
         <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]" />
         <div className="container mx-auto px-4 py-20 md:py-28 relative">
           <div className="max-w-5xl mx-auto text-center space-y-8">
+            <div className="animate-in fade-in slide-in-from-bottom-3 duration-1000">
+              <Badge className="mb-6 text-sm px-4 py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30 hover-elevate" data-testid="badge-ai-powered">
+                <Sparkles className="w-4 h-4 mr-2" />
+                AI-Powered Smart DOOH Ad Network
+              </Badge>
+            </div>
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
               <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold leading-tight" data-testid="text-hero-title">
-                India's Largest Digital
+                India's Largest
                 <br />
                 <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent animate-gradient bg-300%">
-                  Out-of-Home
+                  AI-Enabled DOOH
                 </span>{' '}
                 Advertising Network
               </h1>
             </div>
             <div className="animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200">
               <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed" data-testid="text-hero-subtitle">
-                Discover premium DOOH screens across India. Book instantly, launch campaigns in minutes, and track real-time performance.
+                Leverage AI-driven campaign creation, smart screen matching, and intelligent audience targeting. Book premium DOOH screens instantly and launch data-powered campaigns in minutes.
               </p>
             </div>
             
