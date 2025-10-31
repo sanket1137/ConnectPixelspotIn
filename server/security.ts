@@ -32,6 +32,11 @@ export function setupSecurity(app: Express) {
         replitDevDomain ? `https://${replitDevDomain}` : '',
       ].filter(Boolean);
 
+  console.log('🔧 CORS Configuration:', { 
+    NODE_ENV: process.env.NODE_ENV, 
+    allowedOrigins 
+  });
+
   app.use(cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, Postman, etc.)
@@ -41,6 +46,7 @@ export function setupSecurity(app: Express) {
         callback(null, true);
       } else {
         console.warn(`⚠️ CORS blocked request from origin: ${origin}`);
+        console.warn(`   Allowed origins:`, allowedOrigins);
         callback(new Error('Not allowed by CORS'));
       }
     },
