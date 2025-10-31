@@ -516,6 +516,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DEV ONLY: List all Firebase users
+  app.get("/api/dev/firebase-users", async (req, res) => {
+    try {
+      const listUsersResult = await firebaseAdmin.listUsers(1000);
+      const users = listUsersResult.users.map(user => ({
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        emailVerified: user.emailVerified,
+        disabled: user.disabled,
+        createdAt: user.metadata.creationTime,
+        lastSignIn: user.metadata.lastSignInTime,
+        providers: user.providerData.map(p => p.providerId),
+      }));
+      res.json({ 
+        count: users.length,
+        users 
+      });
+    } catch (error) {
+      console.error("List Firebase users error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // DEV ONLY: Delete Firebase user by email
+  app.delete("/api/dev/firebase-user/:email", async (req, res) => {
+    try {
+      const { email } = req.params;
+      
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Get user by email
+      const user = await firebaseAdmin.getUserByEmail(email);
+      
+      // Delete the user
+      await firebaseAdmin.deleteUser(user.uid);
+      
+      res.json({ 
+        success: true,
+        message: `Firebase user ${email} (${user.uid}) deleted successfully`,
+        deletedUser: {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+        }
+      });
+    } catch (error: any) {
+      console.error("Delete Firebase user error:", error);
+      if (error.code === 'auth/user-not-found') {
+        return res.status(404).json({ error: "User not found in Firebase" });
+      }
+      res.status(500).json({ error: error.message || "Internal server error" });
+    }
+  });
+
   // ========== OBJECT STORAGE ROUTES ==========
   
   // Get upload URL for file uploads
