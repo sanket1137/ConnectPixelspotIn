@@ -2,6 +2,17 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupSecurity } from "./security";
+import { config } from "dotenv";
+import { resolve } from "path";
+
+// Load environment variables from .env.production in production
+if (process.env.NODE_ENV === "production") {
+  const envPath = resolve(process.cwd(), ".env.production");
+  config({ path: envPath });
+  console.log("✅ Loaded environment from .env.production");
+} else {
+  config();
+}
 
 const app = express();
 
