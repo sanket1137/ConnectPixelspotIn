@@ -23,6 +23,7 @@ export function setupSecurity(app: Express) {
     ? [
         'https://pixelspot.in',
         'https://www.pixelspot.in',
+        'https://connect.pixelspot.in',
         replitDevDomain ? `https://${replitDevDomain}` : '',
       ].filter(Boolean)
     : [
