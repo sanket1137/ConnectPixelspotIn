@@ -1,11 +1,25 @@
 import admin from "firebase-admin";
 
 // Initialize Firebase Admin SDK
-// For development, we use applicationDefault() which works in Replit environment
 if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: process.env.VITE_FIREBASE_PROJECT_ID,
-  });
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  
+  if (privateKey && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PROJECT_ID) {
+    // Use service account credentials
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: privateKey,
+      }),
+      projectId: process.env.FIREBASE_PROJECT_ID,
+    });
+  } else {
+    // Fallback to default credentials (for environments like Replit)
+    admin.initializeApp({
+      projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+    });
+  }
 }
 
 export const auth = admin.auth();
