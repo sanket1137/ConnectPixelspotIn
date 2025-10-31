@@ -1,11 +1,7 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
-import { setupSecurity } from "./security";
+// Load environment variables FIRST, before any other imports
 import { config } from "dotenv";
 import { resolve } from "path";
 
-// Load environment variables from .env.production in production
 if (process.env.NODE_ENV === "production") {
   const envPath = resolve(process.cwd(), ".env.production");
   config({ path: envPath });
@@ -13,6 +9,11 @@ if (process.env.NODE_ENV === "production") {
 } else {
   config();
 }
+
+import express, { type Request, Response, NextFunction } from "express";
+import { registerRoutes } from "./routes";
+import { setupVite, serveStatic, log } from "./vite";
+import { setupSecurity } from "./security";
 
 const app = express();
 
