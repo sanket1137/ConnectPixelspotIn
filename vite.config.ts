@@ -27,6 +27,7 @@ export default defineConfig({
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
+  publicDir: path.resolve(import.meta.dirname, "client/public"),
   envDir: path.resolve(import.meta.dirname), // Look for .env files in project root
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),

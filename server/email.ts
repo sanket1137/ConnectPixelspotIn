@@ -11,14 +11,18 @@ class AWSEmailService {
 
   private initializeService(): boolean {
     if (!process.env.AWS_SES_SMTP_USER || !process.env.AWS_SES_SMTP_PASSWORD) {
-      console.warn('⚠️  AWS SES credentials not found. Email OTPs will be logged to console.');
+      console.warn('⚠️  AWS SES credentials not found. Email notifications will be skipped.');
       return false;
     }
 
     try {
+      // Get AWS SES region from env (default to us-east-1)
+      const sesRegion = process.env.AWS_SES_REGION || 'us-east-1';
+      const smtpHost = `email-smtp.${sesRegion}.amazonaws.com`;
+      
       // Configure Nodemailer with AWS SES SMTP
       this.transporter = nodemailer.createTransport({
-        host: 'email-smtp.ap-south-1.amazonaws.com',
+        host: smtpHost,
         port: 587,
         secure: false, // Use STARTTLS
         auth: {
@@ -26,9 +30,14 @@ class AWSEmailService {
           pass: process.env.AWS_SES_SMTP_PASSWORD,
         },
         debug: false,
+        // Add aggressive timeouts to prevent hanging (important: SMTP ports often blocked)
+        connectionTimeout: 3000, // 3 seconds to connect
+        greetingTimeout: 3000,   // 3 seconds for server greeting
+        socketTimeout: 5000,     // 5 seconds for any socket operation
       });
 
-      console.log('✅ AWS SES email service initialized');
+      console.log(`✅ AWS SES email service initialized (region: ${sesRegion})`);
+      console.warn(`⚠️  Note: If SMTP port 587 is blocked by firewall, emails will be skipped (non-critical)`);
       return true;
     } catch (error) {
       console.error('❌ AWS SES initialization failed:', error);
@@ -51,17 +60,30 @@ class AWSEmailService {
     }
 
     try {
-      const info = await this.transporter.sendMail({
-        from: `"Pixelspot" <${this.fromEmail}>`,
-        to: options.to,
-        subject: options.subject,
-        text: options.text,
-        html: options.html,
-      });
+      // Add timeout wrapper to prevent hanging (3 seconds max for entire operation)
+      const sendWithTimeout = Promise.race([
+        this.transporter.sendMail({
+          from: `"Pixelspot" <${this.fromEmail}>`,
+          to: options.to,
+          subject: options.subject,
+          text: options.text,
+          html: options.html,
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Email send timeout after 3s')), 3000)
+        )
+      ]);
 
-      console.log('✅ Email sent:', info.messageId);
+      const info = await sendWithTimeout;
+      console.log('✅ Email sent:', (info as any).messageId);
       return true;
     } catch (error: any) {
+      // Handle timeout or connection errors (common when SMTP ports blocked)
+      if (error.message?.includes('timeout') || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+        console.warn(`⚠️  Email skipped (SMTP port likely blocked): ${options.subject} to ${options.to}`);
+        return false; // Non-critical failure
+      }
+      
       // Handle unverified email error (sandbox mode)
       if (error.message?.includes('Email address is not verified')) {
         console.log('\n🚀 AWS SES UNVERIFIED EMAIL - DEV BYPASS');

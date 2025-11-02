@@ -4,3 +4,50 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+.env
+.env.local
+.env.production
+.env.production.server
+.env.development
+
+# SSH keys
+pixelssh
+pixelssh.pub
+*.pem
+*.key
+
+# Logs
+logs/
+*.log
+pm2-*.log
+
+# Deployment scripts with credentials
+deploy.ps1
+
+# Debug/test files
+test-db.js
+debug-key.js
+load-env.js
+
+# Documentation (keep only essential ones)
+ADMIN_USERS_SETUP.md
+DEPLOYMENT_DATABASE_SSL_CONFIG.md
+DEPLOYMENT_GUIDE.md
+ENVIRONMENT_GUIDE.md
+FIREWALL_FIX_POSTGRESQL.md
+MOBILE_VALIDATION_UPDATE.md
+QUICK_REFERENCE.md
+SEO_FAVICON_SETUP.md
+FAVICON_QUICK_GUIDE.md
+
+# SQL scripts with data
+admin-users-setup.sql
+create-admin-users.ts
+update-admin-db.ts
+
+# Server environment loader (generated)
+server/env-loader.mjs
+
+# Scripts folder (if contains credentials)
+scripts/create-admin-users.mjs
+scripts/create-admin-users.ts

@@ -6,6 +6,7 @@ interface OTPData {
   expiresAt: number;
   type: 'email' | 'mobile';
   target: string; // email address or mobile number
+  used?: boolean; // Track if OTP has been used
 }
 
 const otpStore = new Map<string, OTPData>();
@@ -43,20 +44,43 @@ export function verifyOTP(identifier: string, code: string): boolean {
   const otpData = otpStore.get(identifier);
   
   if (!otpData) {
+    console.log(`❌ OTP not found for identifier: ${identifier}`);
     return false;
   }
   
   if (otpData.expiresAt < Date.now()) {
+    console.log(`❌ OTP expired for identifier: ${identifier}`);
     otpStore.delete(identifier);
     return false;
   }
+
+  // Check if OTP was already used (within last 30 seconds)
+  if (otpData.used) {
+    const timeSinceUse = Date.now() - (otpData.expiresAt - 10 * 60 * 1000);
+    if (timeSinceUse < 30000) { // 30 seconds grace period for duplicate requests
+      console.log(`✅ OTP already used recently for ${identifier}, allowing duplicate verification`);
+      return true;
+    } else {
+      console.log(`❌ OTP already used for identifier: ${identifier}`);
+      return false;
+    }
+  }
   
   if (otpData.code !== code) {
+    console.log(`❌ OTP code mismatch for identifier: ${identifier}`);
     return false;
   }
   
-  // OTP is valid, delete it
-  otpStore.delete(identifier);
+  // Mark OTP as used instead of deleting it immediately
+  otpData.used = true;
+  console.log(`✅ OTP verified and marked as used for identifier: ${identifier}`);
+  
+  // Schedule deletion after 30 seconds (grace period for retries)
+  setTimeout(() => {
+    otpStore.delete(identifier);
+    console.log(`🗑️ OTP deleted for identifier: ${identifier}`);
+  }, 30000);
+  
   return true;
 }
 
@@ -148,12 +172,15 @@ class ComBirdsSMSService {
       if (response.ok && result.data?.msg?.includes('SMS Submitted')) {
         console.log(`✅ SMS sent to +91 ${cleanMobile}`);
         console.log(`📱 Transaction ID: ${result.data.transactionId}`);
+        console.log(`📤 Sender ID: ${this.config.senderId}`);
+        console.log(`📋 Full response:`, JSON.stringify(result));
         return {
           success: true,
           message: `OTP sent to +91 ${cleanMobile}`
         };
       } else {
         console.error('ComBirds SMS error:', result);
+        console.error(`❌ Failed with sender ID: ${this.config.senderId}`);
         return {
           success: false,
           message: 'Failed to send SMS',

@@ -1,0 +1,21 @@
+# PixelSpot - Robots.txt
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://connect.pixelspot.in/sitemap.xml
+
+# Crawl-delay
+Crawl-delay: 1
+
+# Disallow admin and private routes
+Disallow: /admin/
+Disallow: /api/
+Disallow: /dashboard/settings/
+Disallow: /profile/
+
+# Allow important pages
+Allow: /
+Allow: /screens
+Allow: /find-screens
+Allow: /campaigns

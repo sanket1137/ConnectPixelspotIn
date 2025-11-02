@@ -315,6 +315,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Mobile number is required" });
       }
 
+      // Check if mobile number is already registered with another user
+      const existingUser = await storage.getUserByMobileNumber(mobile);
+      if (existingUser && existingUser.id !== req.user!.id) {
+        return res.status(400).json({ 
+          error: "This mobile number is already registered with another account. Please use a different number or contact support." 
+        });
+      }
+
       const code = storeOTP(mobile, 'mobile', mobile);
       await sendMobileOTP(mobile, code);
 
@@ -334,15 +342,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Mobile and code are required" });
       }
 
+      console.log(`🔐 OTP verification attempt for mobile: ${mobile}, user: ${req.user!.id}`);
+
+      // Check if user is already verified
+      if (req.user!.mobileVerified) {
+        console.log(`✅ User ${req.user!.id} mobile already verified, skipping OTP check`);
+        return res.json({ success: true, message: "Mobile verified successfully" });
+      }
+
       const isValid = verifyOTP(mobile, code);
       
       if (!isValid) {
+        console.log(`❌ Invalid OTP for mobile: ${mobile}`);
         return res.status(400).json({ error: "Invalid or expired OTP" });
       }
 
+      console.log(`✅ Valid OTP for mobile: ${mobile}, marking user as verified`);
+      
       // Mark mobile as verified
       await storage.verifyUserMobile(req.user!.id);
 
+      console.log(`✅ Mobile verified successfully for user: ${req.user!.id}`);
       res.json({ success: true, message: "Mobile verified successfully" });
     } catch (error) {
       console.error("Verify mobile OTP error:", error);
@@ -363,6 +383,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         state, 
         mobileNumber 
       } = req.body;
+
+      // Note: Mobile number validation happens at OTP stage (send-mobile endpoint)
+      // By the time we reach here, the mobile number has been verified via OTP
+      // So we trust it's valid and available (or already belongs to this user)
 
       const updateData: any = {};
       if (name) updateData.name = name;
@@ -385,6 +409,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ user });
     } catch (error) {
       console.error("Update profile error:", error);
+      // Catch any unexpected database constraint violations
+      if (error instanceof Error && error.message.includes("unique constraint")) {
+        return res.status(400).json({ 
+          error: "A unique constraint was violated. Please check your input and try again." 
+        });
+      }
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -761,16 +791,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Screen not found" });
       }
 
-      // Send approval email to screen owner
+      // Send approval email to screen owner (non-blocking, fire-and-forget)
       if (screen.ownerId) {
-        const owner = await storage.getUser(screen.ownerId);
-        if (owner) {
-          await notificationService.sendScreenApprovalEmail(owner, screen).catch(err => 
-            console.error("Failed to send screen approval email:", err)
-          );
-        }
+        storage.getUser(screen.ownerId)
+          .then(owner => {
+            if (owner) {
+              notificationService.sendScreenApprovalEmail(owner, screen)
+                .catch(err => console.warn("Screen approval email failed (non-critical):", err.message));
+            }
+          })
+          .catch(err => console.warn("Failed to get owner for email notification:", err.message));
       }
 
+      // Respond immediately without waiting for email
       res.json(screen);
     } catch (error) {
       console.error("Approve screen error:", error);

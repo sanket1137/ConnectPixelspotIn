@@ -103,13 +103,27 @@ export default function ProfileCompletion() {
       setOtpSent(true);
       toast({
         title: "OTP Sent",
-        description: "Check your console for the OTP code (SMS integration pending)",
+        description: "Please check your mobile for the OTP code",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      // Extract the actual error message from the API response
+      let errorMessage = "Failed to send OTP";
+      try {
+        // Error format: "400: {"error":"message"}"
+        const match = error.message.match(/\d+:\s*({.*})/);
+        if (match) {
+          const errorData = JSON.parse(match[1]);
+          errorMessage = errorData.error || errorMessage;
+        }
+      } catch (e) {
+        // If parsing fails, use the full error message
+        errorMessage = error.message.replace(/^\d+:\s*/, '');
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to send OTP",
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -127,10 +141,22 @@ export default function ProfileCompletion() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      // Extract the actual error message from the API response
+      let errorMessage = "Invalid or expired OTP";
+      try {
+        const match = error.message.match(/\d+:\s*({.*})/);
+        if (match) {
+          const errorData = JSON.parse(match[1]);
+          errorMessage = errorData.error || errorMessage;
+        }
+      } catch (e) {
+        errorMessage = error.message.replace(/^\d+:\s*/, '');
+      }
+      
       toast({
         title: "Verification Failed",
-        description: "Invalid or expired OTP",
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -151,10 +177,22 @@ export default function ProfileCompletion() {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       window.location.href = "/";
     },
-    onError: () => {
+    onError: (error: Error) => {
+      // Extract the actual error message from the API response
+      let errorMessage = "Failed to update profile";
+      try {
+        const match = error.message.match(/\d+:\s*({.*})/);
+        if (match) {
+          const errorData = JSON.parse(match[1]);
+          errorMessage = errorData.error || errorMessage;
+        }
+      } catch (e) {
+        errorMessage = error.message.replace(/^\d+:\s*/, '');
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to update profile",
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -270,7 +308,7 @@ export default function ProfileCompletion() {
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Check your browser console for the OTP (SMS integration pending)
+                        Please check your mobile for the OTP code
                       </p>
                     </div>
                   )}

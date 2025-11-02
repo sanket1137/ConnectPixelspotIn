@@ -1,0 +1,25 @@
+{
+  "name": "PixelSpot - Digital Advertising Network",
+  "short_name": "PixelSpot",
+  "description": "India's premier digital outdoor advertising platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "/favicon-dark.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon-light.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "marketing", "advertising"],
+  "orientation": "any"
+}

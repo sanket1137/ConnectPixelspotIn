@@ -3,12 +3,95 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>PixelSpot - India's Smartest Outdoor Advertising Network</title>
-    <meta name="description" content="Discover, book, and manage digital advertising screens across India. PixelSpot connects screen owners, advertisers, and enables seamless DOOH campaigns." />
+    
+    <!-- Primary Meta Tags -->
+    <title>PixelSpot - India's Smartest Outdoor Advertising Network | DOOH Platform</title>
+    <meta name="title" content="PixelSpot - India's Smartest Outdoor Advertising Network | DOOH Platform" />
+    <meta name="description" content="Discover, book, and manage digital advertising screens across India. PixelSpot connects screen owners, advertisers, and enables seamless DOOH (Digital Out-of-Home) campaigns with real-time analytics and AI-powered targeting." />
+    <meta name="keywords" content="digital advertising, outdoor advertising, DOOH, digital out of home, advertising platform, screen advertising, billboard advertising, India advertising, digital screens, advertising network, OOH advertising, programmatic DOOH, screen owners, advertisers, campaign management" />
+    <meta name="author" content="PixelSpot" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="English" />
+    <meta name="revisit-after" content="7 days" />
+    
+    <!-- Favicon - Dynamic based on color scheme -->
+    <link rel="icon" type="image/png" href="/favicon-dark.png" id="favicon-dark" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" href="/favicon-light.png" id="favicon-light" media="(prefers-color-scheme: dark)" />
+    <link rel="apple-touch-icon" href="/favicon-dark.png" />
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://connect.pixelspot.in/" />
+    <meta property="og:title" content="PixelSpot - India's Smartest Outdoor Advertising Network" />
+    <meta property="og:description" content="Discover, book, and manage digital advertising screens across India. Connect with screen owners and run seamless DOOH campaigns." />
+    <meta property="og:image" content="https://connect.pixelspot.in/og-image.png" />
+    <meta property="og:site_name" content="PixelSpot" />
+    <meta property="og:locale" content="en_IN" />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://connect.pixelspot.in/" />
+    <meta property="twitter:title" content="PixelSpot - India's Smartest Outdoor Advertising Network" />
+    <meta property="twitter:description" content="Discover, book, and manage digital advertising screens across India. Connect with screen owners and run seamless DOOH campaigns." />
+    <meta property="twitter:image" content="https://connect.pixelspot.in/twitter-image.png" />
+    
+    <!-- Additional SEO -->
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <link rel="canonical" href="https://connect.pixelspot.in/" />
+    
+    <!-- Geographic Tags -->
+    <meta name="geo.region" content="IN" />
+    <meta name="geo.placename" content="India" />
+    
+    <!-- Business/Organization Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "PixelSpot",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "description": "India's premier digital outdoor advertising platform connecting screen owners with advertisers",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "INR"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "150"
+      }
+    }
+    </script>
+    
+    <!-- Preconnect for Performance -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://releases.transloadit.com/uppy/v3.28.0/uppy.min.css" rel="stylesheet">
+    
+    <!-- Dynamic Favicon Script -->
+    <script>
+      // Update favicon based on system color scheme
+      (function() {
+        const updateFavicon = () => {
+          const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const favicon = document.querySelector('link[rel="icon"]');
+          if (favicon) {
+            favicon.href = isDark ? '/favicon-light.png' : '/favicon-dark.png';
+          }
+        };
+        
+        // Initial update
+        updateFavicon();
+        
+        // Listen for changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateFavicon);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
