@@ -251,7 +251,7 @@ export default function AddScreen() {
   const contentTypes = ["Static Image", "Video", "Interactive", "HTML5"];
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 md:p-8 max-w-6xl mx-auto space-y-4 sm:space-y-6">
       <div>
         <Button
           variant="ghost"
