@@ -815,7 +815,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/admin/screens/:id/reject", authenticate, requireRole("admin"), async (req, res) => {
     try {
       const { id } = req.params;
-      const screen = await storage.updateScreenStatus(id, "inactive");
+      const { reason } = req.body;
+      const screen = await storage.updateScreenStatus(id, "inactive", reason);
       
       if (!screen) {
         return res.status(404).json({ error: "Screen not found" });

@@ -34,7 +34,7 @@ export interface IStorage {
   getDistinctCities(): Promise<string[]>;
   createScreen(screen: InsertScreen): Promise<Screen>;
   updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined>;
-  updateScreenStatus(id: string, status: string): Promise<Screen | undefined>;
+  updateScreenStatus(id: string, status: string, rejectionReason?: string): Promise<Screen | undefined>;
   deleteScreen(id: string): Promise<boolean>;
   
   // Campaign methods
@@ -172,8 +172,12 @@ export class DatabaseStorage implements IStorage {
     return screen || undefined;
   }
 
-  async updateScreenStatus(id: string, status: string): Promise<Screen | undefined> {
-    const [screen] = await db.update(screens).set({ status }).where(eq(screens.id, id)).returning();
+  async updateScreenStatus(id: string, status: string, rejectionReason?: string): Promise<Screen | undefined> {
+    const updateData: any = { status };
+    if (rejectionReason) {
+      updateData.rejectionReason = rejectionReason;
+    }
+    const [screen] = await db.update(screens).set(updateData).where(eq(screens.id, id)).returning();
     return screen || undefined;
   }
 

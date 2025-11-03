@@ -98,6 +98,7 @@ export const screens = pgTable("screens", {
   operationalHours: text("operational_hours"), // JSON string: {"start": "06:00", "end": "22:00"}
   images: text("images").array(), // array of image URLs from object storage
   status: text("status").notNull().default("pending"), // pending, active, inactive
+  rejectionReason: text("rejection_reason"), // Admin's reason for rejecting the screen
   ownedByAdmin: boolean("owned_by_admin").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
