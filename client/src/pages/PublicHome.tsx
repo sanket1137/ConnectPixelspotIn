@@ -16,10 +16,10 @@ interface PublicScreensResponse {
   count: number;
 }
 
-const mapContainerStyle = {
+const getMapContainerStyle = () => ({
   width: '100%',
-  height: '500px',
-};
+  height: window.innerWidth < 640 ? '300px' : window.innerWidth < 1024 ? '400px' : '500px',
+});
 
 const defaultCenter = {
   lat: 20.5937,
@@ -115,21 +115,23 @@ export default function PublicHome() {
               <img 
                 src={logo} 
                 alt="Pixelspot" 
-                className="h-10 w-auto cursor-pointer"
+                className="h-8 sm:h-10 w-auto cursor-pointer"
                 data-testid="img-logo"
               />
             </Link>
             
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <Link href="/login">
-                <Button variant="ghost" data-testid="button-header-login">
-                  Login
+                <Button variant="ghost" size="sm" className="sm:size-default" data-testid="button-header-login">
+                  <span className="hidden sm:inline">Login</span>
+                  <span className="sm:hidden">Log in</span>
                 </Button>
               </Link>
               <Link href="/register?role=advertiser">
-                <Button data-testid="button-header-signup">
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Sign Up Free
+                <Button size="sm" className="sm:size-default" data-testid="button-header-signup">
+                  <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Sign Up Free</span>
+                  <span className="sm:hidden">Sign Up</span>
                 </Button>
               </Link>
             </div>
@@ -140,16 +142,16 @@ export default function PublicHome() {
       {/* Hero Section */}
       <div className="bg-gradient-to-br from-primary/10 via-background to-background border-b overflow-hidden relative">
         <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]" />
-        <div className="container mx-auto px-4 py-20 md:py-28 relative">
-          <div className="max-w-5xl mx-auto text-center space-y-8">
+        <div className="container mx-auto px-4 py-12 sm:py-16 md:py-20 lg:py-28 relative">
+          <div className="max-w-5xl mx-auto text-center space-y-6 sm:space-y-8">
             <div className="animate-in fade-in slide-in-from-bottom-3 duration-1000">
-              <Badge className="mb-6 text-sm px-4 py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30 hover-elevate" data-testid="badge-ai-powered">
-                <Sparkles className="w-4 h-4 mr-2" />
+              <Badge className="mb-4 sm:mb-6 text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30 hover-elevate" data-testid="badge-ai-powered">
+                <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 AI-Powered Smart DOOH Ad Network
               </Badge>
             </div>
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
-              <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold leading-tight" data-testid="text-hero-title">
+              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold leading-tight" data-testid="text-hero-title">
                 India's Largest
                 <br />
                 <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent animate-gradient bg-300%">
@@ -159,7 +161,7 @@ export default function PublicHome() {
               </h1>
             </div>
             <div className="animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200">
-              <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed" data-testid="text-hero-subtitle">
+              <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed px-4" data-testid="text-hero-subtitle">
                 Leverage AI-driven campaign creation, smart screen matching, and intelligent audience targeting. Book premium DOOH screens instantly and launch data-powered campaigns in minutes.
               </p>
             </div>
@@ -203,22 +205,22 @@ export default function PublicHome() {
               </Card>
             </div>
 
-            <div className="flex items-center justify-center gap-4 pt-6 animate-in fade-in slide-in-from-bottom-7 duration-1000 delay-500">
-              <Link href="/register?role=advertiser">
-                <Button size="lg" className="text-lg px-8 h-14 group" data-testid="button-hero-cta">
-                  <Sparkles className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" />
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 pt-4 sm:pt-6 animate-in fade-in slide-in-from-bottom-7 duration-1000 delay-500 px-4">
+              <Link href="/register?role=advertiser" className="w-full sm:w-auto">
+                <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group" data-testid="button-hero-cta">
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:rotate-12 transition-transform" />
                   Start Advertising
-                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
               <Button 
                 size="lg" 
                 variant="outline"
-                className="text-lg px-8 h-14 group"
+                className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group"
                 onClick={() => window.scrollTo({ top: 800, behavior: 'smooth' })}
                 data-testid="button-hero-explore"
               >
-                <Search className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
+                <Search className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:scale-110 transition-transform" />
                 Explore Screens
               </Button>
             </div>
@@ -284,17 +286,17 @@ export default function PublicHome() {
       )}
 
       {/* Main Content - Map & Screens */}
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="container mx-auto px-4 py-6 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
           {/* Filters Sidebar */}
           <div className="lg:col-span-1 space-y-4">
             <Card data-testid="card-filters">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Filter className="w-5 h-5" />
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
                   Filters
                 </CardTitle>
-                <CardDescription>Refine your search</CardDescription>
+                <CardDescription className="text-xs sm:text-sm">Refine your search</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 {/* City Filter */}
@@ -433,7 +435,7 @@ export default function PublicHome() {
                 <CardContent className="p-0">
                   <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}>
                     <GoogleMap
-                      mapContainerStyle={mapContainerStyle}
+                      mapContainerStyle={getMapContainerStyle()}
                       center={defaultCenter}
                       zoom={5}
                       options={{
@@ -473,7 +475,7 @@ export default function PublicHome() {
             )}
 
             {/* Screen Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {screensLoading ? (
                 <div className="col-span-full text-center py-12">
                   <Monitor className="w-12 h-12 mx-auto text-muted-foreground mb-4 animate-pulse" />
@@ -575,16 +577,16 @@ export default function PublicHome() {
       </div>
 
       {/* Discover Perfect Screen Section */}
-      <div className="bg-gradient-to-br from-primary/5 to-background border-t mt-16 overflow-hidden relative">
+      <div className="bg-gradient-to-br from-primary/5 to-background border-t mt-8 sm:mt-12 md:mt-16 overflow-hidden relative">
         <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]" />
-        <div className="container mx-auto px-4 py-20 relative">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <Badge className="text-sm px-4 py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30">
-                <MapPin className="w-4 h-4 mr-2" />
+        <div className="container mx-auto px-4 py-12 sm:py-16 md:py-20 relative">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-10 md:gap-12 items-center">
+            <div className="space-y-4 sm:space-y-6">
+              <Badge className="text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30">
+                <MapPin className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 Precision Targeting
               </Badge>
-              <h2 className="text-5xl md:text-6xl font-bold leading-tight">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
                 Discover the
                 <br />
                 <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent">
@@ -593,20 +595,20 @@ export default function PublicHome() {
                 <br />
                 for your brand
               </h2>
-              <p className="text-xl text-muted-foreground leading-relaxed">
+              <p className="text-base sm:text-lg md:text-xl text-muted-foreground leading-relaxed">
                 Pinpoint high-impact locations with AI-powered recommendations. Our intelligent platform analyzes audience demographics, footfall patterns, and engagement data to match your brand with the most effective DOOH screens across India.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                <Link href="/register?role=advertiser">
-                  <Button size="lg" className="text-lg px-8 h-14 group" data-testid="button-discover-cta">
-                    <Search className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 sm:pt-4">
+                <Link href="/register?role=advertiser" className="w-full sm:w-auto">
+                  <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group" data-testid="button-discover-cta">
+                    <Search className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:scale-110 transition-transform" />
                     Explore Screens
-                    <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </Link>
               </div>
             </div>
-            <div className="relative">
+            <div className="relative mt-8 lg:mt-0">
               <div className="relative rounded-2xl overflow-hidden border border-primary/20 shadow-2xl">
                 <img 
                   src="https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800" 
@@ -615,9 +617,9 @@ export default function PublicHome() {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
               </div>
-              <div className="absolute -bottom-6 -right-6 bg-primary text-primary-foreground p-6 rounded-2xl shadow-xl border border-primary/20">
-                <p className="text-4xl font-bold">{screens.length}+</p>
-                <p className="text-sm font-medium">Premium Screens</p>
+              <div className="absolute -bottom-4 sm:-bottom-6 -right-4 sm:-right-6 bg-primary text-primary-foreground p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-xl border border-primary/20">
+                <p className="text-2xl sm:text-3xl md:text-4xl font-bold">{screens.length}+</p>
+                <p className="text-xs sm:text-sm font-medium">Premium Screens</p>
               </div>
             </div>
           </div>
@@ -625,27 +627,27 @@ export default function PublicHome() {
       </div>
 
       {/* From Discovery to Delivery Section */}
-      <div className="bg-gradient-to-br from-background to-primary/10 border-y mt-16">
-        <div className="container mx-auto px-4 py-20">
-          <div className="text-center mb-16 space-y-4">
-            <Badge className="text-sm px-4 py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30">
-              <Sparkles className="w-4 h-4 mr-2" />
+      <div className="bg-gradient-to-br from-background to-primary/10 border-y mt-8 sm:mt-12 md:mt-16">
+        <div className="container mx-auto px-4 py-12 sm:py-16 md:py-20">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
+            <Badge className="text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30">
+              <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               Complete Solution
             </Badge>
-            <h2 className="text-5xl md:text-6xl font-bold leading-tight">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
               From Discovery
               <br />
               <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent">
                 to Delivery
               </span>
             </h2>
-            <p className="text-2xl text-muted-foreground max-w-3xl mx-auto">
+            <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto px-4">
               All powered by AI on one intelligent dashboard
             </p>
           </div>
 
           {/* Features Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {/* AI Campaign Creation */}
             <Card className="hover-elevate border-primary/20">
               <CardHeader>
@@ -740,18 +742,18 @@ export default function PublicHome() {
       </div>
 
       {/* How It Works Section */}
-      <div className="container mx-auto px-4 py-20">
-        <div className="text-center mb-16 space-y-4">
-          <Badge className="text-sm px-4 py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30">
+      <div className="container mx-auto px-4 py-12 sm:py-16 md:py-20">
+        <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
+          <Badge className="text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30">
             Simple Process
           </Badge>
-          <h2 className="text-5xl md:text-6xl font-bold">How It Works</h2>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold">How It Works</h2>
+          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto px-4">
             Launch your DOOH campaign in 4 simple steps
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
           {/* Step 1 */}
           <div className="relative">
             <div className="text-center space-y-4">
@@ -807,32 +809,32 @@ export default function PublicHome() {
           </div>
         </div>
 
-        <div className="text-center mt-12">
-          <Link href="/register?role=advertiser">
-            <Button size="lg" className="text-lg px-8 h-14 group" data-testid="button-howitworks-cta">
-              <Sparkles className="w-5 h-5 mr-2" />
+        <div className="text-center mt-8 sm:mt-10 md:mt-12">
+          <Link href="/register?role=advertiser" className="inline-block w-full sm:w-auto">
+            <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group" data-testid="button-howitworks-cta">
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
               Get Started Now
-              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
           </Link>
         </div>
       </div>
 
       {/* Bottom CTA */}
-      <div className="bg-gradient-to-br from-primary/10 to-background border-t mt-16">
-        <div className="container mx-auto px-4 py-16 text-center">
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">Ready to Reach Millions?</h2>
-          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
+      <div className="bg-gradient-to-br from-primary/10 to-background border-t mt-8 sm:mt-12 md:mt-16">
+        <div className="container mx-auto px-4 py-12 sm:py-14 md:py-16 text-center">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4">Ready to Reach Millions?</h2>
+          <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
             Join hundreds of brands using Pixelspot to create impactful DOOH campaigns across India's top locations.
           </p>
-          <Link href="/register?role=advertiser">
-            <Button size="lg" className="text-lg px-8 py-6" data-testid="button-bottom-cta">
-              <Sparkles className="w-5 h-5 mr-2" />
+          <Link href="/register?role=advertiser" className="inline-block w-full sm:w-auto px-4">
+            <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14" data-testid="button-bottom-cta">
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
               Start Your Campaign - Free
-              <ArrowRight className="w-5 h-5 ml-2" />
+              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2" />
             </Button>
           </Link>
-          <p className="text-sm text-muted-foreground mt-4">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-3 sm:mt-4">
             No credit card required • Launch in minutes
           </p>
         </div>
