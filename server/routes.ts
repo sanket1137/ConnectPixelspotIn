@@ -1739,10 +1739,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========== AI CAMPAIGN ADVISOR ROUTES ==========
 
+  // Fetch website content for analysis
+  app.post("/api/ai/fetch-website", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { url } = req.body;
+
+      if (!url) {
+        return res.status(400).json({ error: "URL is required" });
+      }
+
+      // Validate URL format
+      let validUrl: URL;
+      try {
+        validUrl = new URL(url.startsWith('http') ? url : `https://${url}`);
+      } catch (error) {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+
+      // Fetch the website content
+      const response = await fetch(validUrl.toString(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; PixelSpot/1.0; +https://pixelspot.com)'
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (!response.ok) {
+        return res.status(400).json({ error: "Failed to fetch website" });
+      }
+
+      const html = await response.text();
+
+      // Extract basic information from HTML
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      const title = titleMatch ? titleMatch[1].trim() : '';
+
+      const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
+      const description = descMatch ? descMatch[1].trim() : '';
+
+      // Extract text content (remove HTML tags and scripts)
+      let textContent = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // Limit content to first 2000 characters
+      textContent = textContent.substring(0, 2000);
+
+      res.json({
+        content: textContent,
+        title,
+        description
+      });
+    } catch (error) {
+      console.error("Fetch website error:", error);
+      res.status(500).json({ error: "Failed to fetch website content" });
+    }
+  });
+
   // AI Campaign Advisor chat endpoint
   app.post("/api/ai/campaign-advisor", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
-      const { messages } = req.body;
+      const { messages, websiteUrl, campaignType } = req.body;
 
       if (!messages || !Array.isArray(messages)) {
         return res.status(400).json({ error: "Messages array is required" });
@@ -1752,7 +1813,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "OpenAI API key not configured" });
       }
 
-      const result = await getCampaignAdvice(messages, storage);
+      // Fetch website context if URL is provided
+      let websiteContext: string | undefined;
+      if (websiteUrl) {
+        try {
+          const validUrl = new URL(websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`);
+          const response = await fetch(validUrl.toString(), {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; PixelSpot/1.0; +https://pixelspot.com)'
+            },
+            redirect: 'follow',
+            signal: AbortSignal.timeout(10000)
+          });
+
+          if (response.ok) {
+            const html = await response.text();
+            const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+            const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
+            
+            let textContent = html
+              .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .substring(0, 2000);
+
+            websiteContext = `Website: ${titleMatch ? titleMatch[1] : ''}\n${descMatch ? descMatch[1] : ''}\n${textContent}`;
+          }
+        } catch (error) {
+          console.warn("Failed to fetch website, continuing without context:", error);
+        }
+      }
+
+      const result = await getCampaignAdvice(messages, storage, websiteContext, campaignType);
       res.json(result);
     } catch (error) {
       console.error("AI Campaign Advisor error:", error);

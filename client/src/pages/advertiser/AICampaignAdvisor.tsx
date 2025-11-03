@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Send, User, Bot, MapPin, DollarSign, Calendar, ArrowRight } from "lucide-react";
+import { Sparkles, Send, User, Bot, MapPin, DollarSign, Calendar, ArrowRight, Globe, Zap } from "lucide-react";
 import { useLocation } from "wouter";
 import { auth } from "@/lib/firebase";
 
@@ -32,12 +32,15 @@ export default function AICampaignAdvisor() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hello! I'm your AI Campaign Advisor. I'll help you create an effective DOOH advertising campaign by understanding your business, target audience, and goals.\n\nTell me about your business and what you'd like to achieve with this campaign.",
+      content: "Get instant screen recommendations! Add your website URL or choose a campaign type, then tell me about your goals.",
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [campaignType, setCampaignType] = useState("");
+  const [showQuickStart, setShowQuickStart] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [, setLocation] = useLocation();
 
@@ -60,6 +63,7 @@ export default function AICampaignAdvisor() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    setShowQuickStart(false);
 
     try {
       // Get Firebase auth token
@@ -81,6 +85,8 @@ export default function AICampaignAdvisor() {
             role: m.role,
             content: m.content,
           })),
+          websiteUrl: websiteUrl || undefined,
+          campaignType: campaignType || undefined,
         }),
       });
 
@@ -130,6 +136,61 @@ export default function AICampaignAdvisor() {
           <p className="text-muted-foreground">Get personalized screen recommendations for your campaign</p>
         </div>
       </div>
+
+      {showQuickStart && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-primary" />
+              Quick Start
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                Website URL (Optional)
+              </label>
+              <Input
+                value={websiteUrl}
+                onChange={(e) => setWebsiteUrl(e.target.value)}
+                placeholder="Enter your business website URL (optional)"
+                data-testid="input-website-url"
+              />
+              <p className="text-xs text-muted-foreground">
+                We'll analyze your website to better understand your business
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Campaign Type (Optional)</label>
+              <div className="flex flex-wrap gap-2">
+                {["Brand Awareness", "Product Launch", "Store Promotion", "Event Promotion"].map((type) => (
+                  <Button
+                    key={type}
+                    variant={campaignType === type ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCampaignType(campaignType === type ? "" : type)}
+                    data-testid={`button-campaign-type-${type.toLowerCase().replace(/\s+/g, "-")}`}
+                  >
+                    {type}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowQuickStart(false)}
+              className="w-full"
+              data-testid="button-skip-quick-start"
+            >
+              Skip & Chat
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="h-[calc(100vh-12rem)] flex flex-col">
         <CardHeader className="border-b flex-shrink-0">

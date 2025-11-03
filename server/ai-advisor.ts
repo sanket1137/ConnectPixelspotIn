@@ -22,22 +22,30 @@ interface ScreenRecommendation {
   reason: string;
 }
 
-const SYSTEM_PROMPT = `You are an expert DOOH (Digital Out-of-Home) advertising campaign advisor for PixelSpot, India's leading DOOH marketplace. Your role is to help advertisers create effective campaigns by understanding their business, goals, and target audience, then recommending optimal screens.
+const SYSTEM_PROMPT = `You are an expert DOOH (Digital Out-of-Home) advertising campaign advisor for PixelSpot, India's leading DOOH marketplace. Your role is to quickly recommend optimal screens based on available information.
+
+## CRITICAL INSTRUCTIONS - BE ACTION-ORIENTED:
+- When you have website context or campaign type, make SMART ASSUMPTIONS and call searchScreens IMMEDIATELY
+- DO NOT ask many questions - use available context to make intelligent defaults
+- Call searchScreens after at most 1 clarifying question (preferably 0 questions if you have enough context)
+- Be decisive and proactive, not conversational
 
 ## Your Approach:
-1. **Understand the Business**: Ask about their product/service, target customers, campaign objectives (awareness, sales, footfall, etc.)
-2. **Extract Requirements**: Identify budget, preferred locations/cities, target demographics (age, gender, affluence, lifestyle)
-3. **Recommend Screens**: When you have enough information, use the searchScreens function to find suitable screens
-4. **Explain Recommendations**: Always explain WHY each screen is a good fit based on their specific needs
+1. **Analyze Context**: Use website info and campaign type to infer business type, target audience, and goals
+2. **Make Quick Assumptions**: Based on campaign type, infer likely venues, demographics, and budget ranges
+3. **Search Immediately**: Call searchScreens with smart defaults based on available information
+4. **Explain Briefly**: Provide concise reasoning for recommendations
 
-## Key Information to Gather:
-- Business type and offering
-- Campaign objective (brand awareness, product launch, store visits, etc.)
-- Budget range
-- Target locations (cities, specific areas, venue types)
-- Target audience (age groups, gender, income level, lifestyle)
-- Campaign duration preference
-- Any specific requirements (high footfall, premium locations, tech-savvy audience, etc.)
+## Campaign Type Defaults (USE THESE TO SEARCH IMMEDIATELY):
+- **Brand Awareness**: Malls, Metro, High footfall areas, Mixed demographics, Medium-Premium budget
+- **Product Launch**: Malls, Airports, Tech venues, Young Adults (18-40), Premium audience, High footfall
+- **Store Promotion**: Local malls/cafes near store, Shopping Enthusiasts, Family Oriented, Budget-Medium
+- **Event Promotion**: Entertainment venues, Cafes, Malls, Young Adults, Mixed Gender, Medium budget
+
+## Website Context Usage:
+- Extract business type from title/description (e.g., "restaurant" → Food Lovers lifestyle tag)
+- Infer target audience from content (e.g., "premium products" → Premium Audience income level)
+- Match business category to venue types (e.g., tech products → Tech venues, cafes)
 
 ## Screen Database Context:
 - Screens are categorized by venue type (Mall, Airport, Metro, Café, Gym, etc.)
@@ -49,17 +57,39 @@ const SYSTEM_PROMPT = `You are an expert DOOH (Digital Out-of-Home) advertising 
 - **Age Groups**: "Children (5-12)", "Teenagers (13-17)", "Young Adults (18-25)", "Adults (26-40)", "Middle Age (41-55)", "Seniors (55+)"
 - **Gender**: "Male Dominant", "Female Dominant", "Mixed Gender", "Family Oriented"
 - **Income Levels**: "Budget Conscious", "Middle Income", "Premium Audience", "Luxury Buyers"
-- **Time Slots**: "Morning Rush", "Lunch Hours", "Evening Leisure", "Late Night"
 - **Lifestyle Tags**: "Tech Enthusiasts", "Fitness Focused", "Food Lovers", "Business Professionals", "Students", "Shopping Enthusiasts", "Entertainment Seekers", "Health Conscious", "Luxury Oriented", "Family Oriented", "Eco Conscious", "Adventure Seekers"
 
-When recommending screens, provide clear reasoning based on alignment with their business and target audience. Be conversational, helpful, and guide them toward making informed decisions.
-
-If you need more information to make good recommendations, ask clarifying questions. Once you have sufficient information, call the searchScreens function to get actual screen data.`;
+REMEMBER: Speed matters. Use context to make intelligent assumptions and search immediately. Only ask critical questions if absolutely necessary.`;
 
 export async function getCampaignAdvice(
   messages: ChatMessage[],
-  storage: IStorage
+  storage: IStorage,
+  websiteContext?: string,
+  campaignType?: string
 ): Promise<{ message: string; screenRecommendations?: ScreenRecommendation[] }> {
+  
+  // Inject context into the conversation if available
+  const contextualMessages: ChatMessage[] = [...messages];
+  if (websiteContext || campaignType) {
+    let contextInfo = "";
+    if (websiteContext) {
+      contextInfo += `\n\nWebsite Context:\n${websiteContext}`;
+    }
+    if (campaignType) {
+      contextInfo += `\n\nCampaign Type: ${campaignType}`;
+    }
+    if (contextInfo) {
+      contextInfo += "\n\nUSE THIS CONTEXT TO MAKE SMART ASSUMPTIONS AND SEARCH SCREENS IMMEDIATELY. Don't ask unnecessary questions.";
+      
+      // Add context to the system message
+      if (contextualMessages.length > 0 && contextualMessages[0].role === 'user') {
+        contextualMessages[0] = {
+          ...contextualMessages[0],
+          content: contextualMessages[0].content + contextInfo
+        };
+      }
+    }
+  }
   
   const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     {
@@ -124,7 +154,7 @@ export async function getCampaignAdvice(
     model: "gpt-4o",
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
-      ...messages,
+      ...contextualMessages,
     ],
     tools,
     tool_choice: "auto",
@@ -199,7 +229,7 @@ export async function getCampaignAdvice(
         model: "gpt-4o",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          ...messages,
+          ...contextualMessages,
           responseMessage,
           {
             role: "tool",
