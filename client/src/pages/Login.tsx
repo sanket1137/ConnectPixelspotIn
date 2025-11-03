@@ -19,10 +19,13 @@ import { useToast } from "@/hooks/use-toast";
 import logo from "@assets/pixelspot-logo.png";
 
 export default function Login() {
-  const { user, signInWithGoogle, signInWithEmail, signUpWithEmail, loading } = useAuth();
+  const { user, signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [showRoleSelection, setShowRoleSelection] = useState(false);
   const [selectedRole, setSelectedRole] = useState<"screen_owner" | "advertiser" | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
   const { toast } = useToast();
   
   // Check for role parameter in URL
@@ -96,6 +99,28 @@ export default function Login() {
         description: error.message || "Failed to create account",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetLoading(true);
+    try {
+      await resetPassword(resetEmail);
+      toast({
+        title: "Password Reset Email Sent",
+        description: "Please check your email for instructions to reset your password.",
+      });
+      setShowForgotPassword(false);
+      setResetEmail("");
+    } catch (error: any) {
+      toast({
+        title: "Reset Failed",
+        description: error.message || "Failed to send reset email",
+        variant: "destructive",
+      });
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -205,7 +230,17 @@ export default function Login() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="login-password">Password</Label>
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotPassword(true)}
+                        className="text-xs text-primary hover:underline"
+                        data-testid="button-forgot-password"
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
                     <Input
                       id="login-password"
                       type="password"
@@ -395,6 +430,52 @@ export default function Login() {
               </div>
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-serif">Reset Password</DialogTitle>
+            <DialogDescription>
+              Enter your email address and we'll send you a link to reset your password.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleForgotPassword} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="reset-email">Email</Label>
+              <Input
+                id="reset-email"
+                type="email"
+                placeholder="your@email.com"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                required
+                data-testid="input-reset-email"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowForgotPassword(false)}
+                className="flex-1"
+                data-testid="button-cancel-reset"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1"
+                disabled={resetLoading}
+                data-testid="button-send-reset"
+              >
+                {resetLoading ? "Sending..." : "Send Reset Link"}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

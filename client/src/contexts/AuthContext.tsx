@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut, 
-  onAuthStateChanged 
+  onAuthStateChanged,
+  sendPasswordResetEmail
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +20,7 @@ interface AuthContextType {
   signInWithGoogle: (role?: "screen_owner" | "advertiser") => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, name: string, role: "screen_owner" | "advertiser") => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isScreenOwner: boolean;
@@ -141,6 +143,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     signUpWithEmail: async (email: string, password: string, name: string, role: "screen_owner" | "advertiser") => {
       await signUpEmailMutation.mutateAsync({ email, password, name, role });
+    },
+    resetPassword: async (email: string) => {
+      await sendPasswordResetEmail(auth, email);
     },
     signOut: async () => {
       await signOutMutation.mutateAsync();
