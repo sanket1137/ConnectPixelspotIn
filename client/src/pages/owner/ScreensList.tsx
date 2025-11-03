@@ -247,22 +247,20 @@ export default function ScreensList() {
                 <h3 className="font-semibold text-lg">Audience Demographics</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Primary Age Groups:</span>
+                    <span className="text-muted-foreground">Age Groups:</span>
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {selectedScreen.primaryAgeGroups?.map((age) => (
+                      {selectedScreen.detailedAgeGroups?.map((age: string) => (
                         <Badge key={age} variant="secondary" className="text-xs">{age}</Badge>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Gender Split:</span>
-                    <p className="font-medium">
-                      Male: {selectedScreen.genderSplit?.male}% | Female: {selectedScreen.genderSplit?.female}%
-                    </p>
+                    <span className="text-muted-foreground">Gender Orientation:</span>
+                    <p className="font-medium">{selectedScreen.genderOrientation || 'N/A'}</p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Affluence Level:</span>
-                    <p className="font-medium">{selectedScreen.affluenceLevel}</p>
+                    <span className="text-muted-foreground">Income Level:</span>
+                    <p className="font-medium">{selectedScreen.incomeLevel}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Avg Dwell Time:</span>
