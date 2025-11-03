@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Send, User, Bot, MapPin, DollarSign, Calendar, ArrowRight, Globe, Zap } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Sparkles, Send, User, Bot, MapPin, DollarSign, Calendar, ArrowRight, Globe, Zap, Eye, Monitor, CheckSquare, XSquare, Map as MapIcon, RefreshCw, Building } from "lucide-react";
 import { useLocation } from "wouter";
 import { auth } from "@/lib/firebase";
 
@@ -43,6 +45,40 @@ export default function AICampaignAdvisor() {
   const [showQuickStart, setShowQuickStart] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [, setLocation] = useLocation();
+  
+  // State for selected screens
+  const [selectedScreens, setSelectedScreens] = useState<Set<string>>(new Set());
+  const [detailsDialogScreen, setDetailsDialogScreen] = useState<ScreenRecommendation | null>(null);
+  const [currentMessageId, setCurrentMessageId] = useState<string | null>(null);
+
+  // Helper functions for screen selection
+  const toggleScreenSelection = (screenId: string, messageId: string) => {
+    setCurrentMessageId(messageId);
+    setSelectedScreens(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(screenId)) {
+        newSet.delete(screenId);
+      } else {
+        newSet.add(screenId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllScreens = (screens: ScreenRecommendation[], messageId: string) => {
+    setCurrentMessageId(messageId);
+    setSelectedScreens(new Set(screens.map(s => s.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedScreens(new Set());
+  };
+
+  const getSelectedScreensFromMessage = (messageId: string): ScreenRecommendation[] => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message?.screenRecommendations) return [];
+    return message.screenRecommendations.filter(s => selectedScreens.has(s.id));
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -123,6 +159,30 @@ export default function AICampaignAdvisor() {
     // Store recommendations in sessionStorage to pass to campaign creation
     sessionStorage.setItem("aiRecommendedScreens", JSON.stringify(recommendations));
     setLocation("/advertiser/campaigns/new?from=ai");
+  };
+
+  const handleCreateCampaignWithSelected = (messageId: string) => {
+    const selected = getSelectedScreensFromMessage(messageId);
+    if (selected.length === 0) return;
+    sessionStorage.setItem("aiRecommendedScreens", JSON.stringify(selected));
+    setLocation("/advertiser/campaigns/new?from=ai");
+  };
+
+  const handleViewOnMap = (messageId: string) => {
+    const selected = getSelectedScreensFromMessage(messageId);
+    if (selected.length === 0) return;
+    sessionStorage.setItem("highlightedScreens", JSON.stringify(selected.map(s => s.id)));
+    setLocation("/advertiser/discover");
+  };
+
+  const handleRefineSearch = () => {
+    const refineMessage: Message = {
+      id: Date.now().toString(),
+      role: "assistant",
+      content: "I'd be happy to refine your search! Would you like to:\n\n• Adjust the budget or location?\n• See screens in different venue types?\n• Refine the target audience?\n• Change the campaign duration?\n\nJust let me know what you'd like to adjust!",
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, refineMessage]);
   };
 
   return (
@@ -227,50 +287,156 @@ export default function AICampaignAdvisor() {
                     </div>
 
                     {message.screenRecommendations && message.screenRecommendations.length > 0 && (
-                      <div className="w-full max-w-2xl space-y-3 mt-2">
+                      <div className="w-full space-y-4 mt-2">
                         <div className="flex items-center justify-between">
                           <Badge variant="secondary" className="gap-1">
                             <MapPin className="h-3 w-3" />
                             {message.screenRecommendations.length} Screens Recommended
                           </Badge>
-                          <Button
-                            size="sm"
-                            onClick={() => handleExportToCampaign(message.screenRecommendations!)}
-                            className="gap-2"
-                            data-testid="button-export-campaign"
-                          >
-                            Create Campaign <ArrowRight className="h-4 w-4" />
-                          </Button>
                         </div>
 
-                        {message.screenRecommendations.map((screen) => (
-                          <Card key={screen.id} className="bg-background">
-                            <CardContent className="p-4">
-                              <div className="flex justify-between items-start mb-2">
-                                <div>
-                                  <h4 className="font-semibold text-sm">{screen.name}</h4>
-                                  <p className="text-xs text-muted-foreground">{screen.location}, {screen.city}</p>
-                                </div>
-                                <Badge variant="outline">{screen.venueCategory}</Badge>
-                              </div>
-                              
-                              <div className="flex gap-4 text-xs text-muted-foreground mb-2">
-                                <span className="flex items-center gap-1">
-                                  <DollarSign className="h-3 w-3" />
-                                  ₹{screen.pricePerDay.toLocaleString()}/day
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <User className="h-3 w-3" />
-                                  {screen.avgDailyFootfall.toLocaleString()} daily views
-                                </span>
-                              </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {message.screenRecommendations.map((screen) => {
+                            const isSelected = selectedScreens.has(screen.id);
+                            return (
+                              <Card 
+                                key={screen.id} 
+                                className={`bg-background hover-elevate cursor-pointer border-2 transition-all ${
+                                  isSelected ? 'border-primary' : 'border-border'
+                                }`}
+                                onClick={() => toggleScreenSelection(screen.id, message.id)}
+                                data-testid={`card-screen-${screen.id}`}
+                              >
+                                <CardContent className="p-0">
+                                  {/* Screen Image */}
+                                  <div className="relative h-32 bg-muted rounded-t-lg overflow-hidden">
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <Building className="h-12 w-12 text-muted-foreground/30" />
+                                    </div>
+                                    <div className="absolute top-2 left-2">
+                                      <Checkbox 
+                                        checked={isSelected}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleScreenSelection(screen.id, message.id);
+                                        }}
+                                        data-testid={`checkbox-screen-${screen.id}`}
+                                      />
+                                    </div>
+                                    <div className="absolute top-2 right-2">
+                                      <Badge variant="secondary">{screen.venueCategory}</Badge>
+                                    </div>
+                                  </div>
 
-                              <p className="text-xs bg-muted p-2 rounded">
-                                <strong>Why this screen:</strong> {screen.reason}
-                              </p>
-                            </CardContent>
-                          </Card>
-                        ))}
+                                  {/* Screen Details */}
+                                  <div className="p-4 space-y-3">
+                                    <div>
+                                      <h4 className="font-semibold text-base mb-1">{screen.name}</h4>
+                                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <MapPin className="h-3 w-3" />
+                                        {screen.location}, {screen.city}
+                                      </p>
+                                    </div>
+                                    
+                                    {/* Price and Footfall */}
+                                    <div className="flex items-center justify-between gap-4">
+                                      <div className="flex items-center gap-1">
+                                        <DollarSign className="h-4 w-4 text-primary" />
+                                        <span className="font-bold text-lg text-primary">₹{screen.pricePerDay.toLocaleString()}</span>
+                                        <span className="text-xs text-muted-foreground">/day</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 text-sm">
+                                        <Eye className="h-4 w-4 text-muted-foreground" />
+                                        <span className="font-medium">{screen.avgDailyFootfall.toLocaleString()}</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Reason */}
+                                    <div className="bg-primary/5 p-3 rounded-md border border-primary/10">
+                                      <p className="text-xs leading-relaxed">
+                                        <strong className="text-primary">Why this screen:</strong> {screen.reason}
+                                      </p>
+                                    </div>
+
+                                    {/* View Details Button */}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-full gap-2"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDetailsDialogScreen(screen);
+                                      }}
+                                      data-testid={`button-view-details-${screen.id}`}
+                                    >
+                                      <Monitor className="h-4 w-4" />
+                                      View Details
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+
+                        {/* Bulk Action Buttons */}
+                        <div className="flex flex-wrap gap-3 pt-4 border-t">
+                          <Button
+                            onClick={() => handleCreateCampaignWithSelected(message.id)}
+                            disabled={currentMessageId === message.id && selectedScreens.size === 0}
+                            className="gap-2"
+                            data-testid="button-create-campaign-selected"
+                          >
+                            <Sparkles className="h-4 w-4" />
+                            Create Campaign with Selected ({currentMessageId === message.id ? selectedScreens.size : 0})
+                          </Button>
+                          
+                          <Button
+                            variant="outline"
+                            onClick={() => handleViewOnMap(message.id)}
+                            disabled={currentMessageId === message.id && selectedScreens.size === 0}
+                            className="gap-2"
+                            data-testid="button-view-map"
+                          >
+                            <MapIcon className="h-4 w-4" />
+                            View Selected on Map
+                          </Button>
+                          
+                          <Button
+                            variant="ghost"
+                            onClick={handleRefineSearch}
+                            className="gap-2"
+                            data-testid="button-refine-search"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                            Refine My Search
+                          </Button>
+                          
+                          <Button
+                            variant="ghost"
+                            onClick={() => {
+                              if (currentMessageId === message.id && selectedScreens.size === message.screenRecommendations!.length) {
+                                clearSelection();
+                              } else {
+                                selectAllScreens(message.screenRecommendations!, message.id);
+                              }
+                            }}
+                            className="gap-2 ml-auto"
+                            data-testid="button-toggle-select-all"
+                          >
+                            {currentMessageId === message.id && selectedScreens.size === message.screenRecommendations!.length ? (
+                              <>
+                                <XSquare className="h-4 w-4" />
+                                Clear Selection
+                              </>
+                            ) : (
+                              <>
+                                <CheckSquare className="h-4 w-4" />
+                                Select All
+                              </>
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -327,6 +493,120 @@ export default function AICampaignAdvisor() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Screen Details Dialog */}
+      <Dialog open={!!detailsDialogScreen} onOpenChange={(open) => !open && setDetailsDialogScreen(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl flex items-center gap-2">
+              <Monitor className="h-6 w-6 text-primary" />
+              {detailsDialogScreen?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Complete screen information and specifications
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailsDialogScreen && (
+            <div className="space-y-6">
+              {/* Screen Image */}
+              <div className="relative h-48 bg-muted rounded-lg overflow-hidden">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Building className="h-20 w-20 text-muted-foreground/30" />
+                </div>
+                <div className="absolute top-3 right-3">
+                  <Badge variant="secondary" className="text-sm">
+                    {detailsDialogScreen.venueCategory}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Details Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Location</p>
+                  <p className="font-medium flex items-start gap-2">
+                    <MapPin className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                    <span>{detailsDialogScreen.location}, {detailsDialogScreen.city}</span>
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Venue Type</p>
+                  <p className="font-medium flex items-center gap-2">
+                    <Building className="h-4 w-4 text-primary" />
+                    {detailsDialogScreen.venueCategory}
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Price per Day</p>
+                  <p className="font-bold text-2xl text-primary flex items-center gap-1">
+                    <DollarSign className="h-5 w-5" />
+                    ₹{detailsDialogScreen.pricePerDay.toLocaleString()}
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Daily Footfall</p>
+                  <p className="font-bold text-2xl flex items-center gap-2">
+                    <Eye className="h-5 w-5 text-primary" />
+                    {detailsDialogScreen.avgDailyFootfall.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Why This Screen */}
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-primary">Why This Screen is Recommended</p>
+                <div className="bg-primary/5 p-4 rounded-lg border border-primary/10">
+                  <p className="text-sm leading-relaxed">{detailsDialogScreen.reason}</p>
+                </div>
+              </div>
+
+              {/* Additional Info Placeholder */}
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Operating Hours</p>
+                  <p className="text-sm">24/7 Available</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Demographics</p>
+                  <p className="text-sm">Mixed Audience</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setDetailsDialogScreen(null)}
+              data-testid="button-close-details"
+            >
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                if (detailsDialogScreen) {
+                  const messageWithScreen = messages.find(m => 
+                    m.screenRecommendations?.some(s => s.id === detailsDialogScreen.id)
+                  );
+                  if (messageWithScreen) {
+                    toggleScreenSelection(detailsDialogScreen.id, messageWithScreen.id);
+                  }
+                  setDetailsDialogScreen(null);
+                }
+              }}
+              className="gap-2"
+              data-testid="button-select-screen"
+            >
+              <CheckSquare className="h-4 w-4" />
+              {detailsDialogScreen && selectedScreens.has(detailsDialogScreen.id) ? 'Deselect' : 'Select'} This Screen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

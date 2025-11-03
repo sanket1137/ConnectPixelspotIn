@@ -237,8 +237,12 @@ export async function getCampaignAdvice(
         max_tokens: 800,
       });
       
+      // Add follow-up suggestions to the message
+      const baseMessage = explanationCompletion.choices[0].message.content || "Here are my recommendations:";
+      const followUpPrompt = `\n\n💡 **What would you like to do next?**\n\n• Adjust the budget or location?\n• See screens in different venue types?\n• Refine the target audience?\n• Get more information about any screen?\n\nJust let me know how I can help further!`;
+      
       return {
-        message: explanationCompletion.choices[0].message.content || "Here are my recommendations:",
+        message: baseMessage + followUpPrompt,
         screenRecommendations: recommendations,
       };
     }
