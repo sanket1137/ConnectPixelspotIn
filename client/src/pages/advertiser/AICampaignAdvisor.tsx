@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, Send, User, Bot, MapPin, DollarSign, Calendar, ArrowRight } from "lucide-react";
@@ -132,16 +131,16 @@ export default function AICampaignAdvisor() {
         </div>
       </div>
 
-      <Card className="h-[600px] flex flex-col">
-        <CardHeader className="border-b">
+      <Card className="h-[calc(100vh-12rem)] flex flex-col">
+        <CardHeader className="border-b flex-shrink-0">
           <CardTitle className="text-lg flex items-center gap-2">
             <Bot className="h-5 w-5" />
             Campaign Consultation
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col p-0">
-          <ScrollArea ref={scrollRef} className="flex-1 p-6">
-            <div className="space-y-6">
+        <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6">
+            <div className="space-y-6 pb-4">
               {messages.map((message) => (
                 <div
                   key={message.id}
@@ -242,9 +241,9 @@ export default function AICampaignAdvisor() {
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
 
-          <div className="border-t p-4">
+          <div className="border-t p-4 flex-shrink-0">
             <div className="flex gap-2">
               <Input
                 value={input}
