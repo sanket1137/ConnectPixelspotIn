@@ -159,8 +159,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid token" });
       }
 
-      // Check if user already exists
+      // Check if user already exists (by Firebase UID or email)
       let user = await storage.getUserByFirebaseUid(decodedToken.uid);
+
+      // If not found by UID, check by email (for existing email/password users)
+      if (!user) {
+        user = await storage.getUserByEmail(email);
+        
+        // If found by email, update their Firebase UID
+        if (user) {
+          user = await storage.updateUser(user.id, {
+            firebaseUid: decodedToken.uid,
+          });
+        }
+      }
 
       if (!user) {
         // Create new user with selected role (or default to advertiser)
