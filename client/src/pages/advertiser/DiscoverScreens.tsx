@@ -58,8 +58,12 @@ export default function DiscoverScreens() {
   const [, setLocation] = useLocation();
   
   const [filters, setFilters] = useState({
+    state: "",
     city: "",
-    type: "",
+    venueCategory: "",
+    screenCategory: "",
+    environmentType: "",
+    trafficType: "",
     minPrice: "",
     maxPrice: "",
   });
@@ -89,6 +93,26 @@ export default function DiscoverScreens() {
     queryKey: ["/api/screens", filters],
   });
 
+  // Fetch location options (states and cities)
+  const { data: locations } = useQuery<{
+    states: string[];
+    cities: { [state: string]: string[] };
+    allCities: string[];
+  }>({
+    queryKey: ["/api/screens/locations"],
+  });
+
+  // Extract unique values from screens for dropdowns
+  const venueCategoryOptions = Array.from(new Set(screens.map(s => s.venueCategory).filter(Boolean))).sort();
+  const screenCategoryOptions = Array.from(new Set(screens.map(s => s.category).filter(Boolean))).sort();
+  const environmentTypeOptions = Array.from(new Set(screens.map(s => s.environmentType).filter(Boolean))).sort();
+  const trafficTypeOptions = Array.from(new Set(screens.map(s => s.trafficType).filter(Boolean))).sort();
+
+  // Get cities for selected state
+  const availableCities = filters.state && locations?.cities[filters.state] 
+    ? locations.cities[filters.state] 
+    : locations?.allCities || [];
+
   // Tiered fallback strategy: progressively drop filters if no results
   const getFilteredScreens = () => {
     // Backend already returns only approved screens, no need to filter by status
@@ -97,8 +121,12 @@ export default function DiscoverScreens() {
     // Try strict match (all filters)
     const applyFilters = (filtersToApply: typeof filters) => {
       return activeScreens.filter((screen) => {
-        if (filtersToApply.city && !screen.city.toLowerCase().includes(filtersToApply.city.toLowerCase())) return false;
-        if (filtersToApply.type && screen.type !== filtersToApply.type) return false;
+        if (filtersToApply.state && screen.state !== filtersToApply.state) return false;
+        if (filtersToApply.city && screen.city !== filtersToApply.city) return false;
+        if (filtersToApply.venueCategory && screen.venueCategory !== filtersToApply.venueCategory) return false;
+        if (filtersToApply.screenCategory && screen.category !== filtersToApply.screenCategory) return false;
+        if (filtersToApply.environmentType && screen.environmentType !== filtersToApply.environmentType) return false;
+        if (filtersToApply.trafficType && screen.trafficType !== filtersToApply.trafficType) return false;
         if (filtersToApply.minPrice && screen.pricePerDay < parseInt(filtersToApply.minPrice)) return false;
         if (filtersToApply.maxPrice && screen.pricePerDay > parseInt(filtersToApply.maxPrice)) return false;
         return true;
@@ -109,23 +137,66 @@ export default function DiscoverScreens() {
     let relaxedFilters: string[] = [];
     
     // If no results, progressively drop filters (least important first)
-    if (results.length === 0 && (filters.city || filters.type || filters.minPrice || filters.maxPrice)) {
-      // Drop type filter (least important)
-      if (filters.type) {
-        const withoutType = { ...filters, type: "" };
-        results = applyFilters(withoutType);
+    const hasAnyFilter = filters.state || filters.city || filters.venueCategory || 
+                         filters.screenCategory || filters.environmentType || 
+                         filters.trafficType || filters.minPrice || filters.maxPrice;
+    
+    if (results.length === 0 && hasAnyFilter) {
+      // Drop traffic type filter (least important)
+      if (filters.trafficType) {
+        const withoutTrafficType = { ...filters, trafficType: "" };
+        results = applyFilters(withoutTrafficType);
         if (results.length > 0) {
-          relaxedFilters.push("Screen Type");
+          relaxedFilters.push("Traffic Type");
+          return { results, relaxedFilters };
+        }
+      }
+      
+      // Drop environment type filter
+      if (filters.environmentType) {
+        const withoutEnvironment = { ...filters, trafficType: "", environmentType: "" };
+        results = applyFilters(withoutEnvironment);
+        if (results.length > 0) {
+          if (filters.trafficType) relaxedFilters.push("Traffic Type");
+          relaxedFilters.push("Environment Type");
+          return { results, relaxedFilters };
+        }
+      }
+      
+      // Drop screen category filter
+      if (filters.screenCategory) {
+        const withoutScreenCategory = { ...filters, trafficType: "", environmentType: "", screenCategory: "" };
+        results = applyFilters(withoutScreenCategory);
+        if (results.length > 0) {
+          if (filters.trafficType) relaxedFilters.push("Traffic Type");
+          if (filters.environmentType) relaxedFilters.push("Environment Type");
+          relaxedFilters.push("Screen Category");
+          return { results, relaxedFilters };
+        }
+      }
+      
+      // Drop venue category filter
+      if (filters.venueCategory) {
+        const withoutVenueCategory = { ...filters, trafficType: "", environmentType: "", screenCategory: "", venueCategory: "" };
+        results = applyFilters(withoutVenueCategory);
+        if (results.length > 0) {
+          if (filters.trafficType) relaxedFilters.push("Traffic Type");
+          if (filters.environmentType) relaxedFilters.push("Environment Type");
+          if (filters.screenCategory) relaxedFilters.push("Screen Category");
+          relaxedFilters.push("Venue Category");
           return { results, relaxedFilters };
         }
       }
       
       // Drop maxPrice filter
       if (filters.maxPrice) {
-        const withoutMaxPrice = { ...filters, type: "", maxPrice: "" };
+        const withoutMaxPrice = { ...filters, trafficType: "", environmentType: "", screenCategory: "", venueCategory: "", maxPrice: "" };
         results = applyFilters(withoutMaxPrice);
         if (results.length > 0) {
-          if (filters.type) relaxedFilters.push("Screen Type");
+          if (filters.trafficType) relaxedFilters.push("Traffic Type");
+          if (filters.environmentType) relaxedFilters.push("Environment Type");
+          if (filters.screenCategory) relaxedFilters.push("Screen Category");
+          if (filters.venueCategory) relaxedFilters.push("Venue Category");
           relaxedFilters.push("Max Price");
           return { results, relaxedFilters };
         }
@@ -133,25 +204,33 @@ export default function DiscoverScreens() {
       
       // Drop minPrice filter
       if (filters.minPrice) {
-        const withoutPriceFilters = { ...filters, type: "", minPrice: "", maxPrice: "" };
+        const withoutPriceFilters = { ...filters, trafficType: "", environmentType: "", screenCategory: "", venueCategory: "", minPrice: "", maxPrice: "" };
         results = applyFilters(withoutPriceFilters);
         if (results.length > 0) {
-          if (filters.type) relaxedFilters.push("Screen Type");
+          if (filters.trafficType) relaxedFilters.push("Traffic Type");
+          if (filters.environmentType) relaxedFilters.push("Environment Type");
+          if (filters.screenCategory) relaxedFilters.push("Screen Category");
+          if (filters.venueCategory) relaxedFilters.push("Venue Category");
           if (filters.maxPrice) relaxedFilters.push("Max Price");
           relaxedFilters.push("Min Price");
           return { results, relaxedFilters };
         }
       }
       
-      // Last resort: show all active screens in city (or all if no city filter)
-      results = activeScreens.filter(s => 
-        !filters.city || s.city.toLowerCase().includes(filters.city.toLowerCase())
-      );
-      if (filters.type) relaxedFilters.push("Screen Type");
+      // Last resort: show all active screens in city/state (or all if no location filter)
+      results = activeScreens.filter(s => {
+        if (filters.state && s.state !== filters.state) return false;
+        if (filters.city && s.city !== filters.city) return false;
+        return true;
+      });
+      if (filters.trafficType) relaxedFilters.push("Traffic Type");
+      if (filters.environmentType) relaxedFilters.push("Environment Type");
+      if (filters.screenCategory) relaxedFilters.push("Screen Category");
+      if (filters.venueCategory) relaxedFilters.push("Venue Category");
       if (filters.maxPrice) relaxedFilters.push("Max Price");
       if (filters.minPrice) relaxedFilters.push("Min Price");
-      if (!filters.city && results.length > 0) {
-        relaxedFilters.push("City");
+      if (!filters.state && !filters.city && results.length > 0) {
+        relaxedFilters.push("Location");
       }
     }
     
@@ -212,8 +291,8 @@ export default function DiscoverScreens() {
       {/* Top Header with Filters */}
       <div className="border-b border-border bg-card">
         <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
-          {/* First Row: View Toggle, Filters, and Actions */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+          {/* View Toggle and Results Count Row */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             {/* View Toggle */}
             <div className="flex items-center gap-2 bg-muted rounded-lg p-1 w-fit">
               <Button
@@ -238,70 +317,8 @@ export default function DiscoverScreens() {
               </Button>
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 flex-1">
-              {/* City Search */}
-              <div className="relative flex-1 sm:max-w-xs">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search city..."
-                  className="pl-10"
-                  value={filters.city}
-                  onChange={(e) => setFilters({ ...filters, city: e.target.value })}
-                  data-testid="input-search-city"
-                />
-              </div>
-
-              {/* Screen Type */}
-              <Select value={filters.type} onValueChange={(value) => setFilters({ ...filters, type: value })}>
-                <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-screen-type">
-                  <SelectValue placeholder="All types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value=" ">All types</SelectItem>
-                  <SelectItem value="billboard">Billboard</SelectItem>
-                  <SelectItem value="digital">Digital Screen</SelectItem>
-                  <SelectItem value="transit">Transit</SelectItem>
-                  <SelectItem value="retail">Retail</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Price Range */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Input
-                  type="number"
-                  placeholder="Min ₹"
-                  className="flex-1 sm:w-24"
-                  value={filters.minPrice}
-                  onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
-                  data-testid="input-min-price"
-                />
-                <span className="text-muted-foreground">-</span>
-                <Input
-                  type="number"
-                  placeholder="Max ₹"
-                  className="flex-1 sm:w-24"
-                  value={filters.maxPrice}
-                  onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
-                  data-testid="input-max-price"
-                />
-              </div>
-
-              {/* Clear Filters */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFilters({ city: "", type: "", minPrice: "", maxPrice: "" })}
-                data-testid="button-clear-filters"
-                className="w-full sm:w-auto"
-              >
-                Clear
-              </Button>
-            </div>
-
-            {/* Right Side Actions */}
+            {/* Results Count and Cart */}
             <div className="flex items-center justify-between sm:justify-end gap-3">
-              {/* Results count */}
               <p className="text-sm font-medium text-muted-foreground" data-testid="text-results-count">
                 {filteredScreens.length} screens
               </p>
@@ -366,6 +383,146 @@ export default function DiscoverScreens() {
                 </Sheet>
               )}
             </div>
+          </div>
+
+          {/* Filter Row 1: Location and Categories */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+            {/* State Dropdown */}
+            <Select 
+              value={filters.state} 
+              onValueChange={(value) => setFilters({ ...filters, state: value === "all" ? "" : value, city: "" })}
+            >
+              <SelectTrigger data-testid="select-state">
+                <SelectValue placeholder="All States" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All States</SelectItem>
+                {locations?.states.map((state) => (
+                  <SelectItem key={state} value={state}>{state}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* City Dropdown */}
+            <Select 
+              value={filters.city} 
+              onValueChange={(value) => setFilters({ ...filters, city: value === "all" ? "" : value })}
+            >
+              <SelectTrigger data-testid="select-city">
+                <SelectValue placeholder="All Cities" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Cities</SelectItem>
+                {availableCities.map((city) => (
+                  <SelectItem key={city} value={city}>{city}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Venue Category Dropdown */}
+            <Select 
+              value={filters.venueCategory} 
+              onValueChange={(value) => setFilters({ ...filters, venueCategory: value === "all" ? "" : value })}
+            >
+              <SelectTrigger data-testid="select-venue-category">
+                <SelectValue placeholder="All Venues" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Venues</SelectItem>
+                {venueCategoryOptions.map((category) => (
+                  <SelectItem key={category} value={category}>{category}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Screen Category Dropdown */}
+            <Select 
+              value={filters.screenCategory} 
+              onValueChange={(value) => setFilters({ ...filters, screenCategory: value === "all" ? "" : value })}
+            >
+              <SelectTrigger data-testid="select-screen-category">
+                <SelectValue placeholder="All Screen Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Screen Types</SelectItem>
+                {screenCategoryOptions.map((category) => (
+                  <SelectItem key={category} value={category}>{category}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Environment Type Dropdown */}
+            <Select 
+              value={filters.environmentType} 
+              onValueChange={(value) => setFilters({ ...filters, environmentType: value === "all" ? "" : value })}
+            >
+              <SelectTrigger data-testid="select-environment-type">
+                <SelectValue placeholder="All Environments" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Environments</SelectItem>
+                {environmentTypeOptions.map((type) => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Filter Row 2: Traffic Type, Price Range, and Clear */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {/* Traffic Type Dropdown */}
+            <Select 
+              value={filters.trafficType} 
+              onValueChange={(value) => setFilters({ ...filters, trafficType: value === "all" ? "" : value })}
+            >
+              <SelectTrigger data-testid="select-traffic-type">
+                <SelectValue placeholder="All Traffic Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Traffic Types</SelectItem>
+                {trafficTypeOptions.map((type) => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Min Price Input */}
+            <Input
+              type="number"
+              placeholder="Min Price ₹"
+              value={filters.minPrice}
+              onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
+              data-testid="input-min-price"
+            />
+
+            {/* Max Price Input */}
+            <Input
+              type="number"
+              placeholder="Max Price ₹"
+              value={filters.maxPrice}
+              onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
+              data-testid="input-max-price"
+            />
+
+            {/* Clear Filters Button */}
+            <Button
+              variant="outline"
+              size="default"
+              onClick={() => setFilters({ 
+                state: "", 
+                city: "", 
+                venueCategory: "", 
+                screenCategory: "", 
+                environmentType: "", 
+                trafficType: "", 
+                minPrice: "", 
+                maxPrice: "" 
+              })}
+              data-testid="button-clear-filters"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Clear All
+            </Button>
           </div>
         </div>
       </div>
