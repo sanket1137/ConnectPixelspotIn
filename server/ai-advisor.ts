@@ -29,37 +29,33 @@ const SYSTEM_PROMPT = `You are an expert DOOH (Digital Out-of-Home) advertising 
 - DO NOT ask many questions - use available context to make intelligent defaults
 - Call searchScreens after at most 1 clarifying question (preferably 0 questions if you have enough context)
 - Be decisive and proactive, not conversational
+- IMPORTANT: Start with BROAD searches (city + maybe 1-2 filters) - don't over-filter or you'll get 0 results
 
 ## Your Approach:
 1. **Analyze Context**: Use website info and campaign type to infer business type, target audience, and goals
-2. **Make Quick Assumptions**: Based on campaign type, infer likely venues, demographics, and budget ranges
-3. **Search Immediately**: Call searchScreens with smart defaults based on available information
-4. **Explain Briefly**: Provide concise reasoning for recommendations
+2. **Search BROADLY First**: Call searchScreens with just CITY and optionally 1-2 key filters (venue type OR lifestyle tag)
+3. **Explain Briefly**: Provide concise reasoning for recommendations
 
-## Campaign Type Defaults (USE THESE TO SEARCH IMMEDIATELY):
-- **Brand Awareness**: Malls, Metro, High footfall areas, Mixed demographics, Medium-Premium budget
-- **Product Launch**: Malls, Airports, Tech venues, Young Adults (18-40), Premium audience, High footfall
-- **Store Promotion**: Local malls/cafes near store, Shopping Enthusiasts, Family Oriented, Budget-Medium
-- **Event Promotion**: Entertainment venues, Cafes, Malls, Young Adults, Mixed Gender, Medium budget
+## Searching Best Practices:
+- ALWAYS include cities array (e.g., ["Bangalore"])
+- OPTIONAL: Add 1-2 venueCategories if highly relevant (e.g., ["Café", "Restaurant"] for food business)
+- OPTIONAL: Add 1-2 lifestyleTags if highly relevant (e.g., ["Food Lovers"] for café)
+- DO NOT specify: genderOrientation, incomeLevel, ageGroups unless user explicitly requests
+- DO NOT set maxPricePerDay unless user mentions budget constraint
+- The scoring system will rank results by relevance - you don't need to filter everything
 
-## Website Context Usage:
-- Extract business type from title/description (e.g., "restaurant" → Food Lovers lifestyle tag)
-- Infer target audience from content (e.g., "premium products" → Premium Audience income level)
-- Match business category to venue types (e.g., tech products → Tech venues, cafes)
+## Campaign Type Defaults (BROAD SEARCHES):
+- **Brand Awareness**: cities only, let scoring find best venues
+- **Product Launch**: cities + maybe 1-2 venue types (Mall, Airport)
+- **Store Promotion**: cities + maybe venue near store type
+- **Event Promotion**: cities + maybe entertainment venues
+- **Café/Restaurant**: cities + ["Café", "Restaurant", "Mall"] + ["Food Lovers"]
 
-## Screen Database Context:
-- Screens are categorized by venue type (Mall, Airport, Metro, Café, Gym, etc.)
-- Each screen has demographics: age groups, gender orientation, income level, lifestyle tags
-- Screens have different visibility levels, operating hours, and footfall
-- Pricing varies by location, venue type, and screen characteristics
+## Filter Mappings (USE SPARINGLY):
+- **Venue Types**: Mall, Airport, Metro, Café, Restaurant, Gym, Cinema, Shopping Complex, etc.
+- **Lifestyle Tags**: "Food Lovers", "Shopping Enthusiasts", "Tech Enthusiasts", "Business Professionals", etc.
 
-## Filter Mappings:
-- **Age Groups**: "Children (5-12)", "Teenagers (13-17)", "Young Adults (18-25)", "Adults (26-40)", "Middle Age (41-55)", "Seniors (55+)"
-- **Gender**: "Male Dominant", "Female Dominant", "Mixed Gender", "Family Oriented"
-- **Income Levels**: "Budget Conscious", "Middle Income", "Premium Audience", "Luxury Buyers"
-- **Lifestyle Tags**: "Tech Enthusiasts", "Fitness Focused", "Food Lovers", "Business Professionals", "Students", "Shopping Enthusiasts", "Entertainment Seekers", "Health Conscious", "Luxury Oriented", "Family Oriented", "Eco Conscious", "Adventure Seekers"
-
-REMEMBER: Speed matters. Use context to make intelligent assumptions and search immediately. Only ask critical questions if absolutely necessary.`;
+REMEMBER: BROAD searches work better. Start with city + max 1-2 filters. The system scores and ranks results automatically.`;
 
 export async function getCampaignAdvice(
   messages: ChatMessage[],
@@ -260,63 +256,91 @@ async function searchScreensInDatabase(
   // Get all approved screens
   const allScreens = await storage.getApprovedScreens();
   
+  console.log('[AI Advisor] Search criteria:', JSON.stringify(criteria, null, 2));
+  console.log('[AI Advisor] Total approved screens:', allScreens.length);
+  
   // Apply filters
   let filtered = allScreens.filter((screen: Screen) => screen.status === "approved");
   
+  // CRITICAL: Apply location filter first (required)
   if (criteria.cities && criteria.cities.length > 0) {
     filtered = filtered.filter((screen: Screen) => 
       criteria.cities.some((city: string) => 
         screen.city.toLowerCase().includes(city.toLowerCase())
       )
     );
+    console.log('[AI Advisor] After city filter:', filtered.length);
   }
   
-  if (criteria.venueCategories && criteria.venueCategories.length > 0) {
-    filtered = filtered.filter((screen: Screen) => 
-      criteria.venueCategories.includes(screen.venueCategory)
-    );
+  // If we have screens after location filter, apply optional filters as SOFT filters
+  // Use scoring instead of hard filtering to avoid 0 results
+  if (filtered.length > 0) {
+    const scoredScreens = filtered.map((screen: Screen) => {
+      let score = 0;
+      
+      // Venue category match (high priority)
+      if (criteria.venueCategories && criteria.venueCategories.length > 0) {
+        if (criteria.venueCategories.includes(screen.venueCategory)) {
+          score += 10;
+        }
+      }
+      
+      // Price filter (hard limit if specified)
+      if (criteria.maxPricePerDay && screen.pricePerDay > criteria.maxPricePerDay) {
+        score -= 100; // Penalize heavily but don't exclude
+      }
+      
+      // Footfall (medium priority)
+      if (criteria.minFootfall && screen.avgDailyFootfall && screen.avgDailyFootfall >= criteria.minFootfall) {
+        score += 5;
+      }
+      
+      // Age groups (soft match)
+      if (criteria.ageGroups && criteria.ageGroups.length > 0 && screen.detailedAgeGroups) {
+        const matches = criteria.ageGroups.filter((age: string) => 
+          screen.detailedAgeGroups?.includes(age)
+        ).length;
+        score += matches * 3;
+      }
+      
+      // Gender orientation (soft match)
+      if (criteria.genderOrientation && screen.genderOrientation === criteria.genderOrientation) {
+        score += 3;
+      }
+      
+      // Income level (soft match)
+      if (criteria.incomeLevel && screen.incomeLevel === criteria.incomeLevel) {
+        score += 3;
+      }
+      
+      // Lifestyle tags (soft match)
+      if (criteria.lifestyleTags && criteria.lifestyleTags.length > 0 && screen.lifestyleTags) {
+        const matches = criteria.lifestyleTags.filter((tag: string) =>
+          screen.lifestyleTags?.includes(tag)
+        ).length;
+        score += matches * 2;
+      }
+      
+      return { screen, score };
+    });
+    
+    // Sort by score first, then by footfall
+    const sorted = scoredScreens
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return (b.screen.avgDailyFootfall || 0) - (a.screen.avgDailyFootfall || 0);
+      })
+      .map(item => item.screen);
+    
+    const limit = criteria.limit || 5;
+    const result = sorted.slice(0, limit);
+    console.log('[AI Advisor] Returning', result.length, 'screens');
+    return result;
   }
   
-  if (criteria.maxPricePerDay) {
-    filtered = filtered.filter((screen: Screen) => 
-      screen.pricePerDay <= criteria.maxPricePerDay
-    );
-  }
-  
-  if (criteria.minFootfall) {
-    filtered = filtered.filter((screen: Screen) => 
-      screen.avgDailyFootfall && screen.avgDailyFootfall >= criteria.minFootfall
-    );
-  }
-  
-  if (criteria.ageGroups && criteria.ageGroups.length > 0) {
-    filtered = filtered.filter((screen: Screen) => 
-      screen.detailedAgeGroups && 
-      criteria.ageGroups.some((age: string) => screen.detailedAgeGroups?.includes(age))
-    );
-  }
-  
-  if (criteria.genderOrientation) {
-    filtered = filtered.filter((screen: Screen) => 
-      screen.genderOrientation === criteria.genderOrientation
-    );
-  }
-  
-  if (criteria.incomeLevel) {
-    filtered = filtered.filter((screen: Screen) => 
-      screen.incomeLevel === criteria.incomeLevel
-    );
-  }
-  
-  if (criteria.lifestyleTags && criteria.lifestyleTags.length > 0) {
-    filtered = filtered.filter((screen: Screen) => 
-      screen.lifestyleTags && 
-      criteria.lifestyleTags.some((tag: string) => screen.lifestyleTags?.includes(tag))
-    );
-  }
-  
-  // Sort by footfall (descending) and take the limit
-  const sorted = filtered.sort((a: Screen, b: Screen) => 
+  // Fallback: if no screens found even with location, return top screens from all cities
+  console.log('[AI Advisor] No screens found with location filter, returning top screens from all cities');
+  const sorted = allScreens.sort((a: Screen, b: Screen) => 
     (b.avgDailyFootfall || 0) - (a.avgDailyFootfall || 0)
   );
   
