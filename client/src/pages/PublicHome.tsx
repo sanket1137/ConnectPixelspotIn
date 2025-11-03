@@ -302,73 +302,98 @@ export default function PublicHome() {
             Discover premium DOOH screens across diverse venue categories
           </p>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6">
+        
+        {/* Collage Grid Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Left Column - Large Image */}
+          <div
+            className="md:row-span-2 relative overflow-hidden rounded-lg cursor-pointer group h-64 md:h-full"
+            onClick={() => {
+              setSelectedVenue('Highway');
+              setShowCities(false);
+              scrollToScreens();
+            }}
+            data-testid="card-network-highway"
+          >
+            <img
+              src="https://images.unsplash.com/photo-1449844908441-8829872d2607?w=800"
+              alt="Road Side Media"
+              className="w-full h-full object-cover transition-transform group-hover:scale-110"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+            <h3 className="absolute bottom-4 left-4 font-bold text-white text-lg md:text-xl">Road Side Media</h3>
+          </div>
+
+          {/* Middle Column - Airport (Top) */}
+          <div
+            className="md:col-span-2 relative overflow-hidden rounded-lg cursor-pointer group h-64"
+            onClick={() => {
+              setSelectedVenue('Airport');
+              setShowCities(false);
+              scrollToScreens();
+            }}
+            data-testid="card-network-airport"
+          >
+            <img
+              src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800"
+              alt="Airport"
+              className="w-full h-full object-cover transition-transform group-hover:scale-110"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+            <h3 className="absolute bottom-4 left-4 font-bold text-white text-lg md:text-xl">Airport</h3>
+          </div>
+
+          {/* Middle Column - Transit Media (Bottom) */}
+          <div
+            className="md:col-span-2 relative overflow-hidden rounded-lg cursor-pointer group h-64"
+            onClick={() => {
+              setSelectedVenue('Metro');
+              setShowCities(false);
+              scrollToScreens();
+            }}
+            data-testid="card-network-transit"
+          >
+            <img
+              src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800"
+              alt="Transit Media"
+              className="w-full h-full object-cover transition-transform group-hover:scale-110"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+            <h3 className="absolute bottom-4 left-4 font-bold text-white text-lg md:text-xl">Transit Media</h3>
+          </div>
+        </div>
+
+        {/* Bottom Row - Small Images */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mt-4">
           {[
-            { 
-              name: 'Café', 
-              image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=600',
-              venueType: 'Café'
-            },
-            { 
-              name: 'Highway', 
-              image: 'https://images.unsplash.com/photo-1449844908441-8829872d2607?w=600',
-              venueType: 'Highway'
-            },
-            { 
-              name: 'City Centre Junction', 
-              image: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=600',
-              venueType: 'Road Junction'
-            },
-            { 
-              name: 'Gyms', 
-              image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600',
-              venueType: 'Gym'
-            },
-            { 
-              name: 'Residential', 
-              image: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=600',
-              venueType: 'Apartment'
-            },
-            { 
-              name: 'Tech Parks', 
-              image: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600',
-              venueType: 'Corporate Park'
-            },
-          ].map((network) => {
-            const count = screens.filter(s => s.venueCategory === network.venueType).length;
-            
-            return (
-              <Card
-                key={network.name}
-                className="hover-elevate overflow-hidden cursor-pointer group"
-                onClick={() => {
-                  setSelectedVenue(network.venueType);
-                  setShowCities(false);
-                  scrollToScreens();
+            { name: 'Café', image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400', venueType: 'Café' },
+            { name: 'Tech Parks', image: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400', venueType: 'Corporate Park' },
+            { name: 'Residential', image: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=400', venueType: 'Apartment' },
+            { name: 'Gyms', image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400', venueType: 'Gym' },
+            { name: 'City Junction', image: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=400', venueType: 'Road Junction' },
+          ].map((network) => (
+            <div
+              key={network.name}
+              className="relative overflow-hidden rounded-lg cursor-pointer group h-32 sm:h-40"
+              onClick={() => {
+                setSelectedVenue(network.venueType);
+                setShowCities(false);
+                scrollToScreens();
+              }}
+              data-testid={`card-network-${network.name.toLowerCase().replace(/\s+/g, '-')}`}
+            >
+              <img
+                src={network.image}
+                alt={network.name}
+                className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                onError={(e) => {
+                  e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=' + encodeURIComponent(network.name);
                 }}
-                data-testid={`card-network-${network.name.toLowerCase().replace(/\s+/g, '-')}`}
-              >
-                <div className="relative h-40 sm:h-48 overflow-hidden">
-                  <img
-                    src={network.image}
-                    alt={network.name}
-                    className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=' + encodeURIComponent(network.name);
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
-                  <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
-                    <h3 className="font-bold text-white text-xs sm:text-sm mb-1">{network.name}</h3>
-                    <p className="text-xs text-white/90 flex items-center gap-1">
-                      <Monitor className="w-3 h-3" />
-                      {count} {count === 1 ? 'Screen' : 'Screens'}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+              <h3 className="absolute bottom-2 sm:bottom-3 left-2 sm:left-3 font-bold text-white text-xs sm:text-sm">{network.name}</h3>
+            </div>
+          ))}
         </div>
       </div>
 
