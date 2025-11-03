@@ -19,6 +19,12 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
@@ -42,6 +48,7 @@ export default function DiscoverScreens() {
   });
 
   const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
+  const [detailDialogScreen, setDetailDialogScreen] = useState<Screen | null>(null);
   const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [currentPage, setCurrentPage] = useState(1);
@@ -377,79 +384,71 @@ export default function DiscoverScreens() {
       <div className="flex-1 overflow-hidden">
         {viewMode === "list" ? (
           <div className="h-full overflow-y-auto p-6">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {paginatedScreens.map((screen) => (
                 <Card key={screen.id} className="hover-elevate overflow-hidden" data-testid={`card-screen-${screen.id}`}>
-                  {/* Screen Image */}
-                  <div className="relative h-48 bg-muted overflow-hidden">
+                  {/* Screen Image - LARGE */}
+                  <div className="relative h-56 bg-muted overflow-hidden cursor-pointer" onClick={() => setDetailDialogScreen(screen)}>
                     {screen.images && screen.images.length > 0 ? (
                       <img
                         src={screen.images[0]}
                         alt={screen.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-transform hover:scale-105"
                         onError={(e) => {
-                          e.currentTarget.src = 'https://placehold.co/400x300/1a1a1a/666?text=No+Image';
+                          e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
                         }}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-muted">
-                        <MapPin className="w-12 h-12 text-muted-foreground/50" />
+                        <MapPin className="w-16 h-16 text-muted-foreground/50" />
                       </div>
                     )}
-                    <Badge className="absolute top-2 right-2" variant="secondary">{screen.type}</Badge>
+                    <Badge className="absolute top-3 right-3" variant="secondary">{screen.type}</Badge>
+                    {screen.isMultiScreen && screen.numberOfScreens && (
+                      <Badge className="absolute top-3 left-3 bg-purple-600 hover:bg-purple-700">
+                        {screen.numberOfScreens} Screens
+                      </Badge>
+                    )}
                   </div>
 
-                  <CardHeader className="gap-2 space-y-0 pb-4">
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-lg">{screen.name}</CardTitle>
-                      {screen.isMultiScreen && screen.numberOfScreens && (
-                        <Badge variant="default" className="text-xs bg-purple-600 hover:bg-purple-700">
-                          🖥️ Multi-Venue: {screen.numberOfScreens}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="w-4 h-4" />
-                      <span className="truncate">{screen.location}, {screen.city}</span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">{screen.size}</Badge>
+                  <CardContent className="p-5 space-y-3">
+                    <div>
+                      <h3 className="font-bold text-lg leading-tight mb-2">{screen.name}</h3>
+                      <p className="text-sm text-muted-foreground line-clamp-1">
+                        {screen.location}, {screen.city}
+                      </p>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <p className="text-muted-foreground">Price/Day</p>
-                        <p className="font-semibold text-primary">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="text-xs">{screen.size}</Badge>
+                      <Badge variant="outline" className="text-xs">{screen.venueCategory || 'Standard'}</Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Price per day</p>
+                        <p className="font-bold text-lg text-primary">
                           {screen.isMultiScreen && screen.numberOfScreens ? (
-                            <>₹{screen.pricePerDay.toLocaleString()} × {screen.numberOfScreens}</>
+                            <>₹{screen.pricePerDay.toLocaleString()}<span className="text-sm font-normal text-muted-foreground"> × {screen.numberOfScreens}</span></>
                           ) : (
                             <>₹{screen.pricePerDay.toLocaleString()}</>
                           )}
                         </p>
                       </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <p className="text-muted-foreground">Min Booking</p>
-                        <p className="font-semibold">{screen.minBookingDays} days</p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 pt-2">
                       <Button
-                        className="flex-1"
                         variant={selectedScreenIds.has(screen.id) ? "secondary" : "default"}
+                        size="sm"
                         onClick={() => toggleScreenSelection(screen)}
                         data-testid={`button-toggle-screen-${screen.id}`}
                       >
                         {selectedScreenIds.has(screen.id) ? (
                           <>
-                            <Check className="h-4 w-4 mr-2" />
+                            <Check className="h-4 w-4 mr-1" />
                             Selected
                           </>
                         ) : (
                           <>
-                            <Plus className="h-4 w-4 mr-2" />
+                            <Plus className="h-4 w-4 mr-1" />
                             Add
                           </>
                         )}
@@ -559,82 +558,133 @@ export default function DiscoverScreens() {
                   <InfoWindow
                     position={{ lat: parseFloat(selectedScreen.latitude.toString()), lng: parseFloat(selectedScreen.longitude.toString()) }}
                     onCloseClick={() => setSelectedScreen(null)}
+                    options={{
+                      maxWidth: 350,
+                      pixelOffset: new google.maps.Size(0, -10)
+                    }}
                   >
-                    <div className="max-w-sm">
-                      {/* Screen Image */}
-                      <div className="relative h-40 bg-muted overflow-hidden rounded-t-md mb-3">
+                    <div style={{ width: '320px', maxWidth: '320px' }}>
+                      {/* Screen Image - LARGE */}
+                      <div className="relative h-48 bg-gray-200 overflow-hidden rounded-md mb-3">
                         {selectedScreen.images && selectedScreen.images.length > 0 ? (
                           <img
                             src={selectedScreen.images[0]}
                             alt={selectedScreen.name}
-                            className="w-full h-full object-cover"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             onError={(e) => {
-                              e.currentTarget.src = 'https://placehold.co/400x250/1a1a1a/666?text=No+Image';
+                              e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
                             }}
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-muted">
-                            <MapPin className="w-10 h-10 text-muted-foreground/50" />
+                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e5e7eb' }}>
+                            <MapPin style={{ width: '48px', height: '48px', color: '#9ca3af' }} />
                           </div>
                         )}
-                        <Badge className="absolute top-2 right-2" variant="secondary">{selectedScreen.type}</Badge>
+                        <span style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          backgroundColor: 'white',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: '500'
+                        }}>
+                          {selectedScreen.type}
+                        </span>
+                        {selectedScreen.isMultiScreen && selectedScreen.numberOfScreens && (
+                          <span style={{
+                            position: 'absolute',
+                            top: '8px',
+                            left: '8px',
+                            backgroundColor: '#7c3aed',
+                            color: 'white',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            fontWeight: '500'
+                          }}>
+                            {selectedScreen.numberOfScreens} Screens
+                          </span>
+                        )}
                       </div>
 
-                      <div className="space-y-3 px-1">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-bold text-lg">{selectedScreen.name}</h3>
-                            {selectedScreen.isMultiScreen && selectedScreen.numberOfScreens && (
-                              <Badge variant="default" className="text-xs bg-purple-600 hover:bg-purple-700">
-                                🖥️ Multi-Venue: {selectedScreen.numberOfScreens}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <MapPin className="h-4 w-4" />
-                            <span>{selectedScreen.location}, {selectedScreen.city}</span>
-                          </div>
+                      <div style={{ padding: '0 4px' }}>
+                        <h3 style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', color: '#111827' }}>
+                          {selectedScreen.name}
+                        </h3>
+                        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>
+                          {selectedScreen.location}, {selectedScreen.city}
+                        </p>
+
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            border: '1px solid #d1d5db',
+                            color: '#374151'
+                          }}>
+                            {selectedScreen.size}
+                          </span>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            border: '1px solid #d1d5db',
+                            color: '#374151'
+                          }}>
+                            {selectedScreen.venueCategory || 'Standard'}
+                          </span>
                         </div>
 
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline">{selectedScreen.size}</Badge>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm">
-                            <p className="text-muted-foreground">Price/Day</p>
-                            <p className="font-semibold text-primary">
-                              {selectedScreen.isMultiScreen && selectedScreen.numberOfScreens ? (
-                                <>₹{selectedScreen.pricePerDay.toLocaleString()} × {selectedScreen.numberOfScreens}</>
-                              ) : (
-                                <>₹{selectedScreen.pricePerDay.toLocaleString()}</>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          paddingTop: '12px',
+                          borderTop: '1px solid #e5e7eb'
+                        }}>
+                          <div>
+                            <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>Price per day</p>
+                            <p style={{ fontWeight: 'bold', fontSize: '18px', color: '#0d9488' }}>
+                              ₹{selectedScreen.pricePerDay.toLocaleString()}
+                              {selectedScreen.isMultiScreen && selectedScreen.numberOfScreens && (
+                                <span style={{ fontSize: '13px', fontWeight: 'normal', color: '#6b7280' }}>
+                                  {' '}× {selectedScreen.numberOfScreens}
+                                </span>
                               )}
                             </p>
                           </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <p className="text-muted-foreground">Min Booking</p>
-                            <p className="font-semibold">{selectedScreen.minBookingDays} days</p>
-                          </div>
+                          <button
+                            onClick={() => toggleScreenSelection(selectedScreen)}
+                            style={{
+                              backgroundColor: selectedScreenIds.has(selectedScreen.id) ? '#f3f4f6' : '#0d9488',
+                              color: selectedScreenIds.has(selectedScreen.id) ? '#111827' : 'white',
+                              padding: '8px 16px',
+                              borderRadius: '6px',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              fontWeight: '500',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            {selectedScreenIds.has(selectedScreen.id) ? (
+                              <>
+                                <Check style={{ width: '14px', height: '14px' }} />
+                                Selected
+                              </>
+                            ) : (
+                              <>
+                                <Plus style={{ width: '14px', height: '14px' }} />
+                                Add
+                              </>
+                            )}
+                          </button>
                         </div>
-
-                        <Button
-                          className="w-full"
-                          variant={selectedScreenIds.has(selectedScreen.id) ? "secondary" : "default"}
-                          onClick={() => toggleScreenSelection(selectedScreen)}
-                          data-testid={`button-toggle-screen-${selectedScreen.id}`}
-                        >
-                          {selectedScreenIds.has(selectedScreen.id) ? (
-                            <>
-                              <Check className="h-4 w-4 mr-2" />
-                              Selected
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="h-4 w-4 mr-2" />
-                              Add to Campaign
-                            </>
-                          )}
-                        </Button>
                       </div>
                     </div>
                   </InfoWindow>
@@ -644,6 +694,106 @@ export default function DiscoverScreens() {
           </div>
         )}
       </div>
+
+      {/* Screen Detail Dialog */}
+      <Dialog open={!!detailDialogScreen} onOpenChange={(open) => !open && setDetailDialogScreen(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {detailDialogScreen && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl">{detailDialogScreen.name}</DialogTitle>
+              </DialogHeader>
+              
+              <div className="space-y-6">
+                {/* Screen Image */}
+                <div className="relative h-72 bg-muted overflow-hidden rounded-lg">
+                  {detailDialogScreen.images && detailDialogScreen.images.length > 0 ? (
+                    <img
+                      src={detailDialogScreen.images[0]}
+                      alt={detailDialogScreen.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://placehold.co/800x600/1a1a1a/666?text=No+Image';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-muted">
+                      <MapPin className="w-20 h-20 text-muted-foreground/50" />
+                    </div>
+                  )}
+                  <Badge className="absolute top-3 right-3" variant="secondary">{detailDialogScreen.type}</Badge>
+                  {detailDialogScreen.isMultiScreen && detailDialogScreen.numberOfScreens && (
+                    <Badge className="absolute top-3 left-3 bg-purple-600 hover:bg-purple-700">
+                      {detailDialogScreen.numberOfScreens} Screens
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Location */}
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-2">Location</h4>
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
+                    <p className="text-base">{detailDialogScreen.location}, {detailDialogScreen.city}</p>
+                  </div>
+                </div>
+
+                {/* Screen Details */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Size</p>
+                    <Badge variant="outline">{detailDialogScreen.size}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Category</p>
+                    <Badge variant="outline">{detailDialogScreen.venueCategory || 'Standard'}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Price per day</p>
+                    <p className="text-2xl font-bold text-primary">
+                      {detailDialogScreen.isMultiScreen && detailDialogScreen.numberOfScreens ? (
+                        <>₹{detailDialogScreen.pricePerDay.toLocaleString()}<span className="text-base font-normal text-muted-foreground"> × {detailDialogScreen.numberOfScreens}</span></>
+                      ) : (
+                        <>₹{detailDialogScreen.pricePerDay.toLocaleString()}</>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Minimum booking</p>
+                    <p className="text-xl font-semibold">{detailDialogScreen.minBookingDays} days</p>
+                  </div>
+                </div>
+
+                {/* Action Button */}
+                <div className="pt-4 border-t">
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    variant={selectedScreenIds.has(detailDialogScreen.id) ? "secondary" : "default"}
+                    onClick={() => {
+                      toggleScreenSelection(detailDialogScreen);
+                      setDetailDialogScreen(null);
+                    }}
+                    data-testid={`button-toggle-detail-${detailDialogScreen.id}`}
+                  >
+                    {selectedScreenIds.has(detailDialogScreen.id) ? (
+                      <>
+                        <Check className="h-5 w-5 mr-2" />
+                        Selected - Click to Remove
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-5 w-5 mr-2" />
+                        Add to Campaign
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
