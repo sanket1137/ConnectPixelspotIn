@@ -1262,12 +1262,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all active screens (for discovery) with filtering
+  // Get all approved screens (for discovery) with filtering
   app.get("/api/screens", authenticate, async (req, res) => {
     try {
       const { city, type, minPrice, maxPrice, pincode } = req.query;
       
-      let screens = await storage.getActiveScreens();
+      let screens = await storage.getApprovedScreens();
       
       // Apply filters
       if (city) {
@@ -1301,10 +1301,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get available locations (states and cities from active screens)
+  // Get available locations (states and cities from approved screens)
   app.get("/api/screens/locations", authenticate, async (req, res) => {
     try {
-      const screens = await storage.getActiveScreens();
+      const screens = await storage.getApprovedScreens();
       
       // Extract unique states and cities
       const statesSet = new Set<string>();
@@ -1348,7 +1348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Budget and screenIds required" });
       }
       
-      const screens = await storage.getActiveScreens();
+      const screens = await storage.getApprovedScreens();
       const selectedScreens = screens.filter(s => screenIds.includes(s.id));
       
       if (selectedScreens.length === 0) {
@@ -1386,7 +1386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "ScreenIds and duration required" });
       }
       
-      const screens = await storage.getActiveScreens();
+      const screens = await storage.getApprovedScreens();
       const selectedScreens = screens.filter(s => screenIds.includes(s.id));
       
       if (selectedScreens.length === 0) {
@@ -1420,7 +1420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { lat, lng, radiusKm, city, budget, duration } = req.query;
       
-      let screens = await storage.getActiveScreens();
+      let screens = await storage.getApprovedScreens();
       
       // Filter by area (map OR city)
       if (lat && lng && radiusKm) {
