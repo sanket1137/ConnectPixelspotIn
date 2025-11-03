@@ -53,6 +53,8 @@ const CITY_IMAGES: Record<string, string> = {
 
 export default function PublicHome() {
   const [selectedCity, setSelectedCity] = useState<string>('all');
+  const [selectedState, setSelectedState] = useState<string>('all');
+  const [selectedCountry, setSelectedCountry] = useState<string>('India');
   const [selectedVenue, setSelectedVenue] = useState<string>('All Venues');
   const [budgetRange, setBudgetRange] = useState<number[]>([0, 50000]);
   const [hoveredScreen, setHoveredScreen] = useState<string | null>(null);
@@ -72,11 +74,16 @@ export default function PublicHome() {
   const cities = citiesData?.cities || [];
   const cityCount = citiesData?.count || 0;
 
+  // Get unique states from screens
+  const states = Array.from(new Set(screens.map(s => s.state).filter((state): state is string => Boolean(state))));
+
   // Calculate total impressions
   const totalImpressions = screens.reduce((sum, screen) => sum + (screen.avgDailyFootfall || 0), 0);
 
   // Filter screens
   const filteredScreens = screens.filter((screen) => {
+    if (selectedCountry !== 'India') return false; // Only India for now
+    if (selectedState !== 'all' && screen.state !== selectedState) return false;
     if (selectedCity !== 'all' && screen.city !== selectedCity) return false;
     if (selectedVenue !== 'All Venues' && screen.venueCategory !== selectedVenue) return false;
     if (screen.pricePerDay < budgetRange[0] || screen.pricePerDay > budgetRange[1]) return false;
@@ -239,296 +246,51 @@ export default function PublicHome() {
         </div>
       </div>
 
-      {/* Main Content - Map & Screens */}
-      <div className="container mx-auto px-4 py-6 sm:py-8" id="screens-section">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
-          {/* Filters Sidebar */}
-          <div className="lg:col-span-1 space-y-4">
-            <Card data-testid="card-filters">
-              <CardHeader className="pb-3 sm:pb-6">
-                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                  <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
-                  Filters
-                </CardTitle>
-                <CardDescription className="text-xs sm:text-sm">Refine your search</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                {/* City Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">City</label>
-                  <Select value={selectedCity} onValueChange={setSelectedCity}>
-                    <SelectTrigger data-testid="select-city">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Cities ({screens.length})</SelectItem>
-                      {cities.map((city) => {
-                        const count = screens.filter((s) => s.city === city).length;
-                        return (
-                          <SelectItem key={city} value={city}>
-                            {city} ({count})
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Venue Type Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Venue Type</label>
-                  <Select value={selectedVenue} onValueChange={setSelectedVenue}>
-                    <SelectTrigger data-testid="select-venue">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {VENUE_TYPES.map((venue) => (
-                        <SelectItem key={venue} value={venue}>
-                          {venue}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Budget Range */}
-                <div className="space-y-3">
-                  <label className="text-sm font-medium">
-                    Daily Budget
-                  </label>
-                  <div className="text-center py-2 px-3 bg-primary/10 rounded-md">
-                    <p className="text-sm font-semibold text-primary">
-                      ₹{budgetRange[0].toLocaleString()} - ₹{budgetRange[1].toLocaleString()}
-                    </p>
-                  </div>
-                  <Slider
-                    value={budgetRange}
-                    onValueChange={setBudgetRange}
-                    min={0}
-                    max={50000}
-                    step={1000}
-                    data-testid="slider-budget"
-                  />
-                </div>
-
-                {/* View Mode Toggle */}
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    variant={viewMode === 'map' ? 'default' : 'outline'}
-                    onClick={() => setViewMode('map')}
-                    className="flex-1"
-                    size="sm"
-                    data-testid="button-view-map"
-                  >
-                    <MapPin className="w-4 h-4 mr-2" />
-                    Map
-                  </Button>
-                  <Button
-                    variant={viewMode === 'list' ? 'default' : 'outline'}
-                    onClick={() => setViewMode('list')}
-                    className="flex-1"
-                    size="sm"
-                    data-testid="button-view-list"
-                  >
-                    <Search className="w-4 h-4 mr-2" />
-                    List
-                  </Button>
-                </div>
-
-                {/* Results Count */}
-                <div className="pt-3 border-t">
-                  <p className="text-sm text-muted-foreground text-center" data-testid="text-results-count">
-                    Showing <span className="font-semibold text-foreground">{filteredScreens.length}</span> of {screens.length} screens
-                  </p>
-                </div>
-
-                {/* Reset Filters */}
-                {(selectedCity !== 'all' || selectedVenue !== 'All Venues' || budgetRange[0] !== 0 || budgetRange[1] !== 50000) && (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedCity('all');
-                      setSelectedVenue('All Venues');
-                      setBudgetRange([0, 50000]);
-                    }}
-                    data-testid="button-reset-filters"
-                  >
-                    Reset Filters
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* CTA Card */}
-            <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
-              <CardHeader>
-                <CardTitle className="text-lg">Ready to Advertise?</CardTitle>
-                <CardDescription>Launch your campaign today</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Link href="/register?role=advertiser">
-                  <Button className="w-full" size="lg" data-testid="button-cta-create-campaign">
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Create Campaign
-                  </Button>
-                </Link>
-                <p className="text-xs text-muted-foreground text-center">
-                  No credit card required • Free to start
-                </p>
-              </CardContent>
-            </Card>
+      {/* Browse by City Section */}
+      {showCities && cities.length > 0 && (
+        <div className="container mx-auto px-4 py-8 sm:py-12 md:py-16">
+          <div className="text-center mb-8 sm:mb-10 space-y-3">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">Browse by City</h2>
+            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+              Explore premium DOOH screens in major cities across India
+            </p>
           </div>
-
-          {/* Main Content Area */}
-          <div className="lg:col-span-3 space-y-6">
-            {/* Map View */}
-            {viewMode === 'map' && (
-              <Card>
-                <CardContent className="p-0">
-                  <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}>
-                    <GoogleMap
-                      mapContainerStyle={getMapContainerStyle()}
-                      center={defaultCenter}
-                      zoom={5}
-                      options={{
-                        zoomControl: true,
-                        streetViewControl: false,
-                        mapTypeControl: false,
-                        fullscreenControl: true,
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+            {cities.map((city) => {
+              const count = cityCounts[city] || 0;
+              const imageUrl = CITY_IMAGES[city] || 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400';
+              
+              return (
+                <Card
+                  key={city}
+                  className="hover-elevate overflow-hidden cursor-pointer group"
+                  onClick={() => handleCityClick(city)}
+                  data-testid={`card-city-${city}`}
+                >
+                  <div className="relative h-32 sm:h-40 overflow-hidden">
+                    <img
+                      src={imageUrl}
+                      alt={city}
+                      className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=' + encodeURIComponent(city);
                       }}
-                    >
-                      {filteredScreens.map((screen) => {
-                        const isHovered = hoveredScreen === screen.id;
-                        return (
-                          <Marker
-                            key={screen.id}
-                            position={{
-                              lat: parseFloat(screen.latitude as string),
-                              lng: parseFloat(screen.longitude as string),
-                            }}
-                            onClick={() => handleMarkerClick(screen.id)}
-                            onMouseOver={() => setHoveredScreen(screen.id)}
-                            onMouseOut={() => setHoveredScreen(null)}
-                            icon={{
-                              path: 'M 0, 0 m -5, 0 a 5,5 0 1,0 10,0 a 5,5 0 1,0 -10,0',
-                              fillColor: isHovered ? '#22c55e' : '#8b5cf6',
-                              fillOpacity: 1,
-                              strokeColor: '#ffffff',
-                              strokeWeight: 2,
-                              scale: isHovered ? 2.4 : 2,
-                            }}
-                          />
-                        );
-                      })}
-                    </GoogleMap>
-                  </LoadScript>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Screen Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {screensLoading ? (
-                <div className="col-span-full text-center py-12">
-                  <Monitor className="w-12 h-12 mx-auto text-muted-foreground mb-4 animate-pulse" />
-                  <p className="text-muted-foreground">Loading screens...</p>
-                </div>
-              ) : filteredScreens.length === 0 ? (
-                <div className="col-span-full text-center py-12">
-                  <Search className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-lg font-semibold mb-2">No screens found</p>
-                  <p className="text-muted-foreground mb-4">Try adjusting your filters</p>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedCity('all');
-                      setSelectedVenue('All Venues');
-                      setBudgetRange([0, 50000]);
-                    }}
-                    data-testid="button-reset-filters-empty"
-                  >
-                    Reset Filters
-                  </Button>
-                </div>
-              ) : (
-                filteredScreens.map((screen) => (
-                  <Card
-                    key={screen.id}
-                    id={`screen-${screen.id}`}
-                    className={`hover-elevate overflow-hidden transition-all ${
-                      hoveredScreen === screen.id ? 'ring-2 ring-primary shadow-lg' : ''
-                    }`}
-                    onMouseEnter={() => setHoveredScreen(screen.id)}
-                    onMouseLeave={() => setHoveredScreen(null)}
-                    data-testid={`card-screen-${screen.id}`}
-                  >
-                    {/* Screen Image - LARGE */}
-                    <div className="relative h-48 bg-muted overflow-hidden cursor-pointer group">
-                      {(screen.screenImages && screen.screenImages.length > 0) || (screen.images && screen.images.length > 0) ? (
-                        <img
-                          src={(screen.screenImages?.[0] ?? screen.images?.[0]) || ''}
-                          alt={screen.name}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                          onError={(e) => {
-                            e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-muted">
-                          <MapPin className="w-16 h-16 text-muted-foreground/50" />
-                        </div>
-                      )}
-                      <Badge className="absolute top-3 right-3" variant="secondary">{screen.category}</Badge>
-                      {screen.venueCategory && (
-                        <Badge className="absolute top-3 left-3 bg-primary/90 backdrop-blur-sm">
-                          {screen.venueCategory}
-                        </Badge>
-                      )}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
+                      <h3 className="font-bold text-white text-sm sm:text-base mb-1">{city}</h3>
+                      <p className="text-xs text-white/90 flex items-center gap-1">
+                        <Monitor className="w-3 h-3" />
+                        {count} {count === 1 ? 'Screen' : 'Screens'}
+                      </p>
                     </div>
-
-                    <CardContent className="p-4 space-y-3">
-                      <div>
-                        <h3 className="font-bold text-base leading-tight mb-1 line-clamp-1">{screen.name}</h3>
-                        <p className="text-sm text-muted-foreground line-clamp-1 flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-                          {screen.venueName}, {screen.city}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5" />
-                          <span>{screen.avgDailyFootfall?.toLocaleString()}/day</span>
-                        </div>
-                        <span>•</span>
-                        <div className="flex items-center gap-1">
-                          <Monitor className="w-3.5 h-3.5" />
-                          <span>{screen.displayFormat}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2 border-t">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Price per day</p>
-                          <p className="font-bold text-xl text-primary">₹{screen.pricePerDay.toLocaleString()}</p>
-                        </div>
-                        <Link href="/register?role=advertiser">
-                          <Button size="sm" data-testid={`button-book-${screen.id}`}>
-                            <Eye className="w-3.5 h-3.5 mr-1" />
-                            View Details
-                          </Button>
-                        </Link>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Discover Perfect Screen Section */}
       <div className="bg-gradient-to-br from-primary/5 to-background border-t mt-8 sm:mt-12 md:mt-16 overflow-hidden relative">
@@ -770,6 +532,333 @@ export default function PublicHome() {
             </Button>
           </Link>
         </div>
+      </div>
+
+      {/* Main Content - Map & Screens with Horizontal Filters */}
+      <div className="container mx-auto px-4 py-8 sm:py-12 md:py-16" id="screens-section">
+        <div className="text-center mb-6 sm:mb-8 space-y-2">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">Explore Premium Screens</h2>
+          <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+            Find the perfect DOOH screens for your campaign
+          </p>
+        </div>
+
+        {/* Horizontal Filters */}
+        <Card className="mb-6" data-testid="card-filters">
+          <CardContent className="p-4 sm:p-6">
+            <div className="space-y-4">
+              {/* First Row: Dropdowns */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+                {/* Country Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Country</label>
+                  <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+                    <SelectTrigger className="h-9" data-testid="select-country">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="India">India</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* State Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">State</label>
+                  <Select value={selectedState} onValueChange={setSelectedState}>
+                    <SelectTrigger className="h-9" data-testid="select-state">
+                      <SelectValue placeholder="All States" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All States</SelectItem>
+                      {states.map((state) => (
+                        <SelectItem key={state} value={state}>
+                          {state}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* City Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">City</label>
+                  <Select value={selectedCity} onValueChange={setSelectedCity}>
+                    <SelectTrigger className="h-9" data-testid="select-city">
+                      <SelectValue placeholder="All Cities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Cities ({screens.length})</SelectItem>
+                      {cities.map((city) => {
+                        const count = screens.filter((s) => s.city === city).length;
+                        return (
+                          <SelectItem key={city} value={city}>
+                            {city} ({count})
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Venue Type Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Venue Type</label>
+                  <Select value={selectedVenue} onValueChange={setSelectedVenue}>
+                    <SelectTrigger className="h-9" data-testid="select-venue">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VENUE_TYPES.map((venue) => (
+                        <SelectItem key={venue} value={venue}>
+                          {venue}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* View Mode Toggle */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">View</label>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={viewMode === 'map' ? 'default' : 'outline'}
+                      onClick={() => setViewMode('map')}
+                      className="flex-1 h-9"
+                      size="sm"
+                      data-testid="button-view-map"
+                    >
+                      <MapPin className="w-3.5 h-3.5 sm:mr-1.5" />
+                      <span className="hidden sm:inline">Map</span>
+                    </Button>
+                    <Button
+                      variant={viewMode === 'list' ? 'default' : 'outline'}
+                      onClick={() => setViewMode('list')}
+                      className="flex-1 h-9"
+                      size="sm"
+                      data-testid="button-view-list"
+                    >
+                      <Search className="w-3.5 h-3.5 sm:mr-1.5" />
+                      <span className="hidden sm:inline">List</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Second Row: Budget Range Slider */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">Daily Budget Range</label>
+                  <div className="text-xs font-semibold text-primary">
+                    ₹{budgetRange[0].toLocaleString()} - ₹{budgetRange[1].toLocaleString()}
+                  </div>
+                </div>
+                <Slider
+                  value={budgetRange}
+                  onValueChange={setBudgetRange}
+                  min={0}
+                  max={50000}
+                  step={1000}
+                  className="w-full"
+                  data-testid="slider-budget"
+                />
+              </div>
+
+              {/* Third Row: Results Count & Reset */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t">
+                <p className="text-sm text-muted-foreground" data-testid="text-results-count">
+                  Showing <span className="font-semibold text-foreground">{filteredScreens.length}</span> of {screens.length} screens
+                </p>
+                {(selectedCountry !== 'India' || selectedState !== 'all' || selectedCity !== 'all' || selectedVenue !== 'All Venues' || budgetRange[0] !== 0 || budgetRange[1] !== 50000) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedCountry('India');
+                      setSelectedState('all');
+                      setSelectedCity('all');
+                      setSelectedVenue('All Venues');
+                      setBudgetRange([0, 50000]);
+                    }}
+                    data-testid="button-reset-filters"
+                  >
+                    <Filter className="w-3.5 h-3.5 mr-1.5" />
+                    Reset Filters
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Map View */}
+        {viewMode === 'map' && (
+          <Card className="mb-6">
+            <CardContent className="p-0">
+              <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}>
+                <GoogleMap
+                  mapContainerStyle={getMapContainerStyle()}
+                  center={defaultCenter}
+                  zoom={5}
+                  options={{
+                    zoomControl: true,
+                    streetViewControl: false,
+                    mapTypeControl: false,
+                    fullscreenControl: true,
+                  }}
+                >
+                  {filteredScreens.map((screen) => {
+                    const isHovered = hoveredScreen === screen.id;
+                    return (
+                      <Marker
+                        key={screen.id}
+                        position={{
+                          lat: parseFloat(screen.latitude as string),
+                          lng: parseFloat(screen.longitude as string),
+                        }}
+                        onClick={() => handleMarkerClick(screen.id)}
+                        onMouseOver={() => setHoveredScreen(screen.id)}
+                        onMouseOut={() => setHoveredScreen(null)}
+                        icon={{
+                          path: 'M 0, 0 m -5, 0 a 5,5 0 1,0 10,0 a 5,5 0 1,0 -10,0',
+                          fillColor: isHovered ? '#22c55e' : '#8b5cf6',
+                          fillOpacity: 1,
+                          strokeColor: '#ffffff',
+                          strokeWeight: 2,
+                          scale: isHovered ? 2.4 : 2,
+                        }}
+                      />
+                    );
+                  })}
+                </GoogleMap>
+              </LoadScript>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Screen Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          {screensLoading ? (
+            <div className="col-span-full text-center py-12">
+              <Monitor className="w-12 h-12 mx-auto text-muted-foreground mb-4 animate-pulse" />
+              <p className="text-muted-foreground">Loading screens...</p>
+            </div>
+          ) : filteredScreens.length === 0 ? (
+            <div className="col-span-full text-center py-12">
+              <Search className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-lg font-semibold mb-2">No screens found</p>
+              <p className="text-muted-foreground mb-4">Try adjusting your filters</p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelectedCountry('India');
+                  setSelectedState('all');
+                  setSelectedCity('all');
+                  setSelectedVenue('All Venues');
+                  setBudgetRange([0, 50000]);
+                }}
+                data-testid="button-reset-filters-empty"
+              >
+                Reset Filters
+              </Button>
+            </div>
+          ) : (
+            filteredScreens.map((screen) => (
+              <Card
+                key={screen.id}
+                id={`screen-${screen.id}`}
+                className={`hover-elevate overflow-hidden transition-all ${
+                  hoveredScreen === screen.id ? 'ring-2 ring-primary shadow-lg' : ''
+                }`}
+                onMouseEnter={() => setHoveredScreen(screen.id)}
+                onMouseLeave={() => setHoveredScreen(null)}
+                data-testid={`card-screen-${screen.id}`}
+              >
+                {/* Screen Image */}
+                <div className="relative h-40 sm:h-48 bg-muted overflow-hidden cursor-pointer group">
+                  {(screen.screenImages && screen.screenImages.length > 0) || (screen.images && screen.images.length > 0) ? (
+                    <img
+                      src={(screen.screenImages?.[0] ?? screen.images?.[0]) || ''}
+                      alt={screen.name}
+                      className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-muted">
+                      <MapPin className="w-12 h-12 text-muted-foreground/50" />
+                    </div>
+                  )}
+                  <Badge className="absolute top-2 right-2 text-xs" variant="secondary">{screen.category}</Badge>
+                  {screen.venueCategory && (
+                    <Badge className="absolute top-2 left-2 text-xs bg-primary/90 backdrop-blur-sm">
+                      {screen.venueCategory}
+                    </Badge>
+                  )}
+                </div>
+
+                <CardContent className="p-3 sm:p-4 space-y-2.5">
+                  <div>
+                    <h3 className="font-bold text-sm sm:text-base leading-tight mb-1 line-clamp-1">{screen.name}</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 flex-shrink-0" />
+                      {screen.venueName}, {screen.city}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      <span className="text-xs">{screen.avgDailyFootfall?.toLocaleString()}/day</span>
+                    </div>
+                    <span>•</span>
+                    <div className="flex items-center gap-1">
+                      <Monitor className="w-3 h-3" />
+                      <span className="text-xs">{screen.displayFormat}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Per day</p>
+                      <p className="font-bold text-lg sm:text-xl text-primary">₹{screen.pricePerDay.toLocaleString()}</p>
+                    </div>
+                    <Link href="/register?role=advertiser">
+                      <Button size="sm" data-testid={`button-book-${screen.id}`}>
+                        <Eye className="w-3 h-3 mr-1" />
+                        <span className="text-xs">View</span>
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+
+        {/* CTA Section */}
+        <Card className="mt-8 bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+          <CardContent className="p-6 sm:p-8 text-center">
+            <h3 className="text-xl sm:text-2xl font-bold mb-2">Ready to Launch Your Campaign?</h3>
+            <p className="text-sm sm:text-base text-muted-foreground mb-6 max-w-2xl mx-auto">
+              Join hundreds of brands using Pixelspot to create impactful DOOH campaigns
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+              <Link href="/register?role=advertiser">
+                <Button size="lg" data-testid="button-cta-create-campaign">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Create Campaign
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </Link>
+              <p className="text-xs text-muted-foreground">
+                No credit card required • Free to start
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Bottom CTA */}
