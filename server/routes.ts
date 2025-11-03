@@ -1616,6 +1616,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update campaign (advertiser - only for rejected campaigns)
+  app.patch("/api/advertiser/campaigns/:id", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const campaign = await storage.getCampaign(id);
+      
+      if (!campaign || campaign.advertiserId !== req.user!.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      // Only allow editing rejected campaigns
+      if (campaign.status !== "rejected") {
+        return res.status(400).json({ error: "Only rejected campaigns can be edited" });
+      }
+
+      const updateData = {
+        ...req.body,
+        startDate: req.body.startDate ? new Date(req.body.startDate) : undefined,
+        endDate: req.body.endDate ? new Date(req.body.endDate) : undefined,
+      };
+
+      const updatedCampaign = await storage.updateCampaign(id, updateData);
+      res.json(updatedCampaign);
+    } catch (error) {
+      console.error("Update campaign error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Resubmit rejected campaign (advertiser)
+  app.patch("/api/advertiser/campaigns/:id/resubmit", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const campaign = await storage.getCampaign(id);
+      
+      if (!campaign || campaign.advertiserId !== req.user!.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      // Only allow resubmitting rejected campaigns
+      if (campaign.status !== "rejected") {
+        return res.status(400).json({ error: "Only rejected campaigns can be resubmitted" });
+      }
+
+      // Reset status to pending and clear rejection reason
+      const updatedCampaign = await storage.updateCampaign(id, {
+        status: "pending",
+        rejectionReason: null,
+      });
+
+      res.json(updatedCampaign);
+    } catch (error) {
+      console.error("Resubmit campaign error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Accept alternative dates proposed by screen owner
   app.patch("/api/advertiser/bookings/:id/accept-alternative", authenticate, requireRole("advertiser"), async (req, res) => {
     try {

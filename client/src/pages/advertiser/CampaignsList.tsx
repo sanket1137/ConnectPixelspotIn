@@ -1,17 +1,42 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Calendar, DollarSign, Plus, Eye } from "lucide-react";
+import { FileText, Calendar, DollarSign, Plus, Eye, Edit2, RefreshCw, AlertCircle } from "lucide-react";
 import { useLocation } from "wouter";
 import type { Campaign } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 
 export default function CampaignsList() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
     queryKey: ["/api/advertiser/campaigns"],
+  });
+
+  const resubmitMutation = useMutation({
+    mutationFn: async (campaignId: string) => {
+      return apiRequest("PATCH", `/api/advertiser/campaigns/${campaignId}/resubmit`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
+      toast({
+        title: "Campaign Resubmitted",
+        description: "Your campaign has been resubmitted for review.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to resubmit campaign. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const getStatusVariant = (status: string) => {
@@ -131,9 +156,19 @@ export default function CampaignsList() {
                         </p>
                       </div>
                     </div>
+
+                    {campaign.status === "rejected" && campaign.rejectionReason && (
+                      <Alert variant="destructive" className="mt-3">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          <strong className="block mb-1">Rejection Reason:</strong>
+                          {campaign.rejectionReason}
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2">
                     <Button 
                       variant="outline" 
                       onClick={() => setLocation(`/advertiser/campaigns/${campaign.id}`)}
@@ -142,6 +177,26 @@ export default function CampaignsList() {
                       <Eye className="mr-2 h-4 w-4" />
                       View Details
                     </Button>
+                    {campaign.status === "rejected" && (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setLocation(`/advertiser/campaigns/edit/${campaign.id}`)}
+                          data-testid={`button-edit-${campaign.id}`}
+                        >
+                          <Edit2 className="mr-2 h-4 w-4" />
+                          Edit Campaign
+                        </Button>
+                        <Button 
+                          onClick={() => resubmitMutation.mutate(campaign.id)}
+                          disabled={resubmitMutation.isPending}
+                          data-testid={`button-resubmit-${campaign.id}`}
+                        >
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          {resubmitMutation.isPending ? "Resubmitting..." : "Resubmit"}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               </CardContent>

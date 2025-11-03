@@ -147,6 +147,7 @@ export const campaigns = pgTable("campaigns", {
   estimatedBudget: integer("estimated_budget"), // AI-calculated budget based on recommended screens
   creativeUrl: text("creative_url"), // URL to uploaded creative from object storage
   status: text("status").notNull().default("pending"), // pending, approved, live, completed, rejected
+  rejectionReason: text("rejection_reason"), // Admin's reason for rejecting the campaign
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
