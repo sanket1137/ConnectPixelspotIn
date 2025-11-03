@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Check, X, Monitor, AlertCircle } from "lucide-react";
+import { Calendar, Check, X, Monitor, AlertCircle, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +36,7 @@ interface BookingRequest {
   campaign: {
     name: string;
     objective: string;
+    creativeUrl: string | null;
   };
 }
 
@@ -145,6 +146,20 @@ export default function BookingRequests() {
                 <span className="text-muted-foreground">Campaign:</span>
                 <span className="font-medium">{booking.campaign.name}</span>
               </div>
+              {booking.campaign?.creativeUrl && (
+                <div className="mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => window.open(booking.campaign.creativeUrl!, '_blank')}
+                    data-testid={`button-view-creative-${booking.id}`}
+                  >
+                    <Eye className="mr-1.5 h-3 w-3" />
+                    View Campaign Creative
+                  </Button>
+                </div>
+              )}
               <div className="flex items-center gap-2 text-sm">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span>{formatDate(booking.startDate)} - {formatDate(booking.endDate)}</span>

@@ -37,6 +37,7 @@ interface BookingWithDetails {
   campaign: {
     name: string;
     objective: string;
+    creativeUrl: string | null;
   };
   advertiser: {
     id: string;
@@ -212,6 +213,20 @@ export default function ManageBookings() {
             <p className="text-xs text-muted-foreground mt-1">
               Campaign: {booking.campaign?.name || "Unknown Campaign"}
             </p>
+            {booking.campaign?.creativeUrl && (
+              <div className="mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => window.open(booking.campaign.creativeUrl!, '_blank')}
+                  data-testid={`button-view-creative-${booking.id}`}
+                >
+                  <Eye className="mr-1.5 h-3 w-3" />
+                  View Campaign Creative
+                </Button>
+              </div>
+            )}
           </div>
         </div>
         {getStatusBadge(booking)}
