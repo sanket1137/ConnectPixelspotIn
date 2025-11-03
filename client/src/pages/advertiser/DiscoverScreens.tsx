@@ -91,7 +91,8 @@ export default function DiscoverScreens() {
 
   // Tiered fallback strategy: progressively drop filters if no results
   const getFilteredScreens = () => {
-    const activeScreens = screens.filter(s => s.status === "active");
+    // Backend already returns only approved screens, no need to filter by status
+    const activeScreens = screens;
     
     // Try strict match (all filters)
     const applyFilters = (filtersToApply: typeof filters) => {
