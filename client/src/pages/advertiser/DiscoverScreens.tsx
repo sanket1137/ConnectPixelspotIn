@@ -102,8 +102,33 @@ export default function DiscoverScreens() {
     queryKey: ["/api/screens/locations"],
   });
 
-  // Extract unique values from screens for dropdowns
-  const venueCategoryOptions = Array.from(new Set(screens.map(s => s.venueCategory).filter(Boolean))).sort();
+  // All possible venue categories from schema (always available)
+  const venueCategoryOptions = [
+    'Airport',
+    'Apartment',
+    'Bus Stop',
+    'Café',
+    'Cinema',
+    'Co-working',
+    'College',
+    'Corporate Park',
+    'Flyover',
+    'Gym',
+    'Highway',
+    'Hospital',
+    'Mall',
+    'Metro',
+    'Office Building',
+    'Restaurant',
+    'Retail Store',
+    'Road Junction',
+    'Road Side',
+    'Salon',
+    'Shopping Complex',
+    'Stadium'
+  ];
+  
+  // Extract unique values from screens for other dropdowns
   const screenCategoryOptions = Array.from(new Set(screens.map(s => s.category).filter(Boolean))).sort();
   const environmentTypeOptions = Array.from(new Set(screens.map(s => s.environmentType).filter(Boolean))).sort();
   const trafficTypeOptions = Array.from(new Set(screens.map(s => s.trafficType).filter(Boolean))).sort();
