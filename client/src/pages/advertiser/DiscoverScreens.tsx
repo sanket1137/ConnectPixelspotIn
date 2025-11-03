@@ -138,128 +138,21 @@ export default function DiscoverScreens() {
     ? locations.cities[filters.state] 
     : locations?.allCities || [];
 
-  // Tiered fallback strategy: progressively drop filters if no results
+  // Strict filtering: show only screens that match ALL selected filters
   const getFilteredScreens = () => {
-    // Backend already returns only approved screens, no need to filter by status
-    const activeScreens = screens;
+    const results = screens.filter((screen) => {
+      if (filters.state && screen.state !== filters.state) return false;
+      if (filters.city && screen.city !== filters.city) return false;
+      if (filters.venueCategory && screen.venueCategory !== filters.venueCategory) return false;
+      if (filters.screenCategory && screen.category !== filters.screenCategory) return false;
+      if (filters.environmentType && screen.environmentType !== filters.environmentType) return false;
+      if (filters.trafficType && screen.trafficType !== filters.trafficType) return false;
+      if (filters.minPrice && screen.pricePerDay < parseInt(filters.minPrice)) return false;
+      if (filters.maxPrice && screen.pricePerDay > parseInt(filters.maxPrice)) return false;
+      return true;
+    });
     
-    // Try strict match (all filters)
-    const applyFilters = (filtersToApply: typeof filters) => {
-      return activeScreens.filter((screen) => {
-        if (filtersToApply.state && screen.state !== filtersToApply.state) return false;
-        if (filtersToApply.city && screen.city !== filtersToApply.city) return false;
-        if (filtersToApply.venueCategory && screen.venueCategory !== filtersToApply.venueCategory) return false;
-        if (filtersToApply.screenCategory && screen.category !== filtersToApply.screenCategory) return false;
-        if (filtersToApply.environmentType && screen.environmentType !== filtersToApply.environmentType) return false;
-        if (filtersToApply.trafficType && screen.trafficType !== filtersToApply.trafficType) return false;
-        if (filtersToApply.minPrice && screen.pricePerDay < parseInt(filtersToApply.minPrice)) return false;
-        if (filtersToApply.maxPrice && screen.pricePerDay > parseInt(filtersToApply.maxPrice)) return false;
-        return true;
-      });
-    };
-    
-    let results = applyFilters(filters);
-    let relaxedFilters: string[] = [];
-    
-    // If no results, progressively drop filters (least important first)
-    const hasAnyFilter = filters.state || filters.city || filters.venueCategory || 
-                         filters.screenCategory || filters.environmentType || 
-                         filters.trafficType || filters.minPrice || filters.maxPrice;
-    
-    if (results.length === 0 && hasAnyFilter) {
-      // Drop traffic type filter (least important)
-      if (filters.trafficType) {
-        const withoutTrafficType = { ...filters, trafficType: "" };
-        results = applyFilters(withoutTrafficType);
-        if (results.length > 0) {
-          relaxedFilters.push("Traffic Type");
-          return { results, relaxedFilters };
-        }
-      }
-      
-      // Drop environment type filter
-      if (filters.environmentType) {
-        const withoutEnvironment = { ...filters, trafficType: "", environmentType: "" };
-        results = applyFilters(withoutEnvironment);
-        if (results.length > 0) {
-          if (filters.trafficType) relaxedFilters.push("Traffic Type");
-          relaxedFilters.push("Environment Type");
-          return { results, relaxedFilters };
-        }
-      }
-      
-      // Drop screen category filter
-      if (filters.screenCategory) {
-        const withoutScreenCategory = { ...filters, trafficType: "", environmentType: "", screenCategory: "" };
-        results = applyFilters(withoutScreenCategory);
-        if (results.length > 0) {
-          if (filters.trafficType) relaxedFilters.push("Traffic Type");
-          if (filters.environmentType) relaxedFilters.push("Environment Type");
-          relaxedFilters.push("Screen Category");
-          return { results, relaxedFilters };
-        }
-      }
-      
-      // Drop venue category filter
-      if (filters.venueCategory) {
-        const withoutVenueCategory = { ...filters, trafficType: "", environmentType: "", screenCategory: "", venueCategory: "" };
-        results = applyFilters(withoutVenueCategory);
-        if (results.length > 0) {
-          if (filters.trafficType) relaxedFilters.push("Traffic Type");
-          if (filters.environmentType) relaxedFilters.push("Environment Type");
-          if (filters.screenCategory) relaxedFilters.push("Screen Category");
-          relaxedFilters.push("Venue Category");
-          return { results, relaxedFilters };
-        }
-      }
-      
-      // Drop maxPrice filter
-      if (filters.maxPrice) {
-        const withoutMaxPrice = { ...filters, trafficType: "", environmentType: "", screenCategory: "", venueCategory: "", maxPrice: "" };
-        results = applyFilters(withoutMaxPrice);
-        if (results.length > 0) {
-          if (filters.trafficType) relaxedFilters.push("Traffic Type");
-          if (filters.environmentType) relaxedFilters.push("Environment Type");
-          if (filters.screenCategory) relaxedFilters.push("Screen Category");
-          if (filters.venueCategory) relaxedFilters.push("Venue Category");
-          relaxedFilters.push("Max Price");
-          return { results, relaxedFilters };
-        }
-      }
-      
-      // Drop minPrice filter
-      if (filters.minPrice) {
-        const withoutPriceFilters = { ...filters, trafficType: "", environmentType: "", screenCategory: "", venueCategory: "", minPrice: "", maxPrice: "" };
-        results = applyFilters(withoutPriceFilters);
-        if (results.length > 0) {
-          if (filters.trafficType) relaxedFilters.push("Traffic Type");
-          if (filters.environmentType) relaxedFilters.push("Environment Type");
-          if (filters.screenCategory) relaxedFilters.push("Screen Category");
-          if (filters.venueCategory) relaxedFilters.push("Venue Category");
-          if (filters.maxPrice) relaxedFilters.push("Max Price");
-          relaxedFilters.push("Min Price");
-          return { results, relaxedFilters };
-        }
-      }
-      
-      // Last resort: show all active screens in city/state (or all if no location filter)
-      results = activeScreens.filter(s => {
-        if (filters.state && s.state !== filters.state) return false;
-        if (filters.city && s.city !== filters.city) return false;
-        return true;
-      });
-      if (filters.trafficType) relaxedFilters.push("Traffic Type");
-      if (filters.environmentType) relaxedFilters.push("Environment Type");
-      if (filters.screenCategory) relaxedFilters.push("Screen Category");
-      if (filters.venueCategory) relaxedFilters.push("Venue Category");
-      if (filters.maxPrice) relaxedFilters.push("Max Price");
-      if (filters.minPrice) relaxedFilters.push("Min Price");
-      if (!filters.state && !filters.city && results.length > 0) {
-        relaxedFilters.push("Location");
-      }
-    }
-    
-    return { results, relaxedFilters };
+    return { results, relaxedFilters: [] };
   };
   
   const { results: filteredScreens, relaxedFilters } = getFilteredScreens();
