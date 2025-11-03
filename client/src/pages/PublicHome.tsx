@@ -102,7 +102,18 @@ export default function PublicHome() {
   const handleCityClick = (city: string) => {
     setSelectedCity(city);
     setShowCities(false);
-    window.scrollTo({ top: 600, behavior: 'smooth' });
+    // Scroll to screens section
+    const screensSection = document.getElementById('screens-section');
+    if (screensSection) {
+      screensSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const scrollToScreens = () => {
+    const screensSection = document.getElementById('screens-section');
+    if (screensSection) {
+      screensSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   return (
@@ -217,7 +228,7 @@ export default function PublicHome() {
                 size="lg" 
                 variant="outline"
                 className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group"
-                onClick={() => window.scrollTo({ top: 800, behavior: 'smooth' })}
+                onClick={scrollToScreens}
                 data-testid="button-hero-explore"
               >
                 <Search className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:scale-110 transition-transform" />
@@ -228,65 +239,8 @@ export default function PublicHome() {
         </div>
       </div>
 
-      {/* City Cards Section */}
-      {showCities && cities.length > 0 && (
-        <div className="container mx-auto px-4 py-16 bg-gradient-to-b from-background to-primary/5">
-          <div className="text-center mb-10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-            <h2 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-to-r from-foreground to-foreground/60 bg-clip-text text-transparent">
-              Browse by City
-            </h2>
-            <p className="text-lg text-muted-foreground">Select a city to discover available screens</p>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200">
-            {cities.map((city, index) => (
-              <Card 
-                key={city} 
-                className="hover-elevate active-elevate-2 cursor-pointer group overflow-hidden border-primary/10"
-                onClick={() => handleCityClick(city)}
-                data-testid={`card-city-${city}`}
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                <div className="relative h-36 bg-gradient-to-br from-primary/20 to-primary/5 overflow-hidden">
-                  {CITY_IMAGES[city] && (
-                    <img 
-                      src={CITY_IMAGES[city]} 
-                      alt={city}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <h3 className="text-white font-bold text-lg mb-0.5 drop-shadow-lg">{city}</h3>
-                    <div className="flex items-center gap-1.5">
-                      <Monitor className="w-3.5 h-3.5 text-white/90" />
-                      <p className="text-white/90 text-sm font-medium">{cityCounts[city]} screens</p>
-                    </div>
-                  </div>
-                  <div className="absolute top-3 right-3 bg-primary/90 backdrop-blur-sm text-white px-2 py-1 rounded-full text-xs font-semibold">
-                    Explore
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-          
-          <div className="text-center mt-8 animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-300">
-            <Button 
-              variant="ghost" 
-              className="group text-base"
-              onClick={() => setShowCities(false)}
-              data-testid="button-view-all"
-            >
-              View All Screens on Map
-              <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* Main Content - Map & Screens */}
-      <div className="container mx-auto px-4 py-6 sm:py-8">
+      <div className="container mx-auto px-4 py-6 sm:py-8" id="screens-section">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
           {/* Filters Sidebar */}
           <div className="lg:col-span-1 space-y-4">
@@ -599,13 +553,11 @@ export default function PublicHome() {
                 Pinpoint high-impact locations with AI-powered recommendations. Our intelligent platform analyzes audience demographics, footfall patterns, and engagement data to match your brand with the most effective DOOH screens across India.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 sm:pt-4">
-                <Link href="/register?role=advertiser" className="w-full sm:w-auto">
-                  <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group" data-testid="button-discover-cta">
-                    <Search className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:scale-110 transition-transform" />
-                    Explore Screens
-                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                  </Button>
-                </Link>
+                <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group" onClick={scrollToScreens} data-testid="button-discover-cta">
+                  <Search className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:scale-110 transition-transform" />
+                  Explore Screens
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                </Button>
               </div>
             </div>
             <div className="relative mt-8 lg:mt-0">
