@@ -292,6 +292,86 @@ export default function PublicHome() {
         </div>
       )}
 
+      {/* Our Network Section */}
+      <div className="container mx-auto px-4 py-8 sm:py-12 md:py-16">
+        <div className="text-center mb-8 sm:mb-10 space-y-3">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
+            Our <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent">Network</span>
+          </h2>
+          <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+            Discover premium DOOH screens across diverse venue categories
+          </p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6">
+          {[
+            { 
+              name: 'Café', 
+              image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=600',
+              venueType: 'Café'
+            },
+            { 
+              name: 'Highway', 
+              image: 'https://images.unsplash.com/photo-1449844908441-8829872d2607?w=600',
+              venueType: 'Highway'
+            },
+            { 
+              name: 'City Centre Junction', 
+              image: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=600',
+              venueType: 'Road Junction'
+            },
+            { 
+              name: 'Gyms', 
+              image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600',
+              venueType: 'Gym'
+            },
+            { 
+              name: 'Residential', 
+              image: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=600',
+              venueType: 'Apartment'
+            },
+            { 
+              name: 'Tech Parks', 
+              image: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600',
+              venueType: 'Corporate Park'
+            },
+          ].map((network) => {
+            const count = screens.filter(s => s.venueCategory === network.venueType).length;
+            
+            return (
+              <Card
+                key={network.name}
+                className="hover-elevate overflow-hidden cursor-pointer group"
+                onClick={() => {
+                  setSelectedVenue(network.venueType);
+                  setShowCities(false);
+                  scrollToScreens();
+                }}
+                data-testid={`card-network-${network.name.toLowerCase().replace(/\s+/g, '-')}`}
+              >
+                <div className="relative h-40 sm:h-48 overflow-hidden">
+                  <img
+                    src={network.image}
+                    alt={network.name}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=' + encodeURIComponent(network.name);
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
+                    <h3 className="font-bold text-white text-xs sm:text-sm mb-1">{network.name}</h3>
+                    <p className="text-xs text-white/90 flex items-center gap-1">
+                      <Monitor className="w-3 h-3" />
+                      {count} {count === 1 ? 'Screen' : 'Screens'}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Discover Perfect Screen Section */}
       <div className="bg-gradient-to-br from-primary/5 to-background border-t mt-8 sm:mt-12 md:mt-16 overflow-hidden relative">
         <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]" />
