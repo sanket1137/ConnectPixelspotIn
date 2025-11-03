@@ -25,6 +25,11 @@ The platform supports Admin, Screen Owner, and Advertiser roles, each with a ded
 -   **Dual-View Screen Discovery**: Advertisers can switch between a list view and an interactive Google Maps view for screen selection, featuring custom SVG icons.
 -   **Multi-Step Booking Approval Workflow**: Bookings typically require approval from both the Screen Owner and an Admin. Admins have the ability to bypass screen owner approval and approve bookings directly if needed. The workflow supports alternative date negotiation and partial approvals.
 -   **Comprehensive Screen Data Model**: Detailed categorization of screens with identity, location/context, audience demographics (userIntent, userMood, age groups, gender, income levels, lifestyle tags), and commercial data for granular targeting.
+-   **Rejection Workflow System**: Complete rejection handling for both screens and campaigns with detailed reason tracking:
+    - Screen Rejection: Admins can reject screen onboarding with detailed reasons; screen owners can view rejection reasons and edit/resubmit their screens
+    - Campaign Rejection: Campaigns can be rejected with reasons; advertisers can view rejection reasons, edit rejected campaigns, and resubmit for review
+    - Only active (approved) screens are shown to advertisers in discovery and campaign creation
+    - Admins can view all screens (active and inactive) with clear status indicators
 -   **Role-Based Access Control**: Ensures secure and appropriate feature access for all user roles.
 -   **File Uploads**: Integration with Replit Object Storage for managing screen images and campaign creatives.
 -   **Payment Processing**: Stripe integration for secure transactions.
@@ -37,7 +42,7 @@ The platform supports Admin, Screen Owner, and Advertiser roles, each with a ded
 -   **Responsiveness**: Optimized for various devices.
 
 **System Design Choices:**
--   **Database Schema**: Normalized schema for `Users`, `Screens`, `Campaigns`, `Bookings`, and `Payments`, designed for complex relationships and targeting. The `Screens` table includes extensive detail for location, audience, and commercial attributes. Users table includes profile fields: mobileNumber, companyName, industry, gstNumber, address, city, state, with verification flags (emailVerified, mobileVerified, profileCompleted).
+-   **Database Schema**: Normalized schema for `Users`, `Screens`, `Campaigns`, `Bookings`, and `Payments`, designed for complex relationships and targeting. The `Screens` table includes extensive detail for location, audience, and commercial attributes. Users table includes profile fields: mobileNumber, companyName, industry, gstNumber, address, city, state, with verification flags (emailVerified, mobileVerified, profileCompleted). Both `Screens` and `Campaigns` tables include `rejectionReason` text fields for detailed rejection tracking.
 -   **Authentication Flow**: Firebase for Google OAuth and email/password, with backend verification of ID tokens and mandatory role selection during signup. Profile completion is mandatory before dashboard access.
 -   **OTP System**: Simple in-memory OTP storage with 10-minute expiration. Mobile OTP delivery via ComBirds SMS API with DLT-compliant template. Email OTP delivery via AWS SES with professional HTML templates.
 -   **Email Notification System**: Automated email notifications for all booking workflow events using AWS SES:
