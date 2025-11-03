@@ -210,11 +210,11 @@ export default function DiscoverScreens() {
     <div className="h-screen flex flex-col">
       {/* Top Header with Filters */}
       <div className="border-b border-border bg-card">
-        <div className="p-4 space-y-4">
+        <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
           {/* First Row: View Toggle, Filters, and Actions */}
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
             {/* View Toggle */}
-            <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+            <div className="flex items-center gap-2 bg-muted rounded-lg p-1 w-fit">
               <Button
                 variant={viewMode === "list" ? "default" : "ghost"}
                 size="sm"
@@ -223,7 +223,7 @@ export default function DiscoverScreens() {
                 className="gap-2"
               >
                 <List className="h-4 w-4" />
-                List
+                <span className="hidden xs:inline">List</span>
               </Button>
               <Button
                 variant={viewMode === "map" ? "default" : "ghost"}
@@ -233,14 +233,14 @@ export default function DiscoverScreens() {
                 className="gap-2"
               >
                 <MapIcon className="h-4 w-4" />
-                Map
+                <span className="hidden xs:inline">Map</span>
               </Button>
             </div>
 
             {/* Filters */}
-            <div className="flex items-center gap-3 flex-1">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 flex-1">
               {/* City Search */}
-              <div className="relative flex-1 max-w-xs">
+              <div className="relative flex-1 sm:max-w-xs">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search city..."
@@ -253,7 +253,7 @@ export default function DiscoverScreens() {
 
               {/* Screen Type */}
               <Select value={filters.type} onValueChange={(value) => setFilters({ ...filters, type: value })}>
-                <SelectTrigger className="w-[180px]" data-testid="select-screen-type">
+                <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-screen-type">
                   <SelectValue placeholder="All types" />
                 </SelectTrigger>
                 <SelectContent>
@@ -266,11 +266,11 @@ export default function DiscoverScreens() {
               </Select>
 
               {/* Price Range */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Input
                   type="number"
                   placeholder="Min ₹"
-                  className="w-24"
+                  className="flex-1 sm:w-24"
                   value={filters.minPrice}
                   onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
                   data-testid="input-min-price"
@@ -279,7 +279,7 @@ export default function DiscoverScreens() {
                 <Input
                   type="number"
                   placeholder="Max ₹"
-                  className="w-24"
+                  className="flex-1 sm:w-24"
                   value={filters.maxPrice}
                   onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
                   data-testid="input-max-price"
@@ -292,13 +292,14 @@ export default function DiscoverScreens() {
                 size="sm"
                 onClick={() => setFilters({ city: "", type: "", minPrice: "", maxPrice: "" })}
                 data-testid="button-clear-filters"
+                className="w-full sm:w-auto"
               >
                 Clear
               </Button>
             </div>
 
             {/* Right Side Actions */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between sm:justify-end gap-3">
               {/* Results count */}
               <p className="text-sm font-medium text-muted-foreground" data-testid="text-results-count">
                 {filteredScreens.length} screens
@@ -370,10 +371,10 @@ export default function DiscoverScreens() {
 
       {/* Relaxed Filters Alert */}
       {relaxedFilters.length > 0 && (
-        <div className="px-6 pt-4">
+        <div className="px-3 sm:px-4 md:px-6 pt-3 sm:pt-4">
           <Alert className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900" data-testid="alert-relaxed-filters">
             <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
-            <AlertDescription className="text-sm text-yellow-800 dark:text-yellow-200">
+            <AlertDescription className="text-xs sm:text-sm text-yellow-800 dark:text-yellow-200">
               <strong>No exact matches found.</strong> Showing results without: <strong>{relaxedFilters.join(", ")}</strong> filter{relaxedFilters.length > 1 ? "s" : ""}.
             </AlertDescription>
           </Alert>
@@ -383,8 +384,8 @@ export default function DiscoverScreens() {
       {/* Content - List or Map View */}
       <div className="flex-1 overflow-hidden">
         {viewMode === "list" ? (
-          <div className="h-full overflow-y-auto p-6">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="h-full overflow-y-auto p-3 sm:p-4 md:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {paginatedScreens.map((screen) => (
                 <Card key={screen.id} className="hover-elevate overflow-hidden" data-testid={`card-screen-${screen.id}`}>
                   {/* Screen Image - LARGE */}

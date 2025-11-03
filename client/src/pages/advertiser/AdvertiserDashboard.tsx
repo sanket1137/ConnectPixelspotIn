@@ -34,26 +34,26 @@ export default function AdvertiserDashboard() {
   }
 
   return (
-    <div className="p-8 space-y-8">
-      <div className="flex justify-between items-start">
+    <div className="p-4 sm:p-6 md:p-8 space-y-6 sm:space-y-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-foreground font-serif mb-2">Advertiser Dashboard</h1>
-          <p className="text-muted-foreground">Create campaigns and discover advertising screens</p>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground font-serif mb-2">Advertiser Dashboard</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Create campaigns and discover advertising screens</p>
         </div>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setLocation("/advertiser/discover")} data-testid="button-find-screens">
-            <MapPin className="mr-2 h-5 w-5" />
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+          <Button variant="outline" onClick={() => setLocation("/advertiser/discover")} className="w-full sm:w-auto" data-testid="button-find-screens">
+            <MapPin className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
             Find Screens
           </Button>
-          <Button onClick={() => setLocation("/advertiser/campaigns/new")} size="lg" data-testid="button-create-campaign">
-            <Play className="mr-2 h-5 w-5" />
+          <Button onClick={() => setLocation("/advertiser/campaigns/new")} className="w-full sm:w-auto" size="lg" data-testid="button-create-campaign">
+            <Play className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
             Create Campaign
           </Button>
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-6 md:grid-cols-4">
+      <div className="grid gap-4 sm:gap-6 grid-cols-2 md:grid-cols-4">
         <Card className="hover-elevate">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
