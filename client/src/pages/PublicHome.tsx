@@ -473,14 +473,14 @@ export default function PublicHome() {
             )}
 
             {/* Screen Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {screensLoading ? (
-                <div className="col-span-2 text-center py-12">
+                <div className="col-span-full text-center py-12">
                   <Monitor className="w-12 h-12 mx-auto text-muted-foreground mb-4 animate-pulse" />
                   <p className="text-muted-foreground">Loading screens...</p>
                 </div>
               ) : filteredScreens.length === 0 ? (
-                <div className="col-span-2 text-center py-12">
+                <div className="col-span-full text-center py-12">
                   <Search className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-lg font-semibold mb-2">No screens found</p>
                   <p className="text-muted-foreground mb-4">Try adjusting your filters</p>
@@ -501,66 +501,71 @@ export default function PublicHome() {
                   <Card
                     key={screen.id}
                     id={`screen-${screen.id}`}
-                    className={`hover-elevate transition-all ${
+                    className={`hover-elevate overflow-hidden transition-all ${
                       hoveredScreen === screen.id ? 'ring-2 ring-primary shadow-lg' : ''
                     }`}
                     onMouseEnter={() => setHoveredScreen(screen.id)}
                     onMouseLeave={() => setHoveredScreen(null)}
                     data-testid={`card-screen-${screen.id}`}
                   >
-                    <CardHeader>
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="flex-1">
-                          <CardTitle className="text-lg line-clamp-1">{screen.name}</CardTitle>
-                          <CardDescription className="flex items-center gap-1 mt-1">
-                            <MapPin className="w-3 h-3 flex-shrink-0" />
-                            <span className="line-clamp-1">{screen.venueName}, {screen.city}</span>
-                          </CardDescription>
+                    {/* Screen Image - LARGE */}
+                    <div className="relative h-48 bg-muted overflow-hidden cursor-pointer group">
+                      {screen.images && screen.images.length > 0 ? (
+                        <img
+                          src={screen.images[0]}
+                          alt={screen.name}
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-muted">
+                          <MapPin className="w-16 h-16 text-muted-foreground/50" />
                         </div>
-                        <Badge variant="secondary" className="flex-shrink-0">{screen.category}</Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Users className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="text-xs">{screen.avgDailyFootfall?.toLocaleString()} daily</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Monitor className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="text-xs">{screen.displayFormat}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="text-xs line-clamp-1">{screen.venueCategory}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <TrendingUp className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="text-xs">{screen.playbackSlotsPerHour}/hr</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between pt-3 border-t">
-                        <div>
-                          <p className="text-2xl font-bold text-primary">₹{screen.pricePerDay.toLocaleString()}</p>
-                          <p className="text-xs text-muted-foreground">per day</p>
-                        </div>
-                        <Badge variant="outline" className="text-xs">
-                          Min {screen.minBookingDays} days
+                      )}
+                      <Badge className="absolute top-3 right-3" variant="secondary">{screen.category}</Badge>
+                      {screen.venueCategory && (
+                        <Badge className="absolute top-3 left-3 bg-primary/90 backdrop-blur-sm">
+                          {screen.venueCategory}
                         </Badge>
+                      )}
+                    </div>
+
+                    <CardContent className="p-4 space-y-3">
+                      <div>
+                        <h3 className="font-bold text-base leading-tight mb-1 line-clamp-1">{screen.name}</h3>
+                        <p className="text-sm text-muted-foreground line-clamp-1 flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                          {screen.venueName}, {screen.city}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5" />
+                          <span>{screen.avgDailyFootfall?.toLocaleString()}/day</span>
+                        </div>
+                        <span>•</span>
+                        <div className="flex items-center gap-1">
+                          <Monitor className="w-3.5 h-3.5" />
+                          <span>{screen.displayFormat}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Price per day</p>
+                          <p className="font-bold text-xl text-primary">₹{screen.pricePerDay.toLocaleString()}</p>
+                        </div>
+                        <Link href="/register?role=advertiser">
+                          <Button size="sm" data-testid={`button-book-${screen.id}`}>
+                            <Eye className="w-3.5 h-3.5 mr-1" />
+                            View Details
+                          </Button>
+                        </Link>
                       </div>
                     </CardContent>
-                    <CardFooter className="flex gap-2">
-                      <Link href="/register?role=advertiser" className="flex-1">
-                        <Button className="w-full" variant="default" size="sm" data-testid={`button-book-${screen.id}`}>
-                          Book Now
-                        </Button>
-                      </Link>
-                      <Link href="/register?role=advertiser">
-                        <Button variant="outline" size="sm" data-testid={`button-details-${screen.id}`}>
-                          <Search className="w-4 h-4" />
-                        </Button>
-                      </Link>
-                    </CardFooter>
                   </Card>
                 ))
               )}
