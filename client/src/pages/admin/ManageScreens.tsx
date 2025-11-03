@@ -7,6 +7,8 @@ import { MapPin, Monitor, Plus, Check, X, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import type { Screen } from "@shared/schema";
 
@@ -15,6 +17,9 @@ export default function ManageScreens() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [screenToReject, setScreenToReject] = useState<Screen | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
   
   const { data: screens = [], isLoading } = useQuery<Screen[]>({
     queryKey: ["/api/admin/screens"],
@@ -42,15 +47,18 @@ export default function ManageScreens() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: async (screenId: string) => {
-      const response = await apiRequest("PATCH", `/api/admin/screens/${screenId}/reject`, {});
+    mutationFn: async ({ screenId, reason }: { screenId: string; reason: string }) => {
+      const response = await apiRequest("PATCH", `/api/admin/screens/${screenId}/reject`, { reason });
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/screens"] });
+      setRejectDialogOpen(false);
+      setScreenToReject(null);
+      setRejectionReason("");
       toast({
         title: "Screen Rejected",
-        description: "The screen has been rejected and marked as inactive.",
+        description: "The screen has been rejected and the owner has been notified.",
       });
     },
     onError: () => {
@@ -61,6 +69,25 @@ export default function ManageScreens() {
       });
     },
   });
+
+  const handleRejectClick = (screen: Screen) => {
+    setScreenToReject(screen);
+    setRejectDialogOpen(true);
+    setRejectionReason("");
+  };
+
+  const handleRejectConfirm = () => {
+    if (!screenToReject) return;
+    if (!rejectionReason.trim()) {
+      toast({
+        title: "Rejection Reason Required",
+        description: "Please provide a reason for rejecting this screen.",
+        variant: "destructive",
+      });
+      return;
+    }
+    rejectMutation.mutate({ screenId: screenToReject.id, reason: rejectionReason });
+  };
 
   const getStatusBadgeVariant = (status: string) => {
     if (status === "active") return "default";
@@ -144,7 +171,7 @@ export default function ManageScreens() {
                     <Button
                       size="sm"
                       variant="destructive"
-                      onClick={() => rejectMutation.mutate(screen.id)}
+                      onClick={() => handleRejectClick(screen)}
                       disabled={approveMutation.isPending || rejectMutation.isPending}
                       className="flex-1"
                       data-testid={`button-reject-${screen.id}`}
@@ -360,8 +387,8 @@ export default function ManageScreens() {
                       size="sm"
                       variant="destructive"
                       onClick={() => {
-                        rejectMutation.mutate(selectedScreen.id);
                         setSelectedScreen(null);
+                        handleRejectClick(selectedScreen);
                       }}
                       disabled={approveMutation.isPending || rejectMutation.isPending}
                       data-testid="dialog-button-reject"
@@ -374,6 +401,53 @@ export default function ManageScreens() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Rejection Reason Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Screen</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting "{screenToReject?.name}". The screen owner will be notified.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="rejection-reason">Rejection Reason *</Label>
+              <Textarea
+                id="rejection-reason"
+                placeholder="E.g., Image quality is too low, location information is incomplete, pricing needs justification..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                rows={4}
+                data-testid="textarea-rejection-reason"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectDialogOpen(false);
+                setScreenToReject(null);
+                setRejectionReason("");
+              }}
+              disabled={rejectMutation.isPending}
+              data-testid="button-cancel-reject"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectConfirm}
+              disabled={rejectMutation.isPending || !rejectionReason.trim()}
+              data-testid="button-confirm-reject"
+            >
+              {rejectMutation.isPending ? "Rejecting..." : "Reject Screen"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
