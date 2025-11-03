@@ -107,9 +107,9 @@ export default function ScreensList() {
           {screens.map((screen) => (
             <Card key={screen.id} className="overflow-hidden hover-elevate" data-testid={`card-screen-${screen.id}`}>
               <div className="aspect-video bg-muted flex items-center justify-center">
-                {screen.images && screen.images[0] ? (
+                {(screen.screenImages && screen.screenImages[0]) || (screen.images && screen.images[0]) ? (
                   <img
-                    src={screen.images[0]}
+                    src={(screen.screenImages?.[0] ?? screen.images?.[0]) || ''}
                     alt={screen.name}
                     className="w-full h-full object-cover"
                   />

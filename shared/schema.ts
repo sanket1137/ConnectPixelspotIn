@@ -96,7 +96,9 @@ export const screens = pgTable("screens", {
   type: text("type").notNull(), // backward compatibility - will map to category
   size: text("size").notNull(), // dimensions like "10x20 ft" - can be derived from resolution
   operationalHours: text("operational_hours"), // JSON string: {"start": "06:00", "end": "22:00"}
-  images: text("images").array(), // array of image URLs from object storage
+  images: text("images").array(), // DEPRECATED - kept for backward compatibility, use screenImages instead
+  screenImages: text("screen_images").array(), // Up to 4 images of the actual screen/billboard
+  surroundingImages: text("surrounding_images").array(), // Up to 5 images of the surrounding area
   status: text("status").notNull().default("pending"), // pending, active, inactive
   rejectionReason: text("rejection_reason"), // Admin's reason for rejecting the screen
   ownedByAdmin: boolean("owned_by_admin").notNull().default(false),

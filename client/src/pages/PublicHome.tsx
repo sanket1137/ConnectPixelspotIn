@@ -510,9 +510,9 @@ export default function PublicHome() {
                   >
                     {/* Screen Image - LARGE */}
                     <div className="relative h-48 bg-muted overflow-hidden cursor-pointer group">
-                      {screen.images && screen.images.length > 0 ? (
+                      {(screen.screenImages && screen.screenImages.length > 0) || (screen.images && screen.images.length > 0) ? (
                         <img
-                          src={screen.images[0]}
+                          src={(screen.screenImages?.[0] ?? screen.images?.[0]) || ''}
                           alt={screen.name}
                           className="w-full h-full object-cover transition-transform group-hover:scale-105"
                           onError={(e) => {

@@ -92,7 +92,8 @@ export default function AddScreen() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [uploadedImageURL, setUploadedImageURL] = useState<string | null>(null);
+  const [screenImages, setScreenImages] = useState<string[]>([]);
+  const [surroundingImages, setSurroundingImages] = useState<string[]>([]);
 
   const form = useForm<AddScreenForm>({
     resolver: zodResolver(addScreenSchema),
@@ -161,7 +162,9 @@ export default function AddScreen() {
         userMood: data.userMood,
         type: data.category,
         size: data.resolution,
-        imageUrl: uploadedImageURL || null,
+        screenImages: screenImages,
+        surroundingImages: surroundingImages,
+        imageUrl: screenImages.length > 0 ? screenImages[0] : null, // For backward compatibility
       });
     },
     onSuccess: () => {
@@ -190,21 +193,48 @@ export default function AddScreen() {
     };
   };
 
-  const handleUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+  const handleScreenImagesUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
     if (result.successful && result.successful.length > 0) {
-      const uploadedFile = result.successful[0];
-      const fileURL = uploadedFile.uploadURL;
+      const uploadedPaths: string[] = [];
+      
+      for (const uploadedFile of result.successful) {
+        const fileURL = uploadedFile.uploadURL;
+        const response = await apiRequest("PUT", "/api/objects/entity", {
+          fileURL,
+          entityType: "screen",
+        });
+        const data = await response.json();
+        uploadedPaths.push(data.objectPath);
+      }
 
-      const response = await apiRequest("PUT", "/api/objects/entity", {
-        fileURL,
-        entityType: "screen",
-      });
-      const data = await response.json();
-      setUploadedImageURL(data.objectPath);
+      setScreenImages(uploadedPaths);
 
       toast({
-        title: "Image Uploaded",
-        description: "Screen image has been uploaded successfully.",
+        title: "Screen Images Uploaded",
+        description: `${uploadedPaths.length} screen image(s) uploaded successfully.`,
+      });
+    }
+  };
+
+  const handleSurroundingImagesUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    if (result.successful && result.successful.length > 0) {
+      const uploadedPaths: string[] = [];
+      
+      for (const uploadedFile of result.successful) {
+        const fileURL = uploadedFile.uploadURL;
+        const response = await apiRequest("PUT", "/api/objects/entity", {
+          fileURL,
+          entityType: "screen",
+        });
+        const data = await response.json();
+        uploadedPaths.push(data.objectPath);
+      }
+
+      setSurroundingImages(uploadedPaths);
+
+      toast({
+        title: "Surrounding Images Uploaded",
+        description: `${uploadedPaths.length} surrounding image(s) uploaded successfully.`,
       });
     }
   };
@@ -1217,37 +1247,104 @@ export default function AddScreen() {
             </CardContent>
           </Card>
 
-          {/* Screen Image Upload */}
+          {/* Screen Images Upload */}
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Upload className="h-5 w-5 text-primary" />
-                <CardTitle>Screen Image</CardTitle>
+                <CardTitle>Screen Images</CardTitle>
               </div>
+              <CardDescription>
+                Upload up to 4 images of the actual screen/billboard
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-4">
                 <ObjectUploader
-                  maxNumberOfFiles={1}
+                  maxNumberOfFiles={4}
                   maxFileSize={10485760}
                   allowedFileTypes={["image/*"]}
                   onGetUploadParameters={handleGetUploadParameters}
-                  onComplete={handleUploadComplete}
+                  onComplete={handleScreenImagesUploadComplete}
                   buttonVariant="outline"
-                  buttonTestId="button-upload-screen-image"
+                  buttonTestId="button-upload-screen-images"
                 >
                   <Upload className="mr-2 h-4 w-4" />
-                  Upload Screen Image
+                  Upload Screen Images (Max 4)
                 </ObjectUploader>
-                {uploadedImageURL && (
+                {screenImages.length > 0 && (
                   <div className="flex items-center gap-2 text-sm text-green-600">
                     <Check className="h-4 w-4" />
-                    Image uploaded successfully
+                    {screenImages.length} image(s) uploaded
                   </div>
                 )}
               </div>
+              {screenImages.length > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {screenImages.map((image, index) => (
+                    <div key={index} className="relative aspect-square rounded-md overflow-hidden border">
+                      <img
+                        src={image}
+                        alt={`Screen ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
-                Supported formats: JPG, PNG (Max 10MB)
+                Supported formats: JPG, PNG (Max 10MB each). Upload clear photos of your screen from different angles.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Surrounding Area Images Upload */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                <CardTitle>Surrounding Area Images</CardTitle>
+              </div>
+              <CardDescription>
+                Upload up to 5 images showing the area around the screen
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                <ObjectUploader
+                  maxNumberOfFiles={5}
+                  maxFileSize={10485760}
+                  allowedFileTypes={["image/*"]}
+                  onGetUploadParameters={handleGetUploadParameters}
+                  onComplete={handleSurroundingImagesUploadComplete}
+                  buttonVariant="outline"
+                  buttonTestId="button-upload-surrounding-images"
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Surrounding Images (Max 5)
+                </ObjectUploader>
+                {surroundingImages.length > 0 && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <Check className="h-4 w-4" />
+                    {surroundingImages.length} image(s) uploaded
+                  </div>
+                )}
+              </div>
+              {surroundingImages.length > 0 && (
+                <div className="grid grid-cols-5 gap-2">
+                  {surroundingImages.map((image, index) => (
+                    <div key={index} className="relative aspect-square rounded-md overflow-hidden border">
+                      <img
+                        src={image}
+                        alt={`Surrounding ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Supported formats: JPG, PNG (Max 10MB each). Show nearby landmarks, traffic, and the environment.
               </p>
             </CardContent>
           </Card>

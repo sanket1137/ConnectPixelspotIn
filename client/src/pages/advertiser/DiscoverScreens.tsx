@@ -389,9 +389,9 @@ export default function DiscoverScreens() {
                 <Card key={screen.id} className="hover-elevate overflow-hidden" data-testid={`card-screen-${screen.id}`}>
                   {/* Screen Image - LARGE */}
                   <div className="relative h-56 bg-muted overflow-hidden cursor-pointer" onClick={() => setDetailDialogScreen(screen)}>
-                    {screen.images && screen.images.length > 0 ? (
+                    {(screen.screenImages && screen.screenImages.length > 0) || (screen.images && screen.images.length > 0) ? (
                       <img
-                        src={screen.images[0]}
+                        src={(screen.screenImages?.[0] ?? screen.images?.[0]) || ''}
                         alt={screen.name}
                         className="w-full h-full object-cover transition-transform hover:scale-105"
                         onError={(e) => {
