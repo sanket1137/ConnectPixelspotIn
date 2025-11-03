@@ -2,11 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, MapPin, Edit, Trash2, Eye, Plus } from "lucide-react";
+import { Monitor, MapPin, Edit, Trash2, Eye, Plus, AlertCircle } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Screen } from "@shared/schema";
@@ -128,6 +129,16 @@ export default function ScreensList() {
                   </div>
                   <p className="text-sm text-muted-foreground">{screen.type} • {screen.size}</p>
                 </div>
+
+                {screen.status === "inactive" && screen.rejectionReason && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong className="block mb-1">Rejected by Admin:</strong>
+                      {screen.rejectionReason}
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 <div className="flex items-center justify-between pt-4 border-t border-border">
                   <div>
@@ -294,11 +305,22 @@ export default function ScreensList() {
               </div>
 
               {/* Status */}
-              <div className="pt-4 border-t">
-                <span className="text-sm text-muted-foreground">Status:</span>
-                <Badge variant={selectedScreen.status === "active" ? "default" : "secondary"} className="ml-2">
-                  {selectedScreen.status}
-                </Badge>
+              <div className="pt-4 border-t space-y-3">
+                <div>
+                  <span className="text-sm text-muted-foreground">Status:</span>
+                  <Badge variant={selectedScreen.status === "active" ? "default" : "secondary"} className="ml-2">
+                    {selectedScreen.status}
+                  </Badge>
+                </div>
+                {selectedScreen.status === "inactive" && selectedScreen.rejectionReason && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong className="block mb-1">Rejection Reason:</strong>
+                      {selectedScreen.rejectionReason}
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
             </div>
           )}
