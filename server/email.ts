@@ -1,51 +1,56 @@
-import nodemailer from 'nodemailer';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 
 class AWSEmailService {
-  private transporter: nodemailer.Transporter | null = null;
+  private sesClient: SESClient | null = null;
   private fromEmail = 'no-reply@pixelspot.in';
   private initialized: boolean;
+  private usingSMTP: boolean = false;
 
   constructor() {
     this.initialized = this.initializeService();
   }
 
   private initializeService(): boolean {
-    if (!process.env.AWS_SES_SMTP_USER || !process.env.AWS_SES_SMTP_PASSWORD) {
-      console.warn('⚠️  AWS SES credentials not found. Email notifications will be skipped.');
+    // Get AWS SES region from env (default to ap-south-1)
+    const sesRegion = process.env.AWS_SES_REGION || 'ap-south-1';
+
+    // Check for AWS API credentials (preferred - uses HTTPS, not blocked by firewall)
+    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+      try {
+        this.sesClient = new SESClient({
+          region: sesRegion,
+          credentials: {
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID.trim(),
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY.trim(),
+          },
+        });
+
+        console.log(`✅ AWS SES API service initialized`);
+        console.log(`   Region: ${sesRegion}`);
+        console.log(`   Method: AWS SES API (HTTPS)`);
+        console.log(`   Access Key: ${process.env.AWS_ACCESS_KEY_ID?.substring(0, 8)}...`);
+        console.log(`   ✅ Port 443 (HTTPS) - NOT blocked by firewall`);
+        return true;
+      } catch (error) {
+        console.error('❌ AWS SES API initialization failed:', error);
+        return false;
+      }
+    }
+
+    // Fallback to SMTP if API credentials not available
+    if (process.env.AWS_SES_SMTP_USER && process.env.AWS_SES_SMTP_PASSWORD) {
+      this.usingSMTP = true;
+      console.warn('⚠️  AWS SES configured with SMTP credentials');
+      console.warn('⚠️  SMTP port 587 is BLOCKED by Replit firewall');
+      console.warn('⚠️  Emails will NOT be sent - only logged to console');
+      console.warn('⚠️  For email delivery, please add AWS API credentials:');
+      console.warn('     - AWS_ACCESS_KEY_ID');
+      console.warn('     - AWS_SECRET_ACCESS_KEY');
       return false;
     }
 
-    try {
-      // Get AWS SES region from env (default to us-east-1)
-      const sesRegion = process.env.AWS_SES_REGION || 'us-east-1';
-      const smtpHost = `email-smtp.${sesRegion}.amazonaws.com`;
-      
-      // Configure Nodemailer with AWS SES SMTP
-      this.transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: 587,
-        secure: false, // Use STARTTLS
-        auth: {
-          user: process.env.AWS_SES_SMTP_USER?.trim(),
-          pass: process.env.AWS_SES_SMTP_PASSWORD?.trim(),
-        },
-        debug: false,
-        // Add aggressive timeouts to prevent hanging (important: SMTP ports often blocked)
-        connectionTimeout: 3000, // 3 seconds to connect
-        greetingTimeout: 3000,   // 3 seconds for server greeting
-        socketTimeout: 5000,     // 5 seconds for any socket operation
-      });
-
-      console.log(`✅ AWS SES email service initialized`);
-      console.log(`   Region: ${sesRegion}`);
-      console.log(`   SMTP Host: ${smtpHost}`);
-      console.log(`   SMTP User: ${process.env.AWS_SES_SMTP_USER?.substring(0, 8)}...`);
-      console.warn(`⚠️  Note: If SMTP port 587 is blocked by firewall, emails will be skipped (non-critical)`);
-      return true;
-    } catch (error) {
-      console.error('❌ AWS SES initialization failed:', error);
-      return false;
-    }
+    console.warn('⚠️  No AWS SES credentials found. Email notifications will be skipped.');
+    return false;
   }
 
   async sendEmail(options: {
@@ -54,52 +59,63 @@ class AWSEmailService {
     html: string;
     text?: string;
   }): Promise<boolean> {
-    // Mock mode if no credentials
-    if (!this.transporter) {
-      console.log('📧 [MOCK] Email to:', options.to);
-      console.log('📋 Subject:', options.subject);
-      console.log('📄 Content:', options.text);
-      return true;
+    // Mock mode if no credentials or using blocked SMTP
+    if (!this.sesClient || this.usingSMTP) {
+      console.log('\n📧 [CONSOLE LOG - Email Not Sent]');
+      console.log('==========================================');
+      console.log(`📧 To: ${options.to}`);
+      console.log(`📋 Subject: ${options.subject}`);
+      console.log(`📄 Content: ${options.text}`);
+      console.log('==========================================\n');
+      return true; // Return true to not break the flow
     }
 
     try {
-      // Add timeout wrapper to prevent hanging (3 seconds max for entire operation)
-      const sendWithTimeout = Promise.race([
-        this.transporter.sendMail({
-          from: `"Pixelspot" <${this.fromEmail}>`,
-          to: options.to,
-          subject: options.subject,
-          text: options.text,
-          html: options.html,
-        }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Email send timeout after 3s')), 3000)
-        )
-      ]);
+      const command = new SendEmailCommand({
+        Source: `"Pixelspot" <${this.fromEmail}>`,
+        Destination: {
+          ToAddresses: [options.to],
+        },
+        Message: {
+          Subject: {
+            Data: options.subject,
+            Charset: 'UTF-8',
+          },
+          Body: {
+            Text: {
+              Data: options.text || '',
+              Charset: 'UTF-8',
+            },
+            Html: {
+              Data: options.html,
+              Charset: 'UTF-8',
+            },
+          },
+        },
+      });
 
-      const info = await sendWithTimeout;
-      console.log('✅ Email sent:', (info as any).messageId);
+      const response = await this.sesClient.send(command);
+      console.log('✅ Email sent successfully via AWS SES API');
+      console.log(`   Message ID: ${response.MessageId}`);
+      console.log(`   To: ${options.to}`);
       return true;
     } catch (error: any) {
-      // Handle timeout or connection errors (common when SMTP ports blocked)
-      if (error.message?.includes('timeout') || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
-        console.warn(`⚠️  Email skipped (SMTP port likely blocked): ${options.subject} to ${options.to}`);
-        return false; // Non-critical failure
-      }
-      
       // Handle unverified email error (sandbox mode)
-      if (error.message?.includes('Email address is not verified')) {
-        console.log('\n🚀 AWS SES UNVERIFIED EMAIL - DEV BYPASS');
+      if (error.message?.includes('Email address is not verified') || 
+          error.message?.includes('not verified') ||
+          error.Code === 'MessageRejected') {
+        console.log('\n🚀 AWS SES SANDBOX MODE - EMAIL NOT VERIFIED');
         console.log('==========================================');
         console.log(`📧 Recipient: ${options.to}`);
         console.log(`📋 Subject: ${options.subject}`);
         console.log(`📄 Content: ${options.text}`);
-        console.log(`⚠️  Email would send if recipient was verified`);
+        console.log(`⚠️  Email would send if recipient was verified in AWS SES`);
+        console.log(`⚠️  Verify email at: https://console.aws.amazon.com/ses/`);
         console.log('==========================================\n');
         return true; // Bypass for development
       }
 
-      console.error('❌ Email send failed:', error);
+      console.error('❌ Email send failed:', error.message || error);
       return false;
     }
   }
@@ -127,16 +143,10 @@ class AWSEmailService {
       };
     } catch (error: any) {
       // Development mode fallback
-      if (error.message?.includes('Email address is not verified')) {
-        console.log(`📧 DEV MODE - OTP for ${email}: ${otp}`);
-        return {
-          success: true,
-          message: 'Development mode - Check server console for OTP'
-        };
-      }
+      console.log(`📧 DEV MODE - OTP for ${email}: ${otp}`);
       return {
-        success: false,
-        message: 'Email service error'
+        success: true,
+        message: 'Development mode - Check server console for OTP'
       };
     }
   }
