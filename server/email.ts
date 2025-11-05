@@ -26,8 +26,8 @@ class AWSEmailService {
         port: 587,
         secure: false, // Use STARTTLS
         auth: {
-          user: process.env.AWS_SES_SMTP_USER,
-          pass: process.env.AWS_SES_SMTP_PASSWORD,
+          user: process.env.AWS_SES_SMTP_USER?.trim(),
+          pass: process.env.AWS_SES_SMTP_PASSWORD?.trim(),
         },
         debug: false,
         // Add aggressive timeouts to prevent hanging (important: SMTP ports often blocked)
@@ -36,7 +36,10 @@ class AWSEmailService {
         socketTimeout: 5000,     // 5 seconds for any socket operation
       });
 
-      console.log(`✅ AWS SES email service initialized (region: ${sesRegion})`);
+      console.log(`✅ AWS SES email service initialized`);
+      console.log(`   Region: ${sesRegion}`);
+      console.log(`   SMTP Host: ${smtpHost}`);
+      console.log(`   SMTP User: ${process.env.AWS_SES_SMTP_USER?.substring(0, 8)}...`);
       console.warn(`⚠️  Note: If SMTP port 587 is blocked by firewall, emails will be skipped (non-critical)`);
       return true;
     } catch (error) {
