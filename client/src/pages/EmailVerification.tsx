@@ -150,7 +150,7 @@ export default function EmailVerification() {
 
           {!otpSent ? (
             <div className="space-y-4">
-              {sendOtpMutation.isPending && (
+              {(sendOtpMutation.isPending || autoSendAttempted && !otpSent) && (
                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                   <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
                   Sending verification code...
@@ -158,12 +158,12 @@ export default function EmailVerification() {
               )}
               <Button
                 onClick={handleSendOtp}
-                disabled={sendOtpMutation.isPending}
+                disabled={sendOtpMutation.isPending || (autoSendAttempted && !otpSent)}
                 size="lg"
                 className="w-full"
                 data-testid="button-send-email-otp"
               >
-                {sendOtpMutation.isPending ? (
+                {sendOtpMutation.isPending || (autoSendAttempted && !otpSent) ? (
                   "Sending..."
                 ) : (
                   <>
