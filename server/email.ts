@@ -100,6 +100,11 @@ class AWSEmailService {
       console.log(`   To: ${options.to}`);
       return true;
     } catch (error: any) {
+      // Log the actual error for debugging
+      console.error('🚨 AWS SES Error:', error.message || error);
+      console.error('   Error Name:', error.name);
+      console.error('   Error Code:', error.Code || error.code);
+      
       // Handle credential/signature errors
       if (error.message?.includes('signature') || error.message?.includes('Secret Access Key')) {
         console.log('\n🚨 AWS CREDENTIAL ERROR - Logging email to console');
