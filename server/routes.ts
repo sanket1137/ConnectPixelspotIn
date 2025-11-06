@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { verifyToken, auth as firebaseAdmin } from "./firebaseAdmin";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import type { User } from "@shared/schema";
+import type { User, Screen, Campaign, Booking } from "@shared/schema";
 import { db } from "./db";
 import { bookings } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -1851,6 +1851,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("AI Campaign Advisor error:", error);
       res.status(500).json({ error: "Failed to get AI advice. Please try again." });
+    }
+  });
+
+  // ========== TEST EMAIL NOTIFICATIONS ==========
+  // Send all notification templates to a specific email (for testing purposes)
+  app.post("/api/test/send-all-notifications", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Create mock data for testing
+      const mockUser: User = {
+        id: "test-user-id",
+        firebaseUid: "test-firebase-uid",
+        email: email,
+        name: "Test User",
+        role: "advertiser",
+        emailVerified: true,
+        mobileVerified: true,
+        mobileNumber: "+919876543210",
+        phone: null,
+        profileCompleted: true,
+        companyName: "Test Company",
+        industry: "Technology",
+        gstNumber: "22AAAAA0000A1Z5",
+        address: "123 Test Street",
+        city: "Bangalore",
+        state: "Karnataka",
+        createdAt: new Date()
+      };
+
+      const mockOwner: User = {
+        ...mockUser,
+        id: "test-owner-id",
+        name: "Screen Owner",
+        email: email,
+        role: "screen_owner",
+        companyName: "Screen Ads Co."
+      };
+
+      const mockAdmin: User = {
+        ...mockUser,
+        id: "test-admin-id",
+        name: "Admin",
+        email: email,
+        role: "admin",
+        companyName: "Pixelspot"
+      };
+
+      // Mock data - only the fields used in email templates matter
+      const mockScreen = {
+        name: "Premium Mall Screen - Main Entrance",
+        venueName: "Phoenix Marketcity",
+        city: "Bangalore",
+        pricePerDay: 5000,
+      } as any;
+
+      const mockCampaign = {
+        name: "Summer Sale Campaign 2024",
+      } as any;
+
+      const mockBooking = {
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+        totalAmount: 50000,
+      } as any;
+
+      // Send all notification types
+      const results: string[] = [];
+
+      // 1. Screen Approval Email
+      await notificationService.sendScreenApprovalEmail(mockOwner, mockScreen);
+      results.push("✅ Screen Approval Email");
+
+      // 2. Booking Request Emails
+      await notificationService.sendBookingRequestEmails(
+        mockUser, mockOwner, mockAdmin, mockBooking, mockCampaign, mockScreen
+      );
+      results.push("✅ Booking Request Emails (Owner + Admin)");
+
+      // 3. Owner Approval Emails
+      await notificationService.sendBookingOwnerApprovedEmails(
+        mockUser, mockOwner, mockAdmin, mockBooking, mockCampaign, mockScreen
+      );
+      results.push("✅ Owner Approval Emails (Advertiser + Admin)");
+
+      // 4. Owner Rejection Emails
+      await notificationService.sendBookingOwnerRejectedEmails(
+        mockUser, mockOwner, mockAdmin, mockBooking, mockCampaign, mockScreen,
+        "The requested dates conflict with another booking. Please choose alternative dates."
+      );
+      results.push("✅ Owner Rejection Emails (Advertiser + Admin)");
+
+      // 5. Alternative Dates Emails
+      await notificationService.sendAlternativeDatesEmails(
+        mockUser, mockOwner, mockAdmin, mockBooking, mockCampaign, mockScreen,
+        {
+          startDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
+          endDate: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        "Current dates are fully booked. We can offer these alternative dates with a 10% discount."
+      );
+      results.push("✅ Alternative Dates Emails (Advertiser + Admin)");
+
+      // 6. Campaign Live Emails
+      await notificationService.sendCampaignLiveEmails(
+        mockUser, mockOwner, mockBooking, mockCampaign, mockScreen
+      );
+      results.push("✅ Campaign Live Emails (Advertiser + Owner)");
+
+      res.json({
+        success: true,
+        message: `All notification templates sent to ${email}`,
+        sentNotifications: results
+      });
+    } catch (error) {
+      console.error("Test email send error:", error);
+      res.status(500).json({ error: "Failed to send test notifications" });
     }
   });
 
