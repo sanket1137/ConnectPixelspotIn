@@ -34,6 +34,7 @@ import ProfileCompletion from "@/pages/ProfileCompletion";
 import EmailVerification from "@/pages/EmailVerification";
 import Profile from "@/pages/Profile";
 import PublicHome from "@/pages/PublicHome";
+import PasswordReset from "@/pages/PasswordReset";
 
 function Router() {
   return (
@@ -44,6 +45,7 @@ function Router() {
       {/* Public Routes */}
       <Route path="/login" component={Login} />
       <Route path="/register" component={Login} />
+      <Route path="/auth/action" component={PasswordReset} />
       
       {/* Email Verification Route (requires auth but not verified email) */}
       <Route path="/verify-email" component={EmailVerification} />
