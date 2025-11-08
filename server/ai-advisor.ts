@@ -136,6 +136,11 @@ export async function getCampaignAdvice(
               enum: ["Budget Conscious", "Middle Income", "Premium Audience", "Luxury Buyers"],
               description: "Target income level",
             },
+            timePreference: {
+              type: "array",
+              items: { type: "string" },
+              description: "Time of day activity from: Morning Rush, Lunch Hours, Evening Leisure, Late Night",
+            },
             lifestyleTags: {
               type: "array",
               items: { type: "string" },
@@ -212,6 +217,15 @@ export async function getCampaignAdvice(
         
         if (args.incomeLevel && screen.incomeLevel === args.incomeLevel) {
           reasons.push(`${screen.incomeLevel} audience segment`);
+        }
+        
+        if (args.timePreference && screen.timeOfDayActivity) {
+          const matchingTimes = args.timePreference.filter((time: string) =>
+            screen.timeOfDayActivity?.includes(time)
+          );
+          if (matchingTimes.length > 0) {
+            reasons.push(`Active during ${matchingTimes.join(', ')}`);
+          }
         }
         
         if (args.lifestyleTags && screen.lifestyleTags) {
@@ -338,6 +352,14 @@ async function searchScreensInDatabase(
       // Income level (soft match)
       if (criteria.incomeLevel && screen.incomeLevel === criteria.incomeLevel) {
         score += 3;
+      }
+      
+      // Time preference (soft match)
+      if (criteria.timePreference && criteria.timePreference.length > 0 && screen.timeOfDayActivity) {
+        const matches = criteria.timePreference.filter((time: string) =>
+          screen.timeOfDayActivity?.includes(time)
+        ).length;
+        score += matches * 3;
       }
       
       // Lifestyle tags (soft match)
