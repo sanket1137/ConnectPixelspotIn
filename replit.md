@@ -20,7 +20,8 @@ The platform supports Admin, Screen Owner, and Advertiser roles, each with a ded
 **Key Features:**
 -   **Multi-Method Authentication**: Firebase-powered authentication with Google OAuth and email/password, including role selection during signup.
 -   **Profile Completion System**: Mandatory profile completion flow requiring mobile number (with OTP verification), company name, industry, address (city/state), and optional GST number. Google OAuth users have email auto-verified; manual signups require email OTP verification.
--   **OTP Verification**: In-memory OTP system for email and mobile verification. Email/mobile OTPs are logged to console (production requires Twilio for SMS and SendGrid/Resend for email).
+-   **OTP Verification**: In-memory OTP system for email and mobile verification. Mobile OTP via ComBirds SMS API, email OTP via AWS SES with professional HTML templates.
+-   **Screen Operating Hours**: Support for preset operating hours (Business/Mall/Retail/Airport) and custom hours with time picker inputs (start/end) and day checkboxes (Monday-Sunday).
 -   **AI-Driven Campaign Creation**: A 6-step workflow for advertisers to create targeted campaigns, including goal, budget, area selection (map or city), duration, optional audience/location filters, smart plan suggestions, and creative upload.
 -   **Dual-View Screen Discovery**: Advertisers can switch between a list view and an interactive Google Maps view for screen selection, featuring custom SVG icons.
 -   **Multi-Step Booking Approval Workflow**: Bookings typically require approval from both the Screen Owner and an Admin. Admins have the ability to bypass screen owner approval and approve bookings directly if needed. The workflow supports alternative date negotiation and partial approvals.
@@ -42,9 +43,10 @@ The platform supports Admin, Screen Owner, and Advertiser roles, each with a ded
 -   **Responsiveness**: Optimized for various devices.
 
 **System Design Choices:**
--   **Database Schema**: Normalized schema for `Users`, `Screens`, `Campaigns`, `Bookings`, and `Payments`, designed for complex relationships and targeting. The `Screens` table includes extensive detail for location, audience, and commercial attributes. Users table includes profile fields: mobileNumber, companyName, industry, gstNumber, address, city, state, with verification flags (emailVerified, mobileVerified, profileCompleted). Both `Screens` and `Campaigns` tables include `rejectionReason` text fields for detailed rejection tracking.
+-   **Database Schema**: Normalized schema for `Users`, `Screens`, `Campaigns`, `Bookings`, and `Payments`, designed for complex relationships and targeting. The `Screens` table includes extensive detail for location, audience, and commercial attributes including customOperatingHoursStart/End (time fields) and customOperatingDays (array of day names). Users table includes profile fields: mobileNumber, companyName, industry, gstNumber, address, city, state, with verification flags (emailVerified, mobileVerified, profileCompleted). Both `Screens` and `Campaigns` tables include `rejectionReason` text fields for detailed rejection tracking.
 -   **Authentication Flow**: Firebase for Google OAuth and email/password, with backend verification of ID tokens and mandatory role selection during signup. Profile completion is mandatory before dashboard access.
 -   **OTP System**: Simple in-memory OTP storage with 10-minute expiration. Mobile OTP delivery via ComBirds SMS API with DLT-compliant template. Email OTP delivery via AWS SES with professional HTML templates.
+-   **Campaign Lifecycle Automation**: Hourly scheduler automatically updates campaign status: approved→live (on start date), live→completed (on end date). Campaigns marked "approved" immediately when admin approves booking.
 -   **Email Notification System**: Automated email notifications for all booking workflow events using AWS SES:
     - Screen Approval: Admin → Screen Owner when screen is approved
     - Booking Request: Advertiser → Admin & Screen Owner when booking is created

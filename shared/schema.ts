@@ -65,8 +65,9 @@ export const screens = pgTable("screens", {
   visibility: text("visibility"), // High / Medium / Low - based on footfall and visibility
   description: text("description"), // Describe screen, surroundings, pricing justification
   operatingHoursPreset: text("operating_hours_preset"), // Business hours / Mall hours / Retail / Airport/Highways / Custom
-  customOperatingHours: text("custom_operating_hours"), // e.g., "09:00-18:00" for custom preset
-  customOperatingDays: text("custom_operating_days"), // e.g., "Mon-Fri" for custom preset
+  customOperatingHoursStart: text("custom_operating_hours_start"), // e.g., "09:00" - start time for custom preset
+  customOperatingHoursEnd: text("custom_operating_hours_end"), // e.g., "18:00" - end time for custom preset
+  customOperatingDays: text("custom_operating_days").array(), // e.g., ["Monday", "Tuesday", "Friday"] - days for custom preset
   locationTags: text("location_tags").array(), // Nearby facilities: School, Hospital, Mall, etc.
   customLocationTags: text("custom_location_tags").array(), // User-added custom location tags
   

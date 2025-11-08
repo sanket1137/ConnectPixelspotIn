@@ -55,8 +55,9 @@ const addScreenSchema = z.object({
   visibility: z.string().optional(),
   description: z.string().optional(),
   operatingHoursPreset: z.string().optional(),
-  customOperatingHours: z.string().optional(),
-  customOperatingDays: z.string().optional(),
+  customOperatingHoursStart: z.string().optional(),
+  customOperatingHoursEnd: z.string().optional(),
+  customOperatingDays: z.array(z.string()).optional(),
   locationTags: z.array(z.string()).optional(),
   customLocationTags: z.string().optional(),
   
@@ -118,8 +119,9 @@ export default function AddScreen() {
       visibility: "",
       description: "",
       operatingHoursPreset: "",
-      customOperatingHours: "",
-      customOperatingDays: "",
+      customOperatingHoursStart: "",
+      customOperatingHoursEnd: "",
+      customOperatingDays: [],
       locationTags: [],
       customLocationTags: "",
       detailedAgeGroups: [],
@@ -697,29 +699,68 @@ export default function AddScreen() {
                 </div>
 
                 {form.watch("operatingHoursPreset") === "Custom" && (
-                  <div className="grid md:grid-cols-2 gap-4 mt-4">
-                    <FormField
-                      control={form.control}
-                      name="customOperatingHours"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Custom Hours</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g., 09:00-18:00" {...field} data-testid="input-custom-hours" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <div className="space-y-4 mt-4">
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="customOperatingHoursStart"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Start Time</FormLabel>
+                            <FormControl>
+                              <Input type="time" {...field} data-testid="input-start-time" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="customOperatingHoursEnd"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>End Time</FormLabel>
+                            <FormControl>
+                              <Input type="time" {...field} data-testid="input-end-time" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                     <FormField
                       control={form.control}
                       name="customOperatingDays"
-                      render={({ field }) => (
+                      render={() => (
                         <FormItem>
-                          <FormLabel>Custom Days</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g., Mon-Fri" {...field} data-testid="input-custom-days" />
-                          </FormControl>
+                          <FormLabel>Operating Days</FormLabel>
+                          <div className="flex flex-wrap gap-4">
+                            {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => (
+                              <FormField
+                                key={day}
+                                control={form.control}
+                                name="customOperatingDays"
+                                render={({ field }) => (
+                                  <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={field.value?.includes(day)}
+                                        onCheckedChange={(checked) => {
+                                          return checked
+                                            ? field.onChange([...(field.value || []), day])
+                                            : field.onChange(
+                                                field.value?.filter((value) => value !== day)
+                                              );
+                                        }}
+                                        data-testid={`checkbox-day-${day.toLowerCase()}`}
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="font-normal cursor-pointer">{day}</FormLabel>
+                                  </FormItem>
+                                )}
+                              />
+                            ))}
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}
