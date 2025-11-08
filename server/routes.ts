@@ -1421,6 +1421,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { lat, lng, radiusKm, city, budget, duration } = req.query;
       
       let screens = await storage.getApprovedScreens();
+      console.log(`🔍 [/api/screens/in-area] Total active screens from DB: ${screens.length}`);
+      console.log(`   Query params: lat=${lat}, lng=${lng}, radius=${radiusKm}, city=${city}, budget=${budget}, duration=${duration}`);
       
       // Filter by area (map OR city)
       if (lat && lng && radiusKm) {
@@ -1450,7 +1452,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         screens = screens.filter(s => 
           s.city.toLowerCase() === (city as string).toLowerCase()
         );
+        console.log(`   📍 City filter applied: ${screens.length} screens in ${city}`);
       }
+      
+      console.log(`   📊 After area filter: ${screens.length} screens`);
       
       // Sort by footfall (descending) for better recommendations
       screens.sort((a, b) => b.avgDailyFootfall - a.avgDailyFootfall);
@@ -1481,6 +1486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         screens = selectedScreens;
       }
       
+      console.log(`   ✅ Final result: ${screens.length} screens returned`);
       res.json(screens);
     } catch (error) {
       console.error("Get screens in area error:", error);

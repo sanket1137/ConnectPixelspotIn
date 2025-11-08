@@ -150,11 +150,21 @@ export default function CreateCampaign() {
   const [markerPosition, setMarkerPosition] = useState(defaultCenter);
 
   // Fetch available cities
-  const { data: locationsData } = useQuery<{ states: string[]; cities: Record<string, string[]>; allCities: string[] }>({
+  const { data: locationsData, isLoading: locationsLoading, error: locationsError } = useQuery<{ states: string[]; cities: Record<string, string[]>; allCities: string[] }>({
     queryKey: ["/api/screens/locations"],
   });
 
   const allCities = locationsData?.allCities || [];
+  
+  // Debug: Log locations data
+  useEffect(() => {
+    if (locationsData) {
+      console.log("Locations loaded:", locationsData);
+    }
+    if (locationsError) {
+      console.error("Locations error:", locationsError);
+    }
+  }, [locationsData, locationsError]);
 
   const form = useForm<CreateCampaignForm>({
     resolver: zodResolver(createCampaignSchema),
@@ -184,6 +194,8 @@ export default function CreateCampaign() {
   const watchBudget = form.watch("budget");
   const watchAreaType = form.watch("areaType");
   const watchRadius = form.watch("radiusKm");
+  const watchLatitude = form.watch("latitude");
+  const watchLongitude = form.watch("longitude");
   const watchTargetCity = form.watch("targetCity");
   const watchDurationMode = form.watch("durationMode");
   const watchCustomDays = form.watch("customDays");
@@ -192,6 +204,49 @@ export default function CreateCampaign() {
   const watchTargetGender = form.watch("targetGender");
   const watchTargetAffluence = form.watch("targetAffluence");
   const watchTimePreference = form.watch("timePreference");
+
+  // Load pre-selected screens from localStorage (from Discover page)
+  useEffect(() => {
+    const SELECTED_SCREENS_KEY = "selectedScreenIds";
+    const saved = localStorage.getItem(SELECTED_SCREENS_KEY);
+    if (saved) {
+      try {
+        const savedIds = JSON.parse(saved);
+        if (Array.isArray(savedIds) && savedIds.length > 0) {
+          console.log("📦 Loading pre-selected screens from cart:", savedIds.length, "screens");
+          setSelectedScreenIds(savedIds);
+          
+          // Fetch full screen details for pre-selected screens
+          const fetchPreselectedScreens = async () => {
+            try {
+              const response = await apiRequest("GET", "/api/screens");
+              const allScreens = await response.json();
+              // Filter to only include pre-selected screens
+              const preselectedScreens = allScreens.filter((s: Screen) => savedIds.includes(s.id));
+              setScreensInArea(preselectedScreens);
+              console.log("✅ Loaded", preselectedScreens.length, "pre-selected screen details");
+            } catch (error) {
+              console.error("Error fetching pre-selected screen details:", error);
+            }
+          };
+          fetchPreselectedScreens();
+          
+          // Clear localStorage after loading to avoid conflicts
+          localStorage.removeItem(SELECTED_SCREENS_KEY);
+        }
+      } catch (error) {
+        console.error("Error loading pre-selected screens:", error);
+      }
+    }
+  }, []); // Run only once on mount
+  
+  // Debug: Log when screensInArea changes
+  useEffect(() => {
+    console.log("📍 screensInArea updated:", screensInArea.length, "screens");
+    if (screensInArea.length > 0) {
+      console.log("   Sample screen:", screensInArea[0].name, "at", screensInArea[0].city);
+    }
+  }, [screensInArea]);
 
   // Fetch screens in area when area changes (filtered by budget)
   useEffect(() => {
@@ -206,6 +261,17 @@ export default function CreateCampaign() {
       // Use custom days in custom mode
       const duration = watchDurationMode === "auto" ? (calculatedDuration || 7) : watchCustomDays;
       
+      console.log("🔍 Fetching screens in area:", { 
+        areaType: watchAreaType, 
+        currentStep, 
+        lat: form.getValues("latitude"), 
+        lng: form.getValues("longitude"),
+        radiusKm: watchRadius,
+        city: watchTargetCity,
+        budget,
+        duration
+      });
+      
       if (watchAreaType === "map") {
         const lat = form.getValues("latitude");
         const lng = form.getValues("longitude");
@@ -214,31 +280,35 @@ export default function CreateCampaign() {
         if (lat && lng && radiusKm) {
           try {
             let url = `/api/screens/in-area?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`;
-            // Apply budget filter from Step 2 onwards if we have both budget and duration
-            // This ensures consistent screen counts across all steps
-            if (budget && duration && currentStep >= 2) {
+            // Only apply budget filter in Step 4 for Smart Plan selection
+            // Step 2 should show ALL available screens in the area
+            if (budget && duration && currentStep >= 4 && planMode === "smart") {
               url += `&budget=${budget}&duration=${duration}`;
             }
+            console.log("📡 Fetching from URL:", url);
             const response = await apiRequest("GET", url);
             const data = await response.json();
+            console.log("✅ Screens fetched (map):", data.length, "screens");
             setScreensInArea(data);
             if (planMode === "smart") {
               setSelectedScreenIds(data.map((s: Screen) => s.id));
             }
           } catch (error) {
-            console.error("Error fetching screens:", error);
+            console.error("❌ Error fetching screens:", error);
           }
         }
       } else if (watchAreaType === "city" && watchTargetCity) {
         try {
           let url = `/api/screens/in-area?city=${watchTargetCity}`;
-          // Apply budget filter from Step 2 onwards if we have both budget and duration
-          // This ensures consistent screen counts across all steps
-          if (budget && duration && currentStep >= 2) {
+          // Only apply budget filter in Step 4 for Smart Plan selection
+          // Step 2 should show ALL available screens in the area
+          if (budget && duration && currentStep >= 4 && planMode === "smart") {
             url += `&budget=${budget}&duration=${duration}`;
           }
+          console.log("📡 Fetching from URL:", url);
           const response = await apiRequest("GET", url);
           const data = await response.json();
+          console.log("✅ Screens fetched (city):", data.length, "screens");
           setScreensInArea(data);
           if (planMode === "smart") {
             setSelectedScreenIds(data.map((s: Screen) => s.id));
@@ -252,7 +322,7 @@ export default function CreateCampaign() {
     if (currentStep >= 2) {
       fetchScreensInArea();
     }
-  }, [watchAreaType, watchRadius, watchTargetCity, currentStep, watchBudget, calculatedDuration, watchDurationMode, watchCustomDays, skipScreenRefetch]);
+  }, [watchAreaType, watchRadius, watchLatitude, watchLongitude, watchTargetCity, currentStep, watchBudget, calculatedDuration, watchDurationMode, watchCustomDays, skipScreenRefetch]);
 
   // Calculate duration when in auto mode
   useEffect(() => {
@@ -829,6 +899,119 @@ export default function CreateCampaign() {
                                 }}
                               />
                             )}
+                            
+                            {/* Display available screens on map */}
+                            {screensInArea.map((screen) => (
+                              <Marker
+                                key={screen.id}
+                                position={{
+                                  lat: parseFloat(screen.latitude.toString()),
+                                  lng: parseFloat(screen.longitude.toString()),
+                                }}
+                                onClick={() => setSelectedMapScreen(screen)}
+                                icon={{
+                                  path: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z",
+                                  fillColor: "#8b5cf6",
+                                  fillOpacity: 1,
+                                  strokeColor: "#ffffff",
+                                  strokeWeight: 2,
+                                  scale: 1.5,
+                                  anchor: new google.maps.Point(12, 24),
+                                }}
+                              />
+                            ))}
+                            
+                            {/* InfoWindow for selected screen */}
+                            {selectedMapScreen && (
+                              <InfoWindow
+                                position={{
+                                  lat: parseFloat(selectedMapScreen.latitude.toString()),
+                                  lng: parseFloat(selectedMapScreen.longitude.toString()),
+                                }}
+                                onCloseClick={() => setSelectedMapScreen(null)}
+                                options={{
+                                  maxWidth: 350,
+                                  pixelOffset: new google.maps.Size(0, -10)
+                                }}
+                              >
+                                <div style={{ width: '320px', maxWidth: '320px' }}>
+                                  {/* Screen Image */}
+                                  <div className="relative h-48 bg-gray-200 overflow-hidden rounded-md mb-3">
+                                    {selectedMapScreen.images && selectedMapScreen.images.length > 0 ? (
+                                      <img
+                                        src={selectedMapScreen.images[0]}
+                                        alt={selectedMapScreen.name}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        onError={(e) => {
+                                          e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
+                                        }}
+                                      />
+                                    ) : (
+                                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e5e7eb' }}>
+                                        <MapPin style={{ width: '48px', height: '48px', color: '#9ca3af' }} />
+                                      </div>
+                                    )}
+                                    <span style={{
+                                      position: 'absolute',
+                                      top: '8px',
+                                      right: '8px',
+                                      backgroundColor: 'white',
+                                      padding: '4px 8px',
+                                      borderRadius: '4px',
+                                      fontSize: '12px',
+                                      fontWeight: '500'
+                                    }}>
+                                      {selectedMapScreen.type}
+                                    </span>
+                                  </div>
+
+                                  <div style={{ padding: '0 4px' }}>
+                                    <h3 style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', color: '#111827' }}>
+                                      {selectedMapScreen.name}
+                                    </h3>
+                                    <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>
+                                      {selectedMapScreen.location}, {selectedMapScreen.city}
+                                    </p>
+
+                                    <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                                      <span style={{
+                                        padding: '2px 8px',
+                                        borderRadius: '4px',
+                                        fontSize: '11px',
+                                        border: '1px solid #d1d5db',
+                                        color: '#374151'
+                                      }}>
+                                        {selectedMapScreen.size}
+                                      </span>
+                                      <span style={{
+                                        padding: '2px 8px',
+                                        borderRadius: '4px',
+                                        fontSize: '11px',
+                                        border: '1px solid #d1d5db',
+                                        color: '#374151'
+                                      }}>
+                                        👥 {selectedMapScreen.avgDailyFootfall.toLocaleString()}/day
+                                      </span>
+                                    </div>
+
+                                    <div style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      paddingTop: '12px',
+                                      borderTop: '1px solid #e5e7eb'
+                                    }}>
+                                      <div>
+                                        <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>Price per day</p>
+                                        <p style={{ fontWeight: 'bold', fontSize: '18px', color: '#0d9488' }}>
+                                          ₹{selectedMapScreen.pricePerDay.toLocaleString()}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </InfoWindow>
+                            )}
                           </GoogleMap>
                         </div>
                       )}
@@ -863,18 +1046,33 @@ export default function CreateCampaign() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Select City</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={locationsLoading}>
                             <FormControl>
                               <SelectTrigger data-testid="select-city">
-                                <SelectValue placeholder="Choose a city" />
+                                <SelectValue placeholder={
+                                  locationsLoading 
+                                    ? "Loading cities..." 
+                                    : locationsError 
+                                      ? "Error loading cities" 
+                                      : allCities.length === 0
+                                        ? "No cities available"
+                                        : "Choose a city"
+                                } />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent className="max-h-[300px]">
-                              {allCities.map((city) => (
-                                <SelectItem key={city} value={city}>{city}</SelectItem>
-                              ))}
+                              {allCities.length > 0 ? (
+                                allCities.map((city) => (
+                                  <SelectItem key={city} value={city}>{city}</SelectItem>
+                                ))
+                              ) : (
+                                <div className="p-2 text-sm text-muted-foreground">No cities available</div>
+                              )}
                             </SelectContent>
                           </Select>
+                          {locationsError && (
+                            <p className="text-sm text-destructive">Failed to load cities. Please try again.</p>
+                          )}
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1596,19 +1794,101 @@ export default function CreateCampaign() {
                                         lng: parseFloat(selectedMapScreen.longitude.toString()),
                                       }}
                                       onCloseClick={() => setSelectedMapScreen(null)}
+                                      options={{
+                                        maxWidth: 350,
+                                        pixelOffset: new google.maps.Size(0, -10)
+                                      }}
                                     >
-                                      <div className="p-2">
-                                        <h3 className="font-semibold">{selectedMapScreen.name}</h3>
-                                        <p className="text-sm text-muted-foreground mb-2">{selectedMapScreen.location}</p>
-                                        <p className="text-sm font-medium">₹{selectedMapScreen.pricePerDay.toLocaleString()}/day</p>
-                                        <Button
-                                          size="sm"
-                                          className="mt-2 w-full"
-                                          onClick={() => toggleScreen(selectedMapScreen.id)}
-                                          data-testid={`button-toggle-screen-${selectedMapScreen.id}`}
-                                        >
-                                          {selectedScreenIds.includes(selectedMapScreen.id) ? "Remove" : "Add"}
-                                        </Button>
+                                      <div style={{ width: '320px', maxWidth: '320px' }}>
+                                        {/* Screen Image */}
+                                        <div className="relative h-48 bg-gray-200 overflow-hidden rounded-md mb-3">
+                                          {selectedMapScreen.images && selectedMapScreen.images.length > 0 ? (
+                                            <img
+                                              src={selectedMapScreen.images[0]}
+                                              alt={selectedMapScreen.name}
+                                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                              onError={(e) => {
+                                                e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
+                                              }}
+                                            />
+                                          ) : (
+                                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e5e7eb' }}>
+                                              <MapPin style={{ width: '48px', height: '48px', color: '#9ca3af' }} />
+                                            </div>
+                                          )}
+                                          <span style={{
+                                            position: 'absolute',
+                                            top: '8px',
+                                            right: '8px',
+                                            backgroundColor: 'white',
+                                            padding: '4px 8px',
+                                            borderRadius: '4px',
+                                            fontSize: '12px',
+                                            fontWeight: '500'
+                                          }}>
+                                            {selectedMapScreen.type}
+                                          </span>
+                                        </div>
+
+                                        <div style={{ padding: '0 4px' }}>
+                                          <h3 style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', color: '#111827' }}>
+                                            {selectedMapScreen.name}
+                                          </h3>
+                                          <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>
+                                            {selectedMapScreen.location}, {selectedMapScreen.city}
+                                          </p>
+
+                                          <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                                            <span style={{
+                                              padding: '2px 8px',
+                                              borderRadius: '4px',
+                                              fontSize: '11px',
+                                              border: '1px solid #d1d5db',
+                                              color: '#374151'
+                                            }}>
+                                              {selectedMapScreen.size}
+                                            </span>
+                                            <span style={{
+                                              padding: '2px 8px',
+                                              borderRadius: '4px',
+                                              fontSize: '11px',
+                                              border: '1px solid #d1d5db',
+                                              color: '#374151'
+                                            }}>
+                                              👥 {selectedMapScreen.avgDailyFootfall.toLocaleString()}/day
+                                            </span>
+                                          </div>
+
+                                          <div style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            paddingTop: '12px',
+                                            borderTop: '1px solid #e5e7eb'
+                                          }}>
+                                            <div>
+                                              <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>Price per day</p>
+                                              <p style={{ fontWeight: 'bold', fontSize: '18px', color: '#0d9488' }}>
+                                                ₹{selectedMapScreen.pricePerDay.toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <button
+                                              onClick={() => toggleScreen(selectedMapScreen.id)}
+                                              style={{
+                                                backgroundColor: selectedScreenIds.includes(selectedMapScreen.id) ? '#f3f4f6' : '#0d9488',
+                                                color: selectedScreenIds.includes(selectedMapScreen.id) ? '#111827' : 'white',
+                                                padding: '8px 16px',
+                                                borderRadius: '6px',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: '500'
+                                              }}
+                                            >
+                                              {selectedScreenIds.includes(selectedMapScreen.id) ? "Remove" : "Add"}
+                                            </button>
+                                          </div>
+                                        </div>
                                       </div>
                                     </InfoWindow>
                                   )}

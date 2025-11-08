@@ -141,20 +141,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getApprovedScreens(): Promise<Screen[]> {
-    return await db.select().from(screens).where(eq(screens.status, "approved"));
+    // Return screens with 'active' status (available for booking)
+    const activeScreens = await db.select().from(screens).where(eq(screens.status, "active"));
+    console.log(`   💾 [getApprovedScreens] Found ${activeScreens.length} active screens in database`);
+    if (activeScreens.length > 0) {
+      console.log(`      Sample cities: ${activeScreens.slice(0, 5).map(s => s.city).join(', ')}`);
+    }
+    return activeScreens;
   }
 
   async getPublicScreens(): Promise<Screen[]> {
-    // Return only approved screens for public viewing
-    return await db.select().from(screens).where(eq(screens.status, "approved")).orderBy(desc(screens.createdAt));
+    // Return only active screens for public viewing
+    return await db.select().from(screens).where(eq(screens.status, "active")).orderBy(desc(screens.createdAt));
   }
 
   async getDistinctCities(): Promise<string[]> {
-    // Get distinct cities from approved screens
+    // Get distinct cities from active screens
     const result = await db
       .selectDistinct({ city: screens.city })
       .from(screens)
-      .where(eq(screens.status, "approved"));
+      .where(eq(screens.status, "active"));
     
     return result
       .map(r => r.city)
@@ -235,12 +241,11 @@ export class DatabaseStorage implements IStorage {
     
     if (screenIds.length === 0) return [];
     
+    // Fetch ALL bookings for owner's screens (not just pending_owner)
+    // This allows owner to see pending, approved, and rejected bookings in separate tabs
     const bookingsList = await db.select().from(bookings).where(
-      and(
-        eq(bookings.status, "pending_owner"),
-        or(...screenIds.map(id => eq(bookings.screenId, id)))
-      )
-    );
+      or(...screenIds.map(id => eq(bookings.screenId, id)))
+    ).orderBy(desc(bookings.createdAt));
 
     // Fetch screen and campaign details for each booking
     const enrichedBookings = await Promise.all(

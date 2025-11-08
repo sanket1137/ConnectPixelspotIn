@@ -261,10 +261,10 @@ async function searchScreensInDatabase(
   const allScreens = await storage.getApprovedScreens();
   
   console.log('[AI Advisor] Search criteria:', JSON.stringify(criteria, null, 2));
-  console.log('[AI Advisor] Total approved screens:', allScreens.length);
+  console.log('[AI Advisor] Total active screens:', allScreens.length);
   
-  // Apply filters
-  let filtered = allScreens.filter((screen: Screen) => screen.status === "approved");
+  // Apply filters (screens from getApprovedScreens are already active)
+  let filtered = allScreens;
   
   // CRITICAL: Apply location filter first (required)
   if (criteria.cities && criteria.cities.length > 0) {
