@@ -14,6 +14,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupSecurity } from "./security";
+import { db, storage } from "./storage";
 
 const app = express();
 
@@ -85,4 +86,44 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
   });
+
+  // Start campaign lifecycle automation
+  startCampaignLifecycleScheduler();
 })();
+
+// Campaign lifecycle automation - runs every hour
+function startCampaignLifecycleScheduler() {
+  const INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+  
+  async function updateCampaignStatuses() {
+    try {
+      const now = new Date();
+      const campaigns = await storage.getAllCampaigns();
+      
+      for (const campaign of campaigns) {
+        const startDate = new Date(campaign.startDate);
+        const endDate = new Date(campaign.endDate);
+        
+        // approved → live (on start date)
+        if (campaign.status === "approved" && now >= startDate && now < endDate) {
+          await storage.updateCampaignStatus(campaign.id, "live");
+          console.log(`✅ Campaign ${campaign.id} updated to LIVE`);
+        }
+        
+        // live → completed (on end date)
+        if (campaign.status === "live" && now >= endDate) {
+          await storage.updateCampaignStatus(campaign.id, "completed");
+          console.log(`✅ Campaign ${campaign.id} updated to COMPLETED`);
+        }
+      }
+    } catch (error) {
+      console.error("❌ Campaign lifecycle update error:", error);
+    }
+  }
+  
+  // Run immediately on startup, then every hour
+  updateCampaignStatuses();
+  setInterval(updateCampaignStatuses, INTERVAL_MS);
+  
+  console.log("🔄 Campaign lifecycle scheduler started (runs every hour)");
+}

@@ -903,15 +903,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Booking not found" });
       }
 
+      // Update campaign status to "approved"
+      const campaign = await storage.getCampaign(booking.campaignId);
+      if (campaign && campaign.status === "pending") {
+        await storage.updateCampaignStatus(campaign.id, "approved");
+      }
+
       // Send campaign live notifications to advertiser and screen owner
-      const [campaign, screen] = await Promise.all([
+      const [updatedCampaign, screen] = await Promise.all([
         storage.getCampaign(booking.campaignId),
         storage.getScreen(booking.screenId)
       ]);
 
-      if (campaign && screen) {
+      if (updatedCampaign && screen) {
         const [advertiser, owner] = await Promise.all([
-          storage.getUser(campaign.advertiserId),
+          storage.getUser(updatedCampaign.advertiserId),
           storage.getUser(screen.ownerId)
         ]);
 
@@ -920,7 +926,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             advertiser,
             owner,
             booking,
-            campaign,
+            updatedCampaign,
             screen
           ).catch(err => console.error("Failed to send campaign live emails:", err));
         }
