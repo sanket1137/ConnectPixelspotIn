@@ -1807,6 +1807,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI Campaign Advisor chat endpoint
+  // ========== AI CAMPAIGN ADVISOR V2 - Session-based with Rate Limiting ==========
+  
+  /**
+   * Send message to AI advisor (creates new conversation or continues existing one)
+   * Rate limited: 30 messages/hour, 10 new conversations/day
+   */
+  app.post("/api/ai/chat", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { message, conversationId, websiteUrl, campaignType } = req.body;
+      const userId = req.user!.id;
+
+      if (!message || typeof message !== "string") {
+        return res.status(400).json({ error: "Message is required" });
+      }
+
+      if (!process.env.OPENAI_API_KEY) {
+        return res.status(500).json({ error: "OpenAI API key not configured" });
+      }
+
+      const { sendMessageToAdvisor } = await import("./ai-advisor-v2");
+      
+      const result = await sendMessageToAdvisor(
+        storage,
+        userId,
+        message,
+        conversationId,
+        websiteUrl,
+        campaignType
+      );
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("[AI Chat] Error:", error);
+      
+      // Handle rate limiting errors
+      if (error.message && error.message.includes("Rate limit exceeded")) {
+        return res.status(429).json({ error: error.message });
+      }
+      
+      res.status(500).json({ error: "Failed to get AI response. Please try again." });
+    }
+  });
+
+  /**
+   * Get user's conversation list
+   */
+  app.get("/api/ai/conversations", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const limit = parseInt(req.query.limit as string) || 50;
+
+      const { getUserConversations } = await import("./ai-advisor-v2");
+      const conversations = await getUserConversations(storage, userId, limit);
+      
+      res.json({ conversations });
+    } catch (error) {
+      console.error("[AI Conversations] Error:", error);
+      res.status(500).json({ error: "Failed to fetch conversations" });
+    }
+  });
+
+  /**
+   * Get messages from a specific conversation
+   */
+  app.get("/api/ai/conversations/:id/messages", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const conversationId = req.params.id;
+
+      const { getConversationMessages } = await import("./ai-advisor-v2");
+      const messages = await getConversationMessages(storage, userId, conversationId);
+      
+      res.json({ messages });
+    } catch (error: any) {
+      console.error("[AI Messages] Error:", error);
+      
+      if (error.message && error.message.includes("Unauthorized")) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      if (error.message && error.message.includes("not found")) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  /**
+   * Delete a conversation
+   */
+  app.delete("/api/ai/conversations/:id", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const conversationId = req.params.id;
+
+      const { deleteConversation } = await import("./ai-advisor-v2");
+      await deleteConversation(storage, userId, conversationId);
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[AI Delete] Error:", error);
+      
+      if (error.message && error.message.includes("Unauthorized")) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      if (error.message && error.message.includes("not found")) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      
+      res.status(500).json({ error: "Failed to delete conversation" });
+    }
+  });
+
+  // ========== AI CAMPAIGN ADVISOR V1 - DEPRECATED (kept for backward compatibility) ==========
   app.post("/api/ai/campaign-advisor", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
       const { messages, websiteUrl, campaignType } = req.body;

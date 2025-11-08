@@ -1,14 +1,18 @@
 // Reference: blueprint:javascript_database
 import { 
   users, screens, campaigns, bookings, payments,
+  aiConversations, aiMessages, aiRateLimits,
   type User, type InsertUser, 
   type Screen, type InsertScreen,
   type Campaign, type InsertCampaign,
   type Booking, type InsertBooking,
-  type Payment, type InsertPayment
+  type Payment, type InsertPayment,
+  type AiConversation, type InsertAiConversation,
+  type AiMessage, type InsertAiMessage,
+  type AiRateLimit, type InsertAiRateLimit
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, gte, lte, or, desc } from "drizzle-orm";
+import { eq, and, gte, lte, or, desc, sql as drizzleSql } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -65,6 +69,26 @@ export interface IStorage {
   getPaymentByBooking(bookingId: string): Promise<Payment | undefined>;
   createPayment(payment: InsertPayment): Promise<Payment>;
   updatePaymentStatus(id: string, status: string): Promise<Payment | undefined>;
+  
+  // AI Conversation methods
+  createConversation(userId: string, websiteUrl?: string, campaignType?: string): Promise<AiConversation>;
+  getConversation(id: string): Promise<AiConversation | undefined>;
+  getUserConversations(userId: string, limit?: number): Promise<AiConversation[]>;
+  updateConversationTitle(id: string, title: string): Promise<AiConversation | undefined>;
+  updateConversationWebsiteContext(id: string, websiteContext: string, expiryHours?: number): Promise<AiConversation | undefined>;
+  updateConversationStats(id: string, messageCount: number, totalTokens: number): Promise<AiConversation | undefined>;
+  deleteConversation(id: string): Promise<boolean>;
+  
+  // AI Message methods
+  addMessage(conversationId: string, role: "user" | "assistant", content: string, screenRecommendations?: any[], tokensUsed?: number): Promise<AiMessage>;
+  getConversationMessages(conversationId: string, limit?: number): Promise<AiMessage[]>;
+  getLastNMessages(conversationId: string, n: number): Promise<AiMessage[]>;
+  deleteConversationMessages(conversationId: string): Promise<boolean>;
+  
+  // AI Rate Limiting methods
+  checkRateLimit(userId: string, actionType: "message" | "new_conversation", maxCount: number, windowMinutes: number): Promise<boolean>;
+  incrementRateLimit(userId: string, actionType: "message" | "new_conversation", windowMinutes: number): Promise<void>;
+  cleanupExpiredRateLimits(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -370,6 +394,194 @@ export class DatabaseStorage implements IStorage {
   async updatePaymentStatus(id: string, status: string): Promise<Payment | undefined> {
     const [payment] = await db.update(payments).set({ status }).where(eq(payments.id, id)).returning();
     return payment || undefined;
+  }
+
+  // AI Conversation methods
+  async createConversation(userId: string, websiteUrl?: string, campaignType?: string): Promise<AiConversation> {
+    const [conversation] = await db.insert(aiConversations).values({
+      userId,
+      websiteUrl: websiteUrl || null,
+      campaignType: campaignType || null,
+      title: null, // Will be set after first message
+    }).returning();
+    return conversation;
+  }
+
+  async getConversation(id: string): Promise<AiConversation | undefined> {
+    const [conversation] = await db.select().from(aiConversations).where(eq(aiConversations.id, id));
+    return conversation || undefined;
+  }
+
+  async getUserConversations(userId: string, limit: number = 50): Promise<AiConversation[]> {
+    return await db.select()
+      .from(aiConversations)
+      .where(eq(aiConversations.userId, userId))
+      .orderBy(desc(aiConversations.lastMessageAt))
+      .limit(limit);
+  }
+
+  async updateConversationTitle(id: string, title: string): Promise<AiConversation | undefined> {
+    const [conversation] = await db.update(aiConversations)
+      .set({ title, updatedAt: drizzleSql`NOW()` })
+      .where(eq(aiConversations.id, id))
+      .returning();
+    return conversation || undefined;
+  }
+
+  async updateConversationWebsiteContext(id: string, websiteContext: string, expiryHours: number = 24): Promise<AiConversation | undefined> {
+    const expiry = new Date();
+    expiry.setHours(expiry.getHours() + expiryHours);
+    
+    const [conversation] = await db.update(aiConversations)
+      .set({ 
+        websiteContext, 
+        websiteContextExpiry: expiry,
+        updatedAt: drizzleSql`NOW()` 
+      })
+      .where(eq(aiConversations.id, id))
+      .returning();
+    return conversation || undefined;
+  }
+
+  async updateConversationStats(id: string, messageCount: number, totalTokens: number): Promise<AiConversation | undefined> {
+    const [conversation] = await db.update(aiConversations)
+      .set({ 
+        messageCount, 
+        totalTokensUsed: totalTokens,
+        lastMessageAt: drizzleSql`NOW()`,
+        updatedAt: drizzleSql`NOW()` 
+      })
+      .where(eq(aiConversations.id, id))
+      .returning();
+    return conversation || undefined;
+  }
+
+  async deleteConversation(id: string): Promise<boolean> {
+    // Delete messages first (cascade)
+    await this.deleteConversationMessages(id);
+    await db.delete(aiConversations).where(eq(aiConversations.id, id));
+    return true;
+  }
+
+  // AI Message methods
+  async addMessage(
+    conversationId: string, 
+    role: "user" | "assistant", 
+    content: string, 
+    screenRecommendations?: any[], 
+    tokensUsed?: number
+  ): Promise<AiMessage> {
+    const [message] = await db.insert(aiMessages).values({
+      conversationId,
+      role,
+      content,
+      screenRecommendations: screenRecommendations || null,
+      tokensUsed: tokensUsed || null,
+    }).returning();
+    
+    // Update conversation's lastMessageAt
+    await db.update(aiConversations)
+      .set({ lastMessageAt: drizzleSql`NOW()`, updatedAt: drizzleSql`NOW()` })
+      .where(eq(aiConversations.id, conversationId));
+    
+    return message;
+  }
+
+  async getConversationMessages(conversationId: string, limit: number = 100): Promise<AiMessage[]> {
+    return await db.select()
+      .from(aiMessages)
+      .where(eq(aiMessages.conversationId, conversationId))
+      .orderBy(aiMessages.createdAt)
+      .limit(limit);
+  }
+
+  async getLastNMessages(conversationId: string, n: number): Promise<AiMessage[]> {
+    const messages = await db.select()
+      .from(aiMessages)
+      .where(eq(aiMessages.conversationId, conversationId))
+      .orderBy(desc(aiMessages.createdAt))
+      .limit(n);
+    
+    // Reverse to get chronological order
+    return messages.reverse();
+  }
+
+  async deleteConversationMessages(conversationId: string): Promise<boolean> {
+    await db.delete(aiMessages).where(eq(aiMessages.conversationId, conversationId));
+    return true;
+  }
+
+  // AI Rate Limiting methods
+  async checkRateLimit(
+    userId: string, 
+    actionType: "message" | "new_conversation", 
+    maxCount: number, 
+    windowMinutes: number
+  ): Promise<boolean> {
+    // Clean up expired limits first
+    await this.cleanupExpiredRateLimits();
+    
+    const windowStart = new Date();
+    windowStart.setMinutes(windowStart.getMinutes() - windowMinutes);
+    
+    // Get all rate limit records for this user and action type within the window
+    const limits = await db.select()
+      .from(aiRateLimits)
+      .where(
+        and(
+          eq(aiRateLimits.userId, userId),
+          eq(aiRateLimits.actionType, actionType),
+          gte(aiRateLimits.windowStart, windowStart)
+        )
+      );
+    
+    const totalCount = limits.reduce((sum, limit) => sum + limit.count, 0);
+    return totalCount < maxCount;
+  }
+
+  async incrementRateLimit(
+    userId: string, 
+    actionType: "message" | "new_conversation", 
+    windowMinutes: number
+  ): Promise<void> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + windowMinutes * 60 * 1000);
+    
+    // Find existing rate limit in current window
+    const windowStart = new Date();
+    windowStart.setMinutes(windowStart.getMinutes() - 1); // 1 minute granularity
+    
+    const [existing] = await db.select()
+      .from(aiRateLimits)
+      .where(
+        and(
+          eq(aiRateLimits.userId, userId),
+          eq(aiRateLimits.actionType, actionType),
+          gte(aiRateLimits.windowStart, windowStart)
+        )
+      )
+      .limit(1);
+    
+    if (existing) {
+      // Increment existing count
+      await db.update(aiRateLimits)
+        .set({ count: existing.count + 1, expiresAt })
+        .where(eq(aiRateLimits.id, existing.id));
+    } else {
+      // Create new rate limit record
+      await db.insert(aiRateLimits).values({
+        userId,
+        actionType,
+        count: 1,
+        windowStart: now,
+        expiresAt,
+      });
+    }
+  }
+
+  async cleanupExpiredRateLimits(): Promise<void> {
+    const now = new Date();
+    await db.delete(aiRateLimits).where(lte(aiRateLimits.expiresAt, now));
   }
 }
 

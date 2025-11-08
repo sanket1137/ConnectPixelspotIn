@@ -29,20 +29,35 @@ const SYSTEM_PROMPT = `You are an expert DOOH (Digital Out-of-Home) advertising 
 - DO NOT ask many questions - use available context to make intelligent defaults
 - Call searchScreens after at most 1 clarifying question (preferably 0 questions if you have enough context)
 - Be decisive and proactive, not conversational
-- IMPORTANT: Start with BROAD searches (city + maybe 1-2 filters) - don't over-filter or you'll get 0 results
 
 ## Your Approach:
 1. **Analyze Context**: Use website info and campaign type to infer business type, target audience, and goals
-2. **Search BROADLY First**: Call searchScreens with just CITY and optionally 1-2 key filters (venue type OR lifestyle tag)
+2. **Apply User Requirements**: If user specifies venue type, location, or demographics, ALWAYS use those filters
 3. **Explain Briefly**: Provide concise reasoning for recommendations
+
+## IMPORTANT FILTERING RULES:
+- **When user says "roadside", "road side", "next to road"** → MUST use venueCategories: ["Road Side"]
+- **When user says "mall", "shopping mall"** → MUST use venueCategories: ["Mall", "Shopping Complex"]
+- **When user says "metro", "metro station"** → MUST use venueCategories: ["Metro"]
+- **When user specifies ANY venue type** → ALWAYS use venueCategories filter to exclude others
+- **When user refines search** → ADD the new filter, don't ignore it
+- **Start broad ONLY if user has NO specific requirements** - otherwise be precise!
 
 ## Searching Best Practices:
 - ALWAYS include cities array (e.g., ["Bangalore"])
-- OPTIONAL: Add 1-2 venueCategories if highly relevant (e.g., ["Café", "Restaurant"] for food business)
+- **CRITICAL**: When user mentions specific venue type, ALWAYS use venueCategories filter
 - OPTIONAL: Add 1-2 lifestyleTags if highly relevant (e.g., ["Food Lovers"] for café)
 - DO NOT specify: genderOrientation, incomeLevel, ageGroups unless user explicitly requests
 - DO NOT set maxPricePerDay unless user mentions budget constraint
 - The scoring system will rank results by relevance - you don't need to filter everything
+
+## Examples of Correct Filtering:
+- User: "roadside screens in Mumbai" → cities: ["Mumbai"], venueCategories: ["Road Side"]
+- User: "mall screens in Delhi" → cities: ["Delhi"], venueCategories: ["Mall", "Shopping Complex"]
+- User: "metro stations in Bangalore" → cities: ["Bangalore"], venueCategories: ["Metro"]
+- User: "I want screens next to road" → venueCategories: ["Road Side"]
+- User: "show me only outdoor screens" → environmentType: "Outdoor Digital"
+- User: "screens in shopping areas" → venueCategories: ["Mall", "Shopping Complex", "Retail Store"]
 
 ## Campaign Type Defaults (BROAD SEARCHES):
 - **Brand Awareness**: cities only, let scoring find best venues
@@ -92,7 +107,7 @@ export async function getCampaignAdvice(
       type: "function",
       function: {
         name: "searchScreens",
-        description: "Search for screens in the database based on campaign requirements. Use this when you have gathered enough information about the advertiser's needs.",
+        description: "Search for screens in the database. IMPORTANT: If user mentions specific venue type (roadside, mall, metro, etc.), ALWAYS use venueCategories filter to return ONLY those venues. Use this when you have gathered enough information about the advertiser's needs.",
         parameters: {
           type: "object",
           properties: {
@@ -104,7 +119,7 @@ export async function getCampaignAdvice(
             venueCategories: {
               type: "array",
               items: { type: "string" },
-              description: "Types of venues (e.g., ['Mall', 'Metro', 'Airport'])",
+              description: "STRICT FILTER: Only returns screens at these venues. ALWAYS USE THIS when user mentions venue type (roadside, mall, metro, etc.). Options: Airport, Mall, Metro, Restaurant, Café, Gym, Hospital, College, Road Side, Shopping Complex, etc. Example: User says 'roadside' → venueCategories: ['Road Side']",
             },
             ageGroups: {
               type: "array",
@@ -276,13 +291,21 @@ async function searchScreensInDatabase(
     console.log('[AI Advisor] After city filter:', filtered.length);
   }
   
+  // STRICT FILTER: Venue categories (exclude non-matching venues)
+  if (criteria.venueCategories && criteria.venueCategories.length > 0) {
+    filtered = filtered.filter((screen: Screen) =>
+      criteria.venueCategories.includes(screen.venueCategory)
+    );
+    console.log('[AI Advisor] After venue category filter:', filtered.length);
+  }
+  
   // If we have screens after location filter, apply optional filters as SOFT filters
   // Use scoring instead of hard filtering to avoid 0 results
   if (filtered.length > 0) {
     const scoredScreens = filtered.map((screen: Screen) => {
       let score = 0;
       
-      // Venue category match (high priority)
+      // Venue category match (already filtered above, add bonus for reason)
       if (criteria.venueCategories && criteria.venueCategories.length > 0) {
         if (criteria.venueCategories.includes(screen.venueCategory)) {
           score += 10;

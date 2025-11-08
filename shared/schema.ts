@@ -227,6 +227,74 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   }),
 }));
 
+// AI Conversations table - session-based chat with context persistence
+export const aiConversations = pgTable("ai_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  title: text("title"), // Auto-generated from first message or user-set
+  websiteUrl: text("website_url"), // Cached website context
+  websiteContext: text("website_context"), // Scraped website content (title, description, text)
+  websiteContextExpiry: timestamp("website_context_expiry"), // Re-scrape after 24 hours
+  campaignType: text("campaign_type"), // brand_awareness, product_launch, etc.
+  messageCount: integer("message_count").notNull().default(0),
+  totalTokensUsed: integer("total_tokens_used").notNull().default(0),
+  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// AI Messages table - individual messages in conversations
+export const aiMessages = pgTable("ai_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull(),
+  role: text("role").notNull(), // "user" or "assistant"
+  content: text("content").notNull(),
+  screenRecommendations: jsonb("screen_recommendations").$type<{
+    id: string;
+    name: string;
+    venueName: string;
+    city: string;
+    score: number;
+    pricePerDay: number;
+    reason: string;
+  }[]>(), // Only for assistant messages with recommendations
+  tokensUsed: integer("tokens_used"), // Estimated tokens for this message
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// AI Rate Limiting table - prevent abuse
+export const aiRateLimits = pgTable("ai_rate_limits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  actionType: text("action_type").notNull(), // "message" or "new_conversation"
+  count: integer("count").notNull().default(1),
+  windowStart: timestamp("window_start").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
+// AI Conversations Relations
+export const aiConversationsRelations = relations(aiConversations, ({ one, many }) => ({
+  user: one(users, {
+    fields: [aiConversations.userId],
+    references: [users.id],
+  }),
+  messages: many(aiMessages),
+}));
+
+export const aiMessagesRelations = relations(aiMessages, ({ one }) => ({
+  conversation: one(aiConversations, {
+    fields: [aiMessages.conversationId],
+    references: [aiConversations.id],
+  }),
+}));
+
+export const aiRateLimitsRelations = relations(aiRateLimits, ({ one }) => ({
+  user: one(users, {
+    fields: [aiRateLimits.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -258,6 +326,24 @@ export const insertPaymentSchema = createInsertSchema(payments).omit({
   createdAt: true,
 });
 
+export const insertAiConversationSchema = createInsertSchema(aiConversations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  messageCount: true,
+  totalTokensUsed: true,
+  lastMessageAt: true,
+});
+
+export const insertAiMessageSchema = createInsertSchema(aiMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAiRateLimitSchema = createInsertSchema(aiRateLimits).omit({
+  id: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -273,3 +359,12 @@ export type InsertBooking = z.infer<typeof insertBookingSchema>;
 
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+
+export type AiConversation = typeof aiConversations.$inferSelect;
+export type InsertAiConversation = z.infer<typeof insertAiConversationSchema>;
+
+export type AiMessage = typeof aiMessages.$inferSelect;
+export type InsertAiMessage = z.infer<typeof insertAiMessageSchema>;
+
+export type AiRateLimit = typeof aiRateLimits.$inferSelect;
+export type InsertAiRateLimit = z.infer<typeof insertAiRateLimitSchema>;
