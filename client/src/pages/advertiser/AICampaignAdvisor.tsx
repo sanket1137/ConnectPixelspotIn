@@ -46,6 +46,9 @@ export default function AICampaignAdvisor() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [, setLocation] = useLocation();
   
+  // Conversation ID for memory persistence
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
+  
   // State for selected screens
   const [selectedScreens, setSelectedScreens] = useState<Set<string>>(new Set());
   const [detailsDialogScreen, setDetailsDialogScreen] = useState<ScreenRecommendation | null>(null);
@@ -109,7 +112,8 @@ export default function AICampaignAdvisor() {
       }
       const token = await user.getIdToken();
 
-      const response = await fetch("/api/ai/campaign-advisor", {
+      // Use V2 API endpoint with conversation memory
+      const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -117,10 +121,8 @@ export default function AICampaignAdvisor() {
         },
         credentials: "include",
         body: JSON.stringify({
-          messages: [...messages, userMessage].map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          message: input,
+          conversationId: conversationId,
           websiteUrl: websiteUrl || undefined,
           campaignType: campaignType || undefined,
         }),
@@ -131,6 +133,11 @@ export default function AICampaignAdvisor() {
       }
 
       const data = await response.json();
+
+      // Store conversation ID for future messages (enables memory)
+      if (data.conversationId && !conversationId) {
+        setConversationId(data.conversationId);
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
