@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, Edit2, Save, X, Shield, Play } from "lucide-react";
-import WelcomeModal from "@/components/WelcomeModal";
+import { useLocation } from "wouter";
 import {
   Select,
   SelectContent,
@@ -45,9 +45,9 @@ const INDUSTRIES = [
 export default function Profile() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [isEditing, setIsEditing] = useState(false);
   const [showMobileDialog, setShowMobileDialog] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(false);
   const [mobileNumber, setMobileNumber] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -482,12 +482,19 @@ export default function Profile() {
         <Card>
           <CardHeader>
             <CardTitle>Welcome Tour</CardTitle>
-            <CardDescription>Replay the onboarding tour to learn about the platform</CardDescription>
+            <CardDescription>Replay the interactive onboarding tour</CardDescription>
           </CardHeader>
           <CardContent>
             <Button
               variant="outline"
-              onClick={() => setShowWelcome(true)}
+              onClick={() => {
+                const dashboardPath = user?.role === "advertiser" 
+                  ? "/advertiser/dashboard?tour=true"
+                  : user?.role === "screen_owner"
+                  ? "/owner/dashboard?tour=true"
+                  : "/admin/dashboard?tour=true";
+                setLocation(dashboardPath);
+              }}
               data-testid="button-replay-tour"
             >
               <Play className="w-4 h-4 mr-2" />
@@ -496,13 +503,6 @@ export default function Profile() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Welcome Modal */}
-      <WelcomeModal 
-        open={showWelcome} 
-        onClose={() => setShowWelcome(false)} 
-        userRole={user?.role as "advertiser" | "screen_owner" | "admin"} 
-      />
 
       {/* Mobile Verification Dialog */}
       <Dialog open={showMobileDialog} onOpenChange={setShowMobileDialog}>

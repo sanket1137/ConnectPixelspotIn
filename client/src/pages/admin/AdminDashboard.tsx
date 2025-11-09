@@ -27,8 +27,15 @@ export default function AdminDashboard() {
   });
 
   useEffect(() => {
-    if (user && user.profileCompleted && !user.hasSeenOnboarding) {
+    const params = new URLSearchParams(window.location.search);
+    const shouldRunTour = params.get('tour') === 'true';
+    
+    if (shouldRunTour || (user && user.profileCompleted && !user.hasSeenOnboarding)) {
       setTimeout(() => setRunTour(true), 500);
+      
+      if (shouldRunTour) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
     }
   }, [user]);
 
