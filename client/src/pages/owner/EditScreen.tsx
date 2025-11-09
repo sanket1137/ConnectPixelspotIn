@@ -208,6 +208,54 @@ export default function EditScreen() {
     }
   }, [screen, form]);
 
+  // Helper function to parse operating hours preset into structured data
+  const parseOperatingHoursPreset = (preset: string) => {
+    switch (preset) {
+      case "Business hours (09:00-18:00 | Mon-Fri)":
+        return {
+          start: "09:00",
+          end: "18:00",
+          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        };
+      case "Mall hours (10:00-22:00 | Mon-Sun)":
+        return {
+          start: "10:00",
+          end: "22:00",
+          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        };
+      case "Retail (11:00-23:00 | Mon-Sun)":
+        return {
+          start: "11:00",
+          end: "23:00",
+          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        };
+      case "Airport/Highways (24/7 | Mon-Sun)":
+        return {
+          start: "00:00",
+          end: "23:59",
+          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        };
+      case "Custom":
+        return null; // User will input manually
+      default:
+        return null;
+    }
+  };
+
+  // Watch operatingHoursPreset and auto-populate structured fields
+  const operatingHoursPreset = form.watch("operatingHoursPreset");
+  
+  useEffect(() => {
+    if (operatingHoursPreset && operatingHoursPreset !== "Custom") {
+      const parsed = parseOperatingHoursPreset(operatingHoursPreset);
+      if (parsed) {
+        form.setValue("customOperatingHoursStart", parsed.start);
+        form.setValue("customOperatingHoursEnd", parsed.end);
+        form.setValue("customOperatingDays", parsed.days);
+      }
+    }
+  }, [operatingHoursPreset]);
+
   const updateScreenMutation = useMutation({
     mutationFn: async (data: EditScreenForm) => {
       const payload = {
