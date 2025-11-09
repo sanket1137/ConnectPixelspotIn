@@ -23,12 +23,15 @@ export default function AdvertiserDashboard() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const [runTour, setRunTour] = useState(false);
+  const [tourCompleted, setTourCompleted] = useState(false);
   
   const { data: stats, isLoading } = useQuery<AdvertiserStats>({
     queryKey: ["/api/advertiser/stats"],
   });
 
   useEffect(() => {
+    if (tourCompleted) return;
+    
     const params = new URLSearchParams(window.location.search);
     const shouldRunTour = params.get('tour') === 'true';
     
@@ -39,15 +42,16 @@ export default function AdvertiserDashboard() {
         window.history.replaceState({}, '', window.location.pathname);
       }
     }
-  }, [user]);
+  }, [user, tourCompleted]);
 
   const handleTourComplete = async () => {
     setRunTour(false);
+    setTourCompleted(true);
     try {
       await apiRequest("/api/profile/complete-onboarding", {
         method: "POST",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/user"] });
     } catch (error) {
       console.error("Failed to mark onboarding complete:", error);
     }
