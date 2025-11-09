@@ -512,6 +512,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mark onboarding as complete
+  app.post("/api/profile/complete-onboarding", authenticate, async (req, res) => {
+    try {
+      await storage.updateUser(req.user!.id, {
+        hasSeenOnboarding: true,
+      });
+
+      res.json({ success: true, message: "Onboarding completed" });
+    } catch (error) {
+      console.error("Complete onboarding error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // DEV ONLY: Reset all user passwords (remove in production)
   app.post("/api/dev/reset-passwords", async (req, res) => {
     try {
@@ -2050,11 +2064,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: email,
         name: "Test User",
         role: "advertiser",
+        status: "active",
         emailVerified: true,
         mobileVerified: true,
         mobileNumber: "+919876543210",
         phone: null,
         profileCompleted: true,
+        hasSeenOnboarding: false,
         companyName: "Test Company",
         industry: "Technology",
         gstNumber: "22AAAAA0000A1Z5",

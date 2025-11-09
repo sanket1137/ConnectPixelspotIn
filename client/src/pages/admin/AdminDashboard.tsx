@@ -1,7 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Monitor, FileText, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/AuthContext";
+import WelcomeModal from "@/components/WelcomeModal";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface DashboardStats {
   totalUsers: number;
@@ -15,9 +19,32 @@ interface DashboardStats {
 }
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+  const [showWelcome, setShowWelcome] = useState(false);
+  
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/admin/stats"],
   });
+
+  const completeOnboardingMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("/api/profile/complete-onboarding", "POST", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+  });
+
+  useEffect(() => {
+    if (user && user.profileCompleted && !user.hasSeenOnboarding) {
+      setShowWelcome(true);
+    }
+  }, [user]);
+
+  const handleCloseWelcome = () => {
+    setShowWelcome(false);
+    completeOnboardingMutation.mutate();
+  };
 
   const statCards = [
     {
@@ -165,6 +192,13 @@ export default function AdminDashboard() {
           </button>
         </CardContent>
       </Card>
+
+      {/* Welcome Modal */}
+      <WelcomeModal 
+        open={showWelcome} 
+        onClose={handleCloseWelcome} 
+        userRole="admin" 
+      />
     </div>
   );
 }

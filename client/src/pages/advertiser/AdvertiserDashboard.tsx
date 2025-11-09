@@ -1,10 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, MapPin, CreditCard, TrendingUp, Play, CheckCircle2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/AuthContext";
+import WelcomeModal from "@/components/WelcomeModal";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface AdvertiserStats {
   totalCampaigns: number;
@@ -16,9 +20,32 @@ interface AdvertiserStats {
 
 export default function AdvertiserDashboard() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const [showWelcome, setShowWelcome] = useState(false);
+  
   const { data: stats, isLoading } = useQuery<AdvertiserStats>({
     queryKey: ["/api/advertiser/stats"],
   });
+
+  const completeOnboardingMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("/api/profile/complete-onboarding", "POST", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+  });
+
+  useEffect(() => {
+    if (user && user.profileCompleted && !user.hasSeenOnboarding) {
+      setShowWelcome(true);
+    }
+  }, [user]);
+
+  const handleCloseWelcome = () => {
+    setShowWelcome(false);
+    completeOnboardingMutation.mutate();
+  };
 
   if (isLoading) {
     return (
@@ -190,6 +217,13 @@ export default function AdvertiserDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Welcome Modal */}
+      <WelcomeModal 
+        open={showWelcome} 
+        onClose={handleCloseWelcome} 
+        userRole="advertiser" 
+      />
     </div>
   );
 }

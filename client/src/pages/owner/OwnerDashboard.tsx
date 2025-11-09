@@ -1,9 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Monitor, Calendar, DollarSign, TrendingUp, Eye, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/AuthContext";
+import WelcomeModal from "@/components/WelcomeModal";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface OwnerStats {
   totalScreens: number;
@@ -16,9 +20,32 @@ interface OwnerStats {
 
 export default function OwnerDashboard() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const [showWelcome, setShowWelcome] = useState(false);
+  
   const { data: stats, isLoading } = useQuery<OwnerStats>({
     queryKey: ["/api/owner/stats"],
   });
+
+  const completeOnboardingMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("/api/profile/complete-onboarding", "POST", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+  });
+
+  useEffect(() => {
+    if (user && user.profileCompleted && !user.hasSeenOnboarding) {
+      setShowWelcome(true);
+    }
+  }, [user]);
+
+  const handleCloseWelcome = () => {
+    setShowWelcome(false);
+    completeOnboardingMutation.mutate();
+  };
 
   if (isLoading) {
     return (
@@ -125,6 +152,13 @@ export default function OwnerDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Welcome Modal */}
+      <WelcomeModal 
+        open={showWelcome} 
+        onClose={handleCloseWelcome} 
+        userRole="screen_owner" 
+      />
     </div>
   );
 }

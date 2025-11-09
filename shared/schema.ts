@@ -29,6 +29,7 @@ export const users = pgTable("users", {
   
   // Profile Status
   profileCompleted: boolean("profile_completed").notNull().default(false),
+  hasSeenOnboarding: boolean("has_seen_onboarding").notNull().default(false),
   
   role: text("role").notNull().default("advertiser"), // admin, screen_owner, advertiser
   status: text("status").notNull().default("active"), // active, inactive, pending
