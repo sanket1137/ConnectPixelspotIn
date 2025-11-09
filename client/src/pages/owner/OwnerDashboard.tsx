@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Monitor, Calendar, DollarSign, TrendingUp, Eye, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
-import WelcomeModal from "@/components/WelcomeModal";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import GuidedTour from "@/components/GuidedTour";
+import { Step } from "react-joyride";
 
 interface OwnerStats {
   totalScreens: number;
@@ -21,31 +21,41 @@ interface OwnerStats {
 export default function OwnerDashboard() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const [showWelcome, setShowWelcome] = useState(false);
+  const [runTour, setRunTour] = useState(false);
   
   const { data: stats, isLoading } = useQuery<OwnerStats>({
     queryKey: ["/api/owner/stats"],
   });
 
-  const completeOnboardingMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("/api/profile/complete-onboarding", "POST", {});
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    },
-  });
-
   useEffect(() => {
     if (user && user.profileCompleted && !user.hasSeenOnboarding) {
-      setShowWelcome(true);
+      setTimeout(() => setRunTour(true), 500);
     }
   }, [user]);
 
-  const handleCloseWelcome = () => {
-    setShowWelcome(false);
-    completeOnboardingMutation.mutate();
-  };
+  const tourSteps: Step[] = [
+    {
+      target: '[data-tour="owner-welcome"]',
+      content: 'Welcome to your Screen Owner Dashboard! Let me show you how to monetize your screens.',
+      placement: 'center',
+      disableBeacon: true,
+    },
+    {
+      target: '[data-tour="add-screen-btn"]',
+      content: 'Start earning! Add your first screen here with details like location, size, and audience.',
+      placement: 'bottom',
+    },
+    {
+      target: '[data-tour="stats-grid"]',
+      content: 'Monitor your screen inventory, bookings, and earnings in real-time.',
+      placement: 'bottom',
+    },
+    {
+      target: '[data-tour="pending-requests"]',
+      content: 'Manage booking requests from advertisers and approve campaigns for your screens.',
+      placement: 'top',
+    },
+  ];
 
   if (isLoading) {
     return (
@@ -63,18 +73,18 @@ export default function OwnerDashboard() {
   return (
     <div className="p-4 sm:p-6 md:p-8 space-y-6 sm:space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-        <div>
+        <div data-tour="owner-welcome">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground font-serif mb-2">Screen Owner Dashboard</h1>
           <p className="text-sm sm:text-base text-muted-foreground">Manage your screens and track earnings</p>
         </div>
-        <Button onClick={() => setLocation("/owner/screens/new")} size="lg" className="w-full sm:w-auto" data-testid="button-add-screen">
+        <Button onClick={() => setLocation("/owner/screens/new")} size="lg" className="w-full sm:w-auto" data-testid="button-add-screen" data-tour="add-screen-btn">
           <MapPin className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
           Add New Screen
         </Button>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3" data-tour="stats-grid">
         <Card className="hover-elevate">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -92,7 +102,7 @@ export default function OwnerDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate">
+        <Card className="hover-elevate" data-tour="pending-requests">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Pending Requests
@@ -153,11 +163,11 @@ export default function OwnerDashboard() {
         </CardContent>
       </Card>
 
-      {/* Welcome Modal */}
-      <WelcomeModal 
-        open={showWelcome} 
-        onClose={handleCloseWelcome} 
-        userRole="screen_owner" 
+      {/* Guided Tour */}
+      <GuidedTour 
+        steps={tourSteps}
+        run={runTour}
+        onFinish={() => setRunTour(false)}
       />
     </div>
   );
