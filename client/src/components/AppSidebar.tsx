@@ -26,6 +26,7 @@ import {
   DollarSign,
   Sparkles,
   UserCircle,
+  MessageSquare,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ export function AppSidebar() {
     { title: "Manage Users", url: "/admin/users", icon: Users },
     { title: "Manage Screens", url: "/admin/screens", icon: Monitor },
     { title: "Campaigns & Bookings", url: "/admin/bookings", icon: FileText },
+    { title: "AI Conversations", url: "/admin/ai-conversations", icon: MessageSquare },
     { title: "Analytics", url: "/admin/analytics", icon: TrendingUp },
     { title: "Settings", url: "/admin/settings", icon: Settings },
     { title: "Profile", url: "/admin/profile", icon: UserCircle },

@@ -16,6 +16,7 @@ import ManageScreens from "@/pages/admin/ManageScreens";
 import AddScreenForOwner from "@/pages/admin/AddScreenForOwner";
 import ManageBookings from "@/pages/admin/ManageBookings";
 import Analytics from "@/pages/admin/Analytics";
+import AIConversations from "@/pages/admin/AIConversations";
 import Settings from "@/pages/admin/Settings";
 import OwnerDashboard from "@/pages/owner/OwnerDashboard";
 import ScreensList from "@/pages/owner/ScreensList";
@@ -82,6 +83,11 @@ function Router() {
       <Route path="/admin/analytics">
         <AuthGuard allowedRoles={["admin"]}>
           <Analytics />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/ai-conversations">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AIConversations />
         </AuthGuard>
       </Route>
       <Route path="/admin/settings">

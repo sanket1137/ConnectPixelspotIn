@@ -1926,6 +1926,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========== ADMIN AI CONVERSATION ANALYTICS ==========
+  
+  /**
+   * Get all AI conversations with user details (admin only)
+   */
+  app.get("/api/admin/ai/conversations", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const conversations = await storage.getAllConversationsWithUsers(limit);
+      res.json({ conversations });
+    } catch (error) {
+      console.error("[Admin AI Conversations] Error:", error);
+      res.status(500).json({ error: "Failed to fetch conversations" });
+    }
+  });
+
+  /**
+   * Get specific conversation with all messages (admin only)
+   */
+  app.get("/api/admin/ai/conversations/:id", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const conversationId = req.params.id;
+      
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      const messages = await storage.getConversationMessages(conversationId);
+      
+      res.json({ 
+        conversation,
+        messages 
+      });
+    } catch (error) {
+      console.error("[Admin AI Conversation Details] Error:", error);
+      res.status(500).json({ error: "Failed to fetch conversation details" });
+    }
+  });
+
+  /**
+   * Get AI conversation analytics (admin only)
+   */
+  app.get("/api/admin/ai/analytics", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const analytics = await storage.getConversationAnalytics();
+      res.json(analytics);
+    } catch (error) {
+      console.error("[Admin AI Analytics] Error:", error);
+      res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
   // ========== AI CAMPAIGN ADVISOR V1 - DEPRECATED (kept for backward compatibility) ==========
   app.post("/api/ai/campaign-advisor", authenticate, requireRole("advertiser"), async (req, res) => {
     try {

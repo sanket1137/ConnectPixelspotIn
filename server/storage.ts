@@ -511,6 +511,88 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
+  // Admin AI Conversation methods
+  async getAllConversationsWithUsers(limit: number = 100): Promise<any[]> {
+    const conversations = await db.select({
+      id: aiConversations.id,
+      userId: aiConversations.userId,
+      userName: users.name,
+      userEmail: users.email,
+      title: aiConversations.title,
+      websiteUrl: aiConversations.websiteUrl,
+      campaignType: aiConversations.campaignType,
+      messageCount: aiConversations.messageCount,
+      totalTokensUsed: aiConversations.totalTokensUsed,
+      lastMessageAt: aiConversations.lastMessageAt,
+      createdAt: aiConversations.createdAt,
+    })
+    .from(aiConversations)
+    .leftJoin(users, eq(aiConversations.userId, users.id))
+    .orderBy(desc(aiConversations.lastMessageAt))
+    .limit(limit);
+    
+    return conversations;
+  }
+
+  async getConversationAnalytics(): Promise<{
+    totalConversations: number;
+    totalMessages: number;
+    totalTokens: number;
+    activeUsersCount: number;
+    averageMessagesPerConversation: number;
+    conversationsToday: number;
+    conversationsThisWeek: number;
+    conversationsThisMonth: number;
+  }> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    
+    const monthAgo = new Date();
+    monthAgo.setDate(monthAgo.getDate() - 30);
+
+    const [stats] = await db.select({
+      totalConversations: drizzleSql<number>`COUNT(*)::int`,
+      totalMessages: drizzleSql<number>`COALESCE(SUM(${aiConversations.messageCount}), 0)::int`,
+      totalTokens: drizzleSql<number>`COALESCE(SUM(${aiConversations.totalTokensUsed}), 0)::int`,
+      activeUsersCount: drizzleSql<number>`COUNT(DISTINCT ${aiConversations.userId})::int`,
+    })
+    .from(aiConversations);
+
+    const [todayCount] = await db.select({
+      count: drizzleSql<number>`COUNT(*)::int`,
+    })
+    .from(aiConversations)
+    .where(gte(aiConversations.createdAt, today));
+
+    const [weekCount] = await db.select({
+      count: drizzleSql<number>`COUNT(*)::int`,
+    })
+    .from(aiConversations)
+    .where(gte(aiConversations.createdAt, weekAgo));
+
+    const [monthCount] = await db.select({
+      count: drizzleSql<number>`COUNT(*)::int`,
+    })
+    .from(aiConversations)
+    .where(gte(aiConversations.createdAt, monthAgo));
+
+    return {
+      totalConversations: stats.totalConversations || 0,
+      totalMessages: stats.totalMessages || 0,
+      totalTokens: stats.totalTokens || 0,
+      activeUsersCount: stats.activeUsersCount || 0,
+      averageMessagesPerConversation: stats.totalConversations > 0 
+        ? Math.round((stats.totalMessages || 0) / stats.totalConversations) 
+        : 0,
+      conversationsToday: todayCount.count || 0,
+      conversationsThisWeek: weekCount.count || 0,
+      conversationsThisMonth: monthCount.count || 0,
+    };
+  }
+
   // AI Rate Limiting methods
   async checkRateLimit(
     userId: string, 
