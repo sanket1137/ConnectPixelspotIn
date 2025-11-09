@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Monitor, FileText, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
-import WelcomeModal from "@/components/WelcomeModal";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import GuidedTour from "@/components/GuidedTour";
+import { Step } from "react-joyride";
 
 interface DashboardStats {
   totalUsers: number;
@@ -20,31 +20,46 @@ interface DashboardStats {
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const [showWelcome, setShowWelcome] = useState(false);
+  const [runTour, setRunTour] = useState(false);
   
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/admin/stats"],
   });
 
-  const completeOnboardingMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("/api/profile/complete-onboarding", "POST", {});
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    },
-  });
-
   useEffect(() => {
     if (user && user.profileCompleted && !user.hasSeenOnboarding) {
-      setShowWelcome(true);
+      setTimeout(() => setRunTour(true), 500);
     }
   }, [user]);
 
-  const handleCloseWelcome = () => {
-    setShowWelcome(false);
-    completeOnboardingMutation.mutate();
-  };
+  const tourSteps: Step[] = [
+    {
+      target: '[data-tour="admin-welcome"]',
+      content: 'Welcome to your Admin Dashboard! Let me show you around the platform controls.',
+      placement: 'center',
+      disableBeacon: true,
+    },
+    {
+      target: '[data-tour="stats-grid"]',
+      content: 'Here you can see an overview of platform metrics - total users, screens, campaigns, and revenue at a glance.',
+      placement: 'bottom',
+    },
+    {
+      target: '[data-tour="pending-screens"]',
+      content: 'This shows screens waiting for your approval. You can review and approve new screen submissions here.',
+      placement: 'top',
+    },
+    {
+      target: '[data-tour="pending-bookings"]',
+      content: 'Booking requests that need your attention are shown here. You can approve or reject campaign bookings.',
+      placement: 'top',
+    },
+    {
+      target: '[data-tour="quick-actions"]',
+      content: 'Quick actions give you easy access to manage users, add screens, and view detailed reports and analytics.',
+      placement: 'top',
+    },
+  ];
 
   const statCards = [
     {
@@ -103,13 +118,13 @@ export default function AdminDashboard() {
 
   return (
     <div className="p-8 space-y-8">
-      <div>
+      <div data-tour="admin-welcome">
         <h1 className="text-4xl font-bold text-foreground font-serif mb-2">Admin Dashboard</h1>
         <p className="text-muted-foreground">Overview of your platform's performance and metrics</p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4" data-tour="stats-grid">
         {statCards.map((stat) => (
           <Card key={stat.title} className="hover-elevate" data-testid={`card-stat-${stat.title.toLowerCase().replace(/\s+/g, '-')}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -142,7 +157,7 @@ export default function AdminDashboard() {
 
       {/* Pending Actions */}
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
+        <Card data-tour="pending-screens">
           <CardHeader>
             <CardTitle>Pending Screens</CardTitle>
           </CardHeader>
@@ -154,7 +169,7 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-tour="pending-bookings">
           <CardHeader>
             <CardTitle>Pending Bookings</CardTitle>
           </CardHeader>
@@ -168,7 +183,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <Card>
+      <Card data-tour="quick-actions">
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
         </CardHeader>
@@ -193,11 +208,11 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
 
-      {/* Welcome Modal */}
-      <WelcomeModal 
-        open={showWelcome} 
-        onClose={handleCloseWelcome} 
-        userRole="admin" 
+      {/* Guided Tour */}
+      <GuidedTour 
+        steps={tourSteps}
+        run={runTour}
+        onFinish={() => setRunTour(false)}
       />
     </div>
   );
