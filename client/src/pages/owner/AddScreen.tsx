@@ -19,7 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { 
-  INDIAN_STATES, 
+  INDIAN_STATES,
+  ALL_INDIAN_CITIES,
   VISIBILITY_LEVELS, 
   OPERATING_HOURS_PRESETS, 
   DETAILED_AGE_GROUPS,
@@ -422,9 +423,20 @@ export default function AddScreen() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>City</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., Bangalore" {...field} data-testid="input-city" />
-                      </FormControl>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-city">
+                            <SelectValue placeholder="Select city" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-[300px]">
+                          {ALL_INDIAN_CITIES.map((city) => (
+                            <SelectItem key={city} value={city}>
+                              {city}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
