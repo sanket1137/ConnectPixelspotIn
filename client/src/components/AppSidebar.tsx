@@ -92,6 +92,7 @@ export function AppSidebar() {
                     onClick={() => setLocation(item.url)}
                     isActive={location === item.url}
                     data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
+                    data-tour={`sidebar-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
                   >
                     <item.icon className="w-4 h-4" />
                     <span>{item.title}</span>

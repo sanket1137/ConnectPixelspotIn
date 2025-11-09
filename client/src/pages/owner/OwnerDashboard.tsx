@@ -56,24 +56,39 @@ export default function OwnerDashboard() {
   const tourSteps: Step[] = [
     {
       target: '[data-tour="owner-welcome"]',
-      content: 'Welcome to your Screen Owner Dashboard! Let me show you how to monetize your screens.',
+      content: 'Welcome to Pixelspot Screen Owner Portal! Let me show you how to monetize your digital screens.',
       placement: 'center',
       disableBeacon: true,
     },
     {
       target: '[data-tour="add-screen-btn"]',
-      content: 'Start earning! Add your first screen here with details like location, size, and audience.',
+      content: 'Start earning! Add screens with details like location, size, audience demographics, and operating hours.',
       placement: 'bottom',
     },
     {
       target: '[data-tour="stats-grid"]',
-      content: 'Monitor your screen inventory, bookings, and earnings in real-time.',
+      content: 'Monitor your screen inventory, active bookings, and total earnings in real-time.',
       placement: 'bottom',
     },
     {
       target: '[data-tour="pending-requests"]',
-      content: 'Manage booking requests from advertisers and approve campaigns for your screens.',
+      content: 'Review booking requests from advertisers. Approve campaigns, suggest alternative dates, or decline bookings.',
       placement: 'top',
+    },
+    {
+      target: '[data-tour="sidebar-my-screens"]',
+      content: 'Manage all your screens here. View details, edit information, or check approval status from admin.',
+      placement: 'right',
+    },
+    {
+      target: '[data-tour="sidebar-booking-requests"]',
+      content: 'Handle all booking requests in one place. Approve campaigns, negotiate dates, and track booking workflow.',
+      placement: 'right',
+    },
+    {
+      target: '[data-tour="sidebar-earnings"]',
+      content: 'Track your revenue! View monthly earnings, payment history, and see which screens generate the most income.',
+      placement: 'right',
     },
   ];
 

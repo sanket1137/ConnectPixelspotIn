@@ -55,29 +55,44 @@ export default function AdminDashboard() {
   const tourSteps: Step[] = [
     {
       target: '[data-tour="admin-welcome"]',
-      content: 'Welcome to your Admin Dashboard! Let me show you around the platform controls.',
+      content: 'Welcome to Pixelspot Admin! Let me show you around the platform controls and features.',
       placement: 'center',
       disableBeacon: true,
     },
     {
       target: '[data-tour="stats-grid"]',
-      content: 'Here you can see an overview of platform metrics - total users, screens, campaigns, and revenue at a glance.',
+      content: 'Your dashboard shows platform-wide metrics at a glance - users, screens, active campaigns, and revenue.',
       placement: 'bottom',
     },
     {
       target: '[data-tour="pending-screens"]',
-      content: 'This shows screens waiting for your approval. You can review and approve new screen submissions here.',
+      content: 'Monitor screens awaiting approval. Review submissions from screen owners and approve quality listings.',
       placement: 'top',
     },
     {
       target: '[data-tour="pending-bookings"]',
-      content: 'Booking requests that need your attention are shown here. You can approve or reject campaign bookings.',
+      content: 'Booking requests that need your attention. You can approve campaigns or bypass screen owner approval for urgent requests.',
       placement: 'top',
     },
     {
-      target: '[data-tour="quick-actions"]',
-      content: 'Quick actions give you easy access to manage users, add screens, and view detailed reports and analytics.',
-      placement: 'top',
+      target: '[data-tour="sidebar-manage-users"]',
+      content: 'Click here to manage all platform users - advertisers and screen owners. View profiles and handle account issues.',
+      placement: 'right',
+    },
+    {
+      target: '[data-tour="sidebar-manage-screens"]',
+      content: 'Access the complete screen directory here. Approve new screens, manage existing ones, or handle rejections.',
+      placement: 'right',
+    },
+    {
+      target: '[data-tour="sidebar-campaigns-&-bookings"]',
+      content: 'Manage all campaign bookings from this page. Approve campaigns, track booking workflow, and monitor approvals.',
+      placement: 'right',
+    },
+    {
+      target: '[data-tour="sidebar-ai-conversations"]',
+      content: 'Monitor AI chatbot usage! Track how advertisers interact with the AI Campaign Advisor and view conversation analytics.',
+      placement: 'right',
     },
   ];
 

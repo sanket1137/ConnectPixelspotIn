@@ -56,24 +56,39 @@ export default function AdvertiserDashboard() {
   const tourSteps: Step[] = [
     {
       target: '[data-tour="advertiser-welcome"]',
-      content: 'Welcome to your Advertiser Dashboard! Let me show you how to launch your first campaign.',
+      content: 'Welcome to Pixelspot! Let me show you how to launch powerful DOOH advertising campaigns across India.',
       placement: 'center',
       disableBeacon: true,
     },
     {
       target: '[data-tour="create-campaign-btn"]',
-      content: 'Start here! Click this button to create your first advertising campaign with AI assistance.',
+      content: 'Start here! Launch campaigns with our AI-powered 6-step workflow - set budget, select areas, target audience, and upload creatives.',
       placement: 'bottom',
     },
     {
       target: '[data-tour="find-screens-btn"]',
-      content: 'Or browse our network of screens on an interactive map to find the perfect advertising locations.',
+      content: 'Discover screens! Browse our network on an interactive map or list view to find perfect advertising locations.',
       placement: 'bottom',
     },
     {
       target: '[data-tour="stats-grid"]',
-      content: 'Track your campaign performance, spending, and active campaigns at a glance.',
+      content: 'Track your campaign performance, total spending, and active campaigns at a glance.',
       placement: 'bottom',
+    },
+    {
+      target: '[data-tour="sidebar-ai-campaign-advisor"]',
+      content: 'Get expert advice! Chat with our AI advisor about targeting strategy, budget optimization, and campaign planning.',
+      placement: 'right',
+    },
+    {
+      target: '[data-tour="sidebar-my-campaigns"]',
+      content: 'Manage all your campaigns here. View details, track status (pending/approved/live/completed), and edit rejected campaigns.',
+      placement: 'right',
+    },
+    {
+      target: '[data-tour="sidebar-find-screens"]',
+      content: 'Screen discovery page with dual view - switch between interactive Google Maps and detailed list view for browsing.',
+      placement: 'right',
     },
   ];
 
