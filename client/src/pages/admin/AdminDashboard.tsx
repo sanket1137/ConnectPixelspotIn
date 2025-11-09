@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import GuidedTour from "@/components/GuidedTour";
 import { Step } from "react-joyride";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface DashboardStats {
   totalUsers: number;
@@ -38,6 +39,18 @@ export default function AdminDashboard() {
       }
     }
   }, [user]);
+
+  const handleTourComplete = async () => {
+    setRunTour(false);
+    try {
+      await apiRequest("/api/profile/complete-onboarding", {
+        method: "POST",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+    } catch (error) {
+      console.error("Failed to mark onboarding complete:", error);
+    }
+  };
 
   const tourSteps: Step[] = [
     {
@@ -219,7 +232,7 @@ export default function AdminDashboard() {
       <GuidedTour 
         steps={tourSteps}
         run={runTour}
-        onFinish={() => setRunTour(false)}
+        onFinish={handleTourComplete}
       />
     </div>
   );
