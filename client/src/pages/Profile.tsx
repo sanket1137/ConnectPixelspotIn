@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, XCircle, Edit2, Save, X, Shield } from "lucide-react";
+import { CheckCircle2, XCircle, Edit2, Save, X, Shield, Play } from "lucide-react";
+import WelcomeModal from "@/components/WelcomeModal";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,7 @@ export default function Profile() {
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [showMobileDialog, setShowMobileDialog] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
   const [mobileNumber, setMobileNumber] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -475,7 +477,32 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Welcome Tour */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Welcome Tour</CardTitle>
+            <CardDescription>Replay the onboarding tour to learn about the platform</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              onClick={() => setShowWelcome(true)}
+              data-testid="button-replay-tour"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Replay Welcome Tour
+            </Button>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Welcome Modal */}
+      <WelcomeModal 
+        open={showWelcome} 
+        onClose={() => setShowWelcome(false)} 
+        userRole={user?.role as "advertiser" | "screen_owner" | "admin"} 
+      />
 
       {/* Mobile Verification Dialog */}
       <Dialog open={showMobileDialog} onOpenChange={setShowMobileDialog}>
