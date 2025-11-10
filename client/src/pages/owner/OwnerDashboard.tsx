@@ -48,10 +48,8 @@ export default function OwnerDashboard() {
     setRunTour(false);
     setTourCompleted(true);
     try {
-      await apiRequest("/api/profile/complete-onboarding", {
-        method: "POST",
-      });
-      await queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      await apiRequest("/api/profile/complete-onboarding", "POST", {});
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     } catch (error) {
       console.error("Failed to mark onboarding complete:", error);
     }
