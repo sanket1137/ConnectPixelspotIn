@@ -1,13 +1,1470 @@
-import { useAuth } from "@/contexts/AuthContext";
-import ScreenForm from "@/components/ScreenForm";
+import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { ObjectUploader } from "@/components/ObjectUploader";
+import type { UploadResult } from "@uppy/core";
+import { ArrowLeft, MapPin, Upload, Check, Users, DollarSign, Monitor, Crosshair } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { 
+  INDIAN_STATES,
+  ALL_INDIAN_CITIES,
+  VISIBILITY_LEVELS, 
+  OPERATING_HOURS_PRESETS, 
+  DETAILED_AGE_GROUPS,
+  GENDER_ORIENTATIONS,
+  INCOME_LEVELS,
+  LIFESTYLE_TAGS,
+  LOCATION_TAGS
+} from "@shared/constants";
+
+const addScreenSchema = z.object({
+  // Section 1 - Screen Identity
+  name: z.string().min(3, "Screen name must be at least 3 characters"),
+  category: z.string().min(1, "Screen category is required"),
+  displayFormat: z.string().min(1, "Display format is required"),
+  resolution: z.string().min(1, "Resolution is required"),
+  durationPerSlot: z.string().min(1, "Duration per slot is required"),
+  
+  // Section 2 - Location & Context
+  venueName: z.string().min(3, "Venue name is required"),
+  location: z.string().min(3, "Address is required"),
+  city: z.string().min(2, "City is required"),
+  state: z.string().min(2, "State is required"),
+  pincode: z.string().regex(/^\d{6}$/, "Pincode must be 6 digits"),
+  latitude: z.string().min(1, "Latitude is required"),
+  longitude: z.string().min(1, "Longitude is required"),
+  venueCategory: z.string().min(1, "Venue category is required"),
+  avgDailyFootfall: z.string().min(1, "Average daily footfall is required"),
+  trafficType: z.string().min(1, "Traffic type is required"),
+  timeOfDayActivity: z.array(z.string()).min(1, "Select at least one time slot"),
+  environmentType: z.string().min(1, "Environment type is required"),
+  
+  // Enhanced Location Context
+  visibility: z.string().optional(),
+  description: z.string().optional(),
+  operatingHoursPreset: z.string().optional(),
+  customOperatingHoursStart: z.string().optional(),
+  customOperatingHoursEnd: z.string().optional(),
+  customOperatingDays: z.array(z.string()).optional(),
+  locationTags: z.array(z.string()).optional(),
+  customLocationTags: z.string().optional(),
+  
+  // Section 3 - Audience Demographics
+  detailedAgeGroups: z.array(z.string()).optional(),
+  genderOrientation: z.string().optional(),
+  incomeLevel: z.string().optional(),
+  occupationMix: z.array(z.string()).min(1, "Select at least one occupation"),
+  lifestyleTags: z.array(z.string()).optional(),
+  avgDwellTime: z.coerce.number().min(1, "Average dwell time is required"),
+  interestSegments: z.string().optional(),
+  customAudienceTags: z.string().optional(),
+  userIntent: z.array(z.string()).min(1, "Select at least one user intent"),
+  userMood: z.array(z.string()).min(1, "Select at least one user mood"),
+  
+  // Commercial & Campaign Data
+  isMultiScreen: z.boolean(),
+  numberOfScreens: z.string().optional(),
+  pricePerDay: z.string().min(1, "Price per day is required"),
+  minBookingDays: z.string().min(1, "Minimum booking days required"),
+  playbackSlotsPerHour: z.string().min(1, "Playback slots per hour is required"),
+  contentTypesSupported: z.array(z.string()).min(1, "Select at least one content type"),
+  
+  // Legacy fields (auto-populated from other fields)
+  type: z.string().optional(),
+  size: z.string().optional(),
+  operationalHours: z.string().optional(),
+});
+
+type AddScreenForm = z.infer<typeof addScreenSchema>;
 
 export default function AddScreen() {
-  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [screenImages, setScreenImages] = useState<string[]>([]);
+  const [surroundingImages, setSurroundingImages] = useState<string[]>([]);
+
+  const form = useForm<AddScreenForm>({
+    resolver: zodResolver(addScreenSchema),
+    defaultValues: {
+      name: "",
+      category: "",
+      displayFormat: "",
+      resolution: "",
+      durationPerSlot: "",
+      venueName: "",
+      location: "",
+      city: "",
+      state: "",
+      pincode: "",
+      latitude: "",
+      longitude: "",
+      venueCategory: "",
+      avgDailyFootfall: "",
+      trafficType: "",
+      timeOfDayActivity: [],
+      environmentType: "",
+      visibility: "",
+      description: "",
+      operatingHoursPreset: "",
+      customOperatingHoursStart: "",
+      customOperatingHoursEnd: "",
+      customOperatingDays: [],
+      locationTags: [],
+      customLocationTags: "",
+      detailedAgeGroups: [],
+      genderOrientation: "",
+      incomeLevel: "",
+      occupationMix: [],
+      lifestyleTags: [],
+      avgDwellTime: 0,
+      interestSegments: "",
+      customAudienceTags: "",
+      userIntent: [],
+      userMood: [],
+      isMultiScreen: false,
+      numberOfScreens: "",
+      pricePerDay: "",
+      minBookingDays: "1",
+      playbackSlotsPerHour: "",
+      contentTypesSupported: [],
+      type: "",
+      size: "",
+      operationalHours: "",
+    },
+  });
+
+  // Helper function to parse operating hours preset into structured data
+  const parseOperatingHoursPreset = (preset: string) => {
+    switch (preset) {
+      case "Business hours (09:00-18:00 | Mon-Fri)":
+        return {
+          start: "09:00",
+          end: "18:00",
+          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        };
+      case "Mall hours (10:00-22:00 | Mon-Sun)":
+        return {
+          start: "10:00",
+          end: "22:00",
+          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        };
+      case "Retail (11:00-23:00 | Mon-Sun)":
+        return {
+          start: "11:00",
+          end: "23:00",
+          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        };
+      case "Airport/Highways (24/7 | Mon-Sun)":
+        return {
+          start: "00:00",
+          end: "23:59",
+          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        };
+      case "Custom":
+        return null; // User will input manually
+      default:
+        return null;
+    }
+  };
+
+  // Watch operatingHoursPreset and auto-populate structured fields
+  const operatingHoursPreset = form.watch("operatingHoursPreset");
   
+  useEffect(() => {
+    if (operatingHoursPreset && operatingHoursPreset !== "Custom") {
+      const parsed = parseOperatingHoursPreset(operatingHoursPreset);
+      if (parsed) {
+        form.setValue("customOperatingHoursStart", parsed.start);
+        form.setValue("customOperatingHoursEnd", parsed.end);
+        form.setValue("customOperatingDays", parsed.days);
+      }
+    }
+  }, [operatingHoursPreset]);
+
+  const createScreenMutation = useMutation({
+    mutationFn: async (data: AddScreenForm) => {
+      return apiRequest("POST", "/api/owner/screens", {
+        ...data,
+        pricePerDay: parseInt(data.pricePerDay),
+        minBookingDays: parseInt(data.minBookingDays),
+        durationPerSlot: parseInt(data.durationPerSlot),
+        avgDailyFootfall: parseInt(data.avgDailyFootfall),
+        avgDwellTime: data.avgDwellTime,
+        playbackSlotsPerHour: parseInt(data.playbackSlotsPerHour),
+        numberOfScreens: data.numberOfScreens ? parseInt(data.numberOfScreens) : null,
+        interestSegments: data.interestSegments ? data.interestSegments.split(',').map(s => s.trim()) : [],
+        customLocationTags: data.customLocationTags ? data.customLocationTags.split(',').map(s => s.trim()) : [],
+        customAudienceTags: data.customAudienceTags ? data.customAudienceTags.split(',').map(s => s.trim()) : [],
+        userIntent: data.userIntent,
+        userMood: data.userMood,
+        type: data.category,
+        size: data.resolution,
+        screenImages: screenImages,
+        surroundingImages: surroundingImages,
+        imageUrl: screenImages.length > 0 ? screenImages[0] : null, // For backward compatibility
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Screen Added",
+        description: "Your screen has been submitted for approval.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/owner/screens"] });
+      setLocation("/owner/screens");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to add screen. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleGetUploadParameters = async () => {
+    const response = await apiRequest("POST", "/api/objects/upload", {});
+    const data = await response.json();
+    return {
+      method: "PUT" as const,
+      url: data.uploadURL,
+    };
+  };
+
+  const handleScreenImagesUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    if (result.successful && result.successful.length > 0) {
+      const uploadedPaths: string[] = [];
+      
+      for (const uploadedFile of result.successful) {
+        const fileURL = uploadedFile.uploadURL;
+        const response = await apiRequest("PUT", "/api/objects/entity", {
+          fileURL,
+          entityType: "screen",
+        });
+        const data = await response.json();
+        uploadedPaths.push(data.objectPath);
+      }
+
+      setScreenImages(uploadedPaths);
+
+      toast({
+        title: "Screen Images Uploaded",
+        description: `${uploadedPaths.length} screen image(s) uploaded successfully.`,
+      });
+    }
+  };
+
+  const handleSurroundingImagesUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    if (result.successful && result.successful.length > 0) {
+      const uploadedPaths: string[] = [];
+      
+      for (const uploadedFile of result.successful) {
+        const fileURL = uploadedFile.uploadURL;
+        const response = await apiRequest("PUT", "/api/objects/entity", {
+          fileURL,
+          entityType: "screen",
+        });
+        const data = await response.json();
+        uploadedPaths.push(data.objectPath);
+      }
+
+      setSurroundingImages(uploadedPaths);
+
+      toast({
+        title: "Surrounding Images Uploaded",
+        description: `${uploadedPaths.length} surrounding image(s) uploaded successfully.`,
+      });
+    }
+  };
+
+  const onSubmit = (data: AddScreenForm) => {
+    createScreenMutation.mutate(data);
+  };
+
+  const timeSlots = ["Morning Rush", "Lunch Hours", "Evening Leisure", "Late Night"];
+  const ageGroups = ["18-25", "25-40", "40-60", "60+"];
+  const occupations = ["Students", "Working Professionals", "Business Owners", "Homemakers"];
+  const intents = ["Shopping", "Commuting", "Dining", "Fitness", "Entertainment", "Work", "Education"];
+  const moods = ["Relaxed", "Rushed", "Social", "Focused", "Leisure"];
+  const contentTypes = ["Static Image", "Video", "Interactive", "HTML5"];
+
   return (
-    <ScreenForm 
-      isAdminMode={false}
-      currentUserId={user?.id}
-    />
+    <div className="p-4 sm:p-6 md:p-8 max-w-6xl mx-auto space-y-4 sm:space-y-6">
+      <div>
+        <Button
+          variant="ghost"
+          onClick={() => setLocation("/owner/screens")}
+          className="mb-4"
+          data-testid="button-back"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Screens
+        </Button>
+        <h1 className="text-4xl font-bold text-foreground font-serif mb-2">Add New Screen</h1>
+        <p className="text-muted-foreground">Comprehensive screen details for better targeting and campaign planning</p>
+      </div>
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          {/* SECTION 1 - Screen Identity */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Monitor className="h-5 w-5 text-primary" />
+                <CardTitle>Section 1 — Screen Identity</CardTitle>
+              </div>
+              <CardDescription>Basic technical specifications of your screen</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Screen Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Café Coffee Day – Indiranagar 1" {...field} data-testid="input-screen-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Screen Category</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-category">
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Digital Display">Digital Display</SelectItem>
+                          <SelectItem value="LED Video Wall">LED Video Wall</SelectItem>
+                          <SelectItem value="Kiosk">Kiosk</SelectItem>
+                          <SelectItem value="Mall LED">Mall LED</SelectItem>
+                          <SelectItem value="Lift Display">Lift Display</SelectItem>
+                          <SelectItem value="Transit Display">Transit Display</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="displayFormat"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Display Format</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-format">
+                            <SelectValue placeholder="Select format" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Portrait">Portrait</SelectItem>
+                          <SelectItem value="Landscape">Landscape</SelectItem>
+                          <SelectItem value="Square">Square</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="resolution"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Resolution (px)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., 1920x1080" {...field} data-testid="input-resolution" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="durationPerSlot"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Duration per Slot (seconds)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 10" {...field} data-testid="input-duration" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* SECTION 2 - Location & Context */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                <CardTitle>Section 2 — Location & Context</CardTitle>
+              </div>
+              <CardDescription>Venue details and geographic information</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="venueName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Venue Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Phoenix Mall – Food Court" {...field} data-testid="input-venue-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="location"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Near Metro Station, MG Road" {...field} data-testid="input-location" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>City</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-city">
+                            <SelectValue placeholder="Select city" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-[300px]">
+                          {ALL_INDIAN_CITIES.map((city) => (
+                            <SelectItem key={city} value={city}>
+                              {city}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="state"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>State / Union Territory</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-state">
+                            <SelectValue placeholder="Select state" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-[300px]">
+                          {INDIAN_STATES.map((state) => (
+                            <SelectItem key={state} value={state}>
+                              {state}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="pincode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Pincode</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., 560001" {...field} data-testid="input-pincode" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="venueCategory"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Venue Category</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-venue-category">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-[300px]">
+                          <SelectItem value="Airport">Airport</SelectItem>
+                          <SelectItem value="Apartment">Apartment</SelectItem>
+                          <SelectItem value="Bus Stop">Bus Stop</SelectItem>
+                          <SelectItem value="Café">Café</SelectItem>
+                          <SelectItem value="Cinema">Cinema</SelectItem>
+                          <SelectItem value="Co-working">Co-working</SelectItem>
+                          <SelectItem value="College">College</SelectItem>
+                          <SelectItem value="Corporate Park">Corporate Park</SelectItem>
+                          <SelectItem value="Flyover">Flyover</SelectItem>
+                          <SelectItem value="Gym">Gym</SelectItem>
+                          <SelectItem value="Highway">Highway</SelectItem>
+                          <SelectItem value="Hospital">Hospital</SelectItem>
+                          <SelectItem value="Mall">Mall</SelectItem>
+                          <SelectItem value="Metro">Metro</SelectItem>
+                          <SelectItem value="Office Building">Office Building</SelectItem>
+                          <SelectItem value="Restaurant">Restaurant</SelectItem>
+                          <SelectItem value="Retail Store">Retail Store</SelectItem>
+                          <SelectItem value="Road Junction">Road Junction</SelectItem>
+                          <SelectItem value="Road Side">Road Side</SelectItem>
+                          <SelectItem value="Salon">Salon</SelectItem>
+                          <SelectItem value="Shopping Complex">Shopping Complex</SelectItem>
+                          <SelectItem value="Stadium">Stadium</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="latitude"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Latitude</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., 12.9716" {...field} data-testid="input-latitude" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="longitude"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Longitude</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., 77.5946" {...field} data-testid="input-longitude" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="avgDailyFootfall"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Average Daily Footfall</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 5000" {...field} data-testid="input-footfall" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="trafficType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Traffic Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-traffic-type">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Pedestrian">Pedestrian</SelectItem>
+                          <SelectItem value="Seated Audience">Seated Audience</SelectItem>
+                          <SelectItem value="Transit">Transit</SelectItem>
+                          <SelectItem value="Mixed">Mixed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="timeOfDayActivity"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Time-of-Day Activity</FormLabel>
+                    <div className="flex flex-wrap gap-4">
+                      {timeSlots.map((slot) => (
+                        <FormField
+                          key={slot}
+                          control={form.control}
+                          name="timeOfDayActivity"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(slot)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, slot])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== slot)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-time-${slot.toLowerCase().replace(/\s/g, '-')}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{slot}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="environmentType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Environment Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-environment">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Indoor">Indoor</SelectItem>
+                        <SelectItem value="Semi-Outdoor">Semi-Outdoor</SelectItem>
+                        <SelectItem value="Outdoor Digital">Outdoor Digital</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Enhanced Location Context */}
+              <div className="pt-4 border-t">
+                <h3 className="text-lg font-semibold mb-4">Enhanced Location Details</h3>
+                
+                <div className="grid md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="visibility"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Visibility Level</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-visibility">
+                              <SelectValue placeholder="Select visibility" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {VISIBILITY_LEVELS.map((level) => (
+                              <SelectItem key={level} value={level}>{level}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>Based on footfall and screen position</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="operatingHoursPreset"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Operating Hours</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-operating-hours">
+                              <SelectValue placeholder="Select operating hours" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {OPERATING_HOURS_PRESETS.map((preset) => (
+                              <SelectItem key={preset} value={preset}>{preset}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {form.watch("operatingHoursPreset") === "Custom" && (
+                  <div className="space-y-4 mt-4">
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="customOperatingHoursStart"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Start Time</FormLabel>
+                            <FormControl>
+                              <Input type="time" {...field} data-testid="input-start-time" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="customOperatingHoursEnd"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>End Time</FormLabel>
+                            <FormControl>
+                              <Input type="time" {...field} data-testid="input-end-time" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name="customOperatingDays"
+                      render={() => (
+                        <FormItem>
+                          <FormLabel>Operating Days</FormLabel>
+                          <div className="flex flex-wrap gap-4">
+                            {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => (
+                              <FormField
+                                key={day}
+                                control={form.control}
+                                name="customOperatingDays"
+                                render={({ field }) => (
+                                  <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={field.value?.includes(day)}
+                                        onCheckedChange={(checked) => {
+                                          return checked
+                                            ? field.onChange([...(field.value || []), day])
+                                            : field.onChange(
+                                                field.value?.filter((value) => value !== day)
+                                              );
+                                        }}
+                                        data-testid={`checkbox-day-${day.toLowerCase()}`}
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="font-normal cursor-pointer">{day}</FormLabel>
+                                  </FormItem>
+                                )}
+                              />
+                            ))}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Screen Description</FormLabel>
+                      <FormControl>
+                        <textarea
+                          {...field}
+                          rows={3}
+                          placeholder="Describe the screen, surroundings, and justification for pricing..."
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          data-testid="textarea-description"
+                        />
+                      </FormControl>
+                      <FormDescription>Provide context about location and pricing</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="locationTags"
+                  render={() => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Nearby Facilities & Points of Interest</FormLabel>
+                      <div className="space-y-3">
+                        {Object.entries(LOCATION_TAGS).map(([category, tags]) => (
+                          <div key={category} className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">{category}</p>
+                            <div className="flex flex-wrap gap-3">
+                              {(tags as readonly string[]).map((tag: string) => (
+                                <FormField
+                                  key={tag}
+                                  control={form.control}
+                                  name="locationTags"
+                                  render={({ field }) => (
+                                    <FormItem className="flex items-center space-x-2 space-y-0">
+                                      <FormControl>
+                                        <Checkbox
+                                          checked={field.value?.includes(tag)}
+                                          onCheckedChange={(checked) => {
+                                            return checked
+                                              ? field.onChange([...(field.value || []), tag])
+                                              : field.onChange(
+                                                  field.value?.filter((value) => value !== tag)
+                                                );
+                                          }}
+                                          data-testid={`checkbox-location-${tag.toLowerCase().replace(/[\/\s]/g, '-')}`}
+                                        />
+                                      </FormControl>
+                                      <FormLabel className="text-sm font-normal cursor-pointer">{tag}</FormLabel>
+                                    </FormItem>
+                                  )}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="customLocationTags"
+                  render={({ field }) => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Custom Location Tags (comma-separated)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Tech Park, Beach View, Heritage Site" {...field} data-testid="input-custom-location-tags" />
+                      </FormControl>
+                      <FormDescription>Add custom tags to increase targeting accuracy</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* SECTION 3 - Audience Demographics */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                <CardTitle>Section 3 — Audience Demographics</CardTitle>
+              </div>
+              <CardDescription>Target audience characteristics for precise campaign targeting</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="avgDwellTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Avg. Dwell Time (minutes)</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="e.g., 15" {...field} data-testid="input-dwell-time" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="occupationMix"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Occupation Mix</FormLabel>
+                    <div className="flex flex-wrap gap-4">
+                      {occupations.map((occupation) => (
+                        <FormField
+                          key={occupation}
+                          control={form.control}
+                          name="occupationMix"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(occupation)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, occupation])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== occupation)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-occupation-${occupation.toLowerCase().replace(/\s/g, '-')}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{occupation}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="interestSegments"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Audience Interest Segments (comma-separated)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Fitness, Coffee, Tech, Luxury Cars" {...field} data-testid="input-interests" />
+                    </FormControl>
+                    <FormDescription>Tags for targeting specific audience interests</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Enhanced Demographics */}
+              <div className="pt-4 border-t">
+                <h3 className="text-lg font-semibold mb-4">Enhanced Audience Demographics</h3>
+                
+                <FormField
+                  control={form.control}
+                  name="detailedAgeGroups"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Detailed Age Groups (Optional)</FormLabel>
+                      <FormDescription>Select more granular age segments for better targeting</FormDescription>
+                      <div className="flex flex-wrap gap-4 mt-2">
+                        {DETAILED_AGE_GROUPS.map((age) => (
+                          <FormField
+                            key={age}
+                            control={form.control}
+                            name="detailedAgeGroups"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(age)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), age])
+                                        : field.onChange(
+                                            field.value?.filter((value) => value !== age)
+                                          );
+                                    }}
+                                    data-testid={`checkbox-detailed-age-${age.toLowerCase().replace(/[()]/g, '').replace(/\s/g, '-')}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm font-normal cursor-pointer">{age}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid md:grid-cols-2 gap-4 mt-4">
+                  <FormField
+                    control={form.control}
+                    name="genderOrientation"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Gender Orientation</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-gender-orientation">
+                              <SelectValue placeholder="Select orientation" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {GENDER_ORIENTATIONS.map((orientation) => (
+                              <SelectItem key={orientation} value={orientation}>{orientation}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="incomeLevel"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Income Level</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-income-level">
+                              <SelectValue placeholder="Select income level" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {INCOME_LEVELS.map((level) => (
+                              <SelectItem key={level} value={level}>{level}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="lifestyleTags"
+                  render={() => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Lifestyle Tags</FormLabel>
+                      <FormDescription>Describe the lifestyle characteristics of your audience</FormDescription>
+                      <div className="flex flex-wrap gap-4 mt-2">
+                        {LIFESTYLE_TAGS.map((tag) => (
+                          <FormField
+                            key={tag}
+                            control={form.control}
+                            name="lifestyleTags"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(tag)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), tag])
+                                        : field.onChange(
+                                            field.value?.filter((value) => value !== tag)
+                                          );
+                                    }}
+                                    data-testid={`checkbox-lifestyle-${tag.toLowerCase().replace(/\s/g, '-')}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm font-normal cursor-pointer">{tag}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="customAudienceTags"
+                  render={({ field }) => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Custom Audience Tags (comma-separated)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Young Entrepreneurs, Digital Nomads, Pet Owners" {...field} data-testid="input-custom-audience-tags" />
+                      </FormControl>
+                      <FormDescription>Add custom tags to increase targeting accuracy</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="userIntent"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>User Intent at This Location</FormLabel>
+                    <FormDescription>What are people typically doing here? (Select all that apply)</FormDescription>
+                    <div className="flex flex-wrap gap-4 mt-2">
+                      {intents.map((intent) => (
+                        <FormField
+                          key={intent}
+                          control={form.control}
+                          name="userIntent"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(intent)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, intent])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== intent)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-intent-${intent.toLowerCase()}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{intent}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="userMood"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>User Mood/State of Mind</FormLabel>
+                    <FormDescription>What's the typical mood of people at this location? (Select all that apply)</FormDescription>
+                    <div className="flex flex-wrap gap-4 mt-2">
+                      {moods.map((mood) => (
+                        <FormField
+                          key={mood}
+                          control={form.control}
+                          name="userMood"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(mood)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, mood])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== mood)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-mood-${mood.toLowerCase()}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{mood}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Commercial & Campaign Data */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                <CardTitle>Commercial & Campaign Data</CardTitle>
+              </div>
+              <CardDescription>Pricing and campaign specifications</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="isMultiScreen"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Multi-Screen Listing</FormLabel>
+                      <FormDescription>
+                        Does this listing have multiple screens?
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-multi-screen"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {form.watch("isMultiScreen") && (
+                <FormField
+                  control={form.control}
+                  name="numberOfScreens"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Number of Screens</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 5" {...field} data-testid="input-number-screens" />
+                      </FormControl>
+                      <FormDescription>Total number of screens in this listing</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              <div className="grid md:grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="pricePerDay"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Price Per Day (₹)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 5000" {...field} data-testid="input-price" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="minBookingDays"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Minimum Booking Duration (days)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 1" {...field} data-testid="input-min-days" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="playbackSlotsPerHour"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Playback Slots per Hour</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 6" {...field} data-testid="input-slots" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="contentTypesSupported"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Content Types Supported</FormLabel>
+                    <div className="flex flex-wrap gap-4">
+                      {contentTypes.map((type) => (
+                        <FormField
+                          key={type}
+                          control={form.control}
+                          name="contentTypesSupported"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(type)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, type])
+                                      : field.onChange(
+                                          field.value?.filter((value) => value !== type)
+                                        );
+                                  }}
+                                  data-testid={`checkbox-content-${type.toLowerCase().replace(/\s/g, '-')}`}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">{type}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Screen Images Upload */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Upload className="h-5 w-5 text-primary" />
+                <CardTitle>Screen Images</CardTitle>
+              </div>
+              <CardDescription>
+                Upload up to 4 images of the actual screen/billboard
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                <ObjectUploader
+                  maxNumberOfFiles={4}
+                  maxFileSize={10485760}
+                  allowedFileTypes={["image/*"]}
+                  onGetUploadParameters={handleGetUploadParameters}
+                  onComplete={handleScreenImagesUploadComplete}
+                  buttonVariant="outline"
+                  buttonTestId="button-upload-screen-images"
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Screen Images (Max 4)
+                </ObjectUploader>
+                {screenImages.length > 0 && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <Check className="h-4 w-4" />
+                    {screenImages.length} image(s) uploaded
+                  </div>
+                )}
+              </div>
+              {screenImages.length > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {screenImages.map((image, index) => (
+                    <div key={index} className="relative aspect-square rounded-md overflow-hidden border">
+                      <img
+                        src={image}
+                        alt={`Screen ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Supported formats: JPG, PNG (Max 10MB each). Upload clear photos of your screen from different angles.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Surrounding Area Images Upload */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                <CardTitle>Surrounding Area Images</CardTitle>
+              </div>
+              <CardDescription>
+                Upload up to 5 images showing the area around the screen
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                <ObjectUploader
+                  maxNumberOfFiles={5}
+                  maxFileSize={10485760}
+                  allowedFileTypes={["image/*"]}
+                  onGetUploadParameters={handleGetUploadParameters}
+                  onComplete={handleSurroundingImagesUploadComplete}
+                  buttonVariant="outline"
+                  buttonTestId="button-upload-surrounding-images"
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Surrounding Images (Max 5)
+                </ObjectUploader>
+                {surroundingImages.length > 0 && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <Check className="h-4 w-4" />
+                    {surroundingImages.length} image(s) uploaded
+                  </div>
+                )}
+              </div>
+              {surroundingImages.length > 0 && (
+                <div className="grid grid-cols-5 gap-2">
+                  {surroundingImages.map((image, index) => (
+                    <div key={index} className="relative aspect-square rounded-md overflow-hidden border">
+                      <img
+                        src={image}
+                        alt={`Surrounding ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Supported formats: JPG, PNG (Max 10MB each). Show nearby landmarks, traffic, and the environment.
+              </p>
+            </CardContent>
+          </Card>
+
+          <div className="flex gap-4 justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLocation("/owner/screens")}
+              data-testid="button-cancel"
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createScreenMutation.isPending} data-testid="button-submit">
+              {createScreenMutation.isPending ? "Submitting..." : "Submit for Approval"}
+            </Button>
+          </div>
+        </form>
+      </Form>
+    </div>
   );
 }
