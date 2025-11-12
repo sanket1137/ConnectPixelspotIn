@@ -782,29 +782,57 @@ export default function DiscoverScreens() {
               </DialogHeader>
               
               <div className="space-y-6">
-                {/* Screen Image */}
-                <div className="relative h-72 bg-muted overflow-hidden rounded-lg">
-                  {detailDialogScreen.images && detailDialogScreen.images.length > 0 ? (
-                    <img
-                      src={detailDialogScreen.images[0]}
-                      alt={detailDialogScreen.name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://placehold.co/800x600/1a1a1a/666?text=No+Image';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-muted">
-                      <MapPin className="w-20 h-20 text-muted-foreground/50" />
+                {/* Screen Images */}
+                {((detailDialogScreen.screenImages && detailDialogScreen.screenImages.length > 0) || (detailDialogScreen.images && detailDialogScreen.images.length > 0)) && (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold text-muted-foreground">Screen Photos</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {(detailDialogScreen.screenImages || detailDialogScreen.images || []).map((imageUrl: string, idx: number) => (
+                        <div key={idx} className="relative h-48 bg-muted rounded-lg overflow-hidden">
+                          <img
+                            src={imageUrl}
+                            alt={`Screen ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
+                            }}
+                          />
+                          {idx === 0 && (
+                            <>
+                              <Badge className="absolute top-3 right-3" variant="secondary">{detailDialogScreen.type}</Badge>
+                              {detailDialogScreen.isMultiScreen && detailDialogScreen.numberOfScreens && (
+                                <Badge className="absolute top-3 left-3 bg-purple-600 hover:bg-purple-700">
+                                  {detailDialogScreen.numberOfScreens} Screens
+                                </Badge>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  )}
-                  <Badge className="absolute top-3 right-3" variant="secondary">{detailDialogScreen.type}</Badge>
-                  {detailDialogScreen.isMultiScreen && detailDialogScreen.numberOfScreens && (
-                    <Badge className="absolute top-3 left-3 bg-purple-600 hover:bg-purple-700">
-                      {detailDialogScreen.numberOfScreens} Screens
-                    </Badge>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {/* Surrounding Images */}
+                {detailDialogScreen.surroundingImages && detailDialogScreen.surroundingImages.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold text-muted-foreground">Surrounding Area Photos</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      {detailDialogScreen.surroundingImages.map((imageUrl: string, idx: number) => (
+                        <div key={idx} className="relative h-32 bg-muted rounded-lg overflow-hidden">
+                          <img
+                            src={imageUrl}
+                            alt={`Surrounding ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Location */}
                 <div>
