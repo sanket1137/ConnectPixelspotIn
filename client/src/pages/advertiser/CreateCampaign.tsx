@@ -68,7 +68,13 @@ const createCampaignSchema = z.object({
   timePreference: z.array(z.string()).optional(),
   
   // Dates (calculated from duration)
-  startDate: z.string().min(1, "Start date is required"),
+  startDate: z.string().min(1, "Start date is required").refine((date) => {
+    const selectedDate = new Date(date);
+    const tomorrow = new Date();
+    tomorrow.setHours(0, 0, 0, 0);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return selectedDate >= tomorrow;
+  }, "Start date must be at least tomorrow"),
   endDate: z.string().min(1, "End date is required"),
   
   // Creative URL
@@ -185,7 +191,11 @@ export default function CreateCampaign() {
       targetGender: "all",
       targetAffluence: [],
       timePreference: [],
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: (() => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return tomorrow.toISOString().split('T')[0];
+      })(),
       endDate: "",
       creativeUrl: "",
     },
@@ -575,7 +585,11 @@ export default function CreateCampaign() {
       targetGender: "all",
       targetAffluence: [],
       timePreference: [],
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: (() => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return tomorrow.toISOString().split('T')[0];
+      })(),
       endDate: "",
     });
     
@@ -1118,7 +1132,16 @@ export default function CreateCampaign() {
                       <FormItem>
                         <FormLabel>Campaign Start Date</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} data-testid="input-start-date" />
+                          <Input 
+                            type="date" 
+                            {...field} 
+                            min={(() => {
+                              const tomorrow = new Date();
+                              tomorrow.setDate(tomorrow.getDate() + 1);
+                              return tomorrow.toISOString().split('T')[0];
+                            })()} 
+                            data-testid="input-start-date" 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
