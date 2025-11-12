@@ -54,8 +54,8 @@ export const screens = pgTable("screens", {
   city: text("city").notNull(),
   state: text("state"), // Indian state or union territory (nullable for backward compatibility)
   pincode: text("pincode").notNull(),
-  latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
-  longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
+  latitude: decimal("latitude", { precision: 9, scale: 6 }).notNull(),
+  longitude: decimal("longitude", { precision: 9, scale: 6 }).notNull(),
   venueCategory: text("venue_category").notNull(), // Airport / Apartment / Bus Stop / Café / Cinema / Co-working / College / Corporate Park / Flyover / Gym / Highway / Hospital / Mall / Metro / Office Building / Restaurant / Retail Store / Road Junction / Road Side / Salon / Shopping Complex / Stadium
   avgDailyFootfall: integer("avg_daily_footfall").notNull(),
   trafficType: text("traffic_type").notNull(), // Pedestrian / Seated Audience / Transit / Mixed
