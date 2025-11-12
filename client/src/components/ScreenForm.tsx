@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,8 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { ObjectUploader } from "@/components/ObjectUploader";
-import type { UploadResult } from "@uppy/core";
 import { MapPin, Upload, Check, Users, DollarSign, Monitor } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -103,6 +101,11 @@ export function ScreenForm({
   const [screenImages, setScreenImages] = useState<string[]>([]);
   const [surroundingImages, setSurroundingImages] = useState<string[]>([]);
   const [selectedState, setSelectedState] = useState<string>("");
+  const [uploadingScreen, setUploadingScreen] = useState(false);
+  const [uploadingSurrounding, setUploadingSurrounding] = useState(false);
+  
+  const screenInputRef = useRef<HTMLInputElement>(null);
+  const surroundingInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<ScreenFormData>({
     resolver: zodResolver(screenFormSchema),
@@ -228,58 +231,103 @@ export function ScreenForm({
     }
   }, [operatingHoursPreset]);
 
-  const handleGetUploadParameters = async () => {
-    const response = await apiRequest("POST", "/api/objects/upload", {});
-    const data = await response.json();
-    return {
-      method: "PUT" as const,
-      url: data.uploadURL,
-    };
-  };
+  const handleScreenImagesChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
-  const handleScreenImagesUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
-    if (result.successful && result.successful.length > 0) {
+    setUploadingScreen(true);
+    try {
       const uploadedPaths: string[] = [];
-      
-      for (const uploadedFile of result.successful) {
-        const fileURL = uploadedFile.uploadURL;
-        const response = await apiRequest("PUT", "/api/objects/entity", {
-          fileURL,
+
+      for (const file of Array.from(files)) {
+        // Get upload URL
+        const uploadResponse = await apiRequest("POST", "/api/objects/upload", {});
+        const uploadData = await uploadResponse.json();
+
+        // Upload file to object storage
+        await fetch(uploadData.uploadURL, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "Content-Type": file.type,
+          },
+        });
+
+        // Register file with entity
+        const entityResponse = await apiRequest("PUT", "/api/objects/entity", {
+          fileURL: uploadData.uploadURL,
           entityType: "screen",
         });
-        const data = await response.json();
-        uploadedPaths.push(data.objectPath);
+        const entityData = await entityResponse.json();
+        uploadedPaths.push(entityData.objectPath);
       }
 
-      setScreenImages(uploadedPaths);
-
+      setScreenImages([...screenImages, ...uploadedPaths]);
       toast({
         title: "Screen Images Uploaded",
         description: `${uploadedPaths.length} screen image(s) uploaded successfully.`,
       });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Upload Failed",
+        description: "Failed to upload screen images. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingScreen(false);
+      // Reset input
+      if (event.target) event.target.value = "";
     }
   };
 
-  const handleSurroundingImagesUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
-    if (result.successful && result.successful.length > 0) {
+  const handleSurroundingImagesChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingSurrounding(true);
+    try {
       const uploadedPaths: string[] = [];
-      
-      for (const uploadedFile of result.successful) {
-        const fileURL = uploadedFile.uploadURL;
-        const response = await apiRequest("PUT", "/api/objects/entity", {
-          fileURL,
+
+      for (const file of Array.from(files)) {
+        // Get upload URL
+        const uploadResponse = await apiRequest("POST", "/api/objects/upload", {});
+        const uploadData = await uploadResponse.json();
+
+        // Upload file to object storage
+        await fetch(uploadData.uploadURL, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "Content-Type": file.type,
+          },
+        });
+
+        // Register file with entity
+        const entityResponse = await apiRequest("PUT", "/api/objects/entity", {
+          fileURL: uploadData.uploadURL,
           entityType: "screen",
         });
-        const data = await response.json();
-        uploadedPaths.push(data.objectPath);
+        const entityData = await entityResponse.json();
+        uploadedPaths.push(entityData.objectPath);
       }
 
-      setSurroundingImages(uploadedPaths);
-
+      setSurroundingImages([...surroundingImages, ...uploadedPaths]);
       toast({
         title: "Surrounding Images Uploaded",
         description: `${uploadedPaths.length} surrounding image(s) uploaded successfully.`,
       });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Upload Failed",
+        description: "Failed to upload surrounding images. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingSurrounding(false);
+      // Reset input
+      if (event.target) event.target.value = "";
     }
   };
 
@@ -1349,18 +1397,25 @@ export function ScreenForm({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-4">
-              <ObjectUploader
-                maxNumberOfFiles={4}
-                maxFileSize={10485760}
-                allowedFileTypes={["image/*"]}
-                onGetUploadParameters={handleGetUploadParameters}
-                onComplete={handleScreenImagesUploadComplete}
-                buttonVariant="outline"
-                buttonTestId="button-upload-screen-images"
+              <input
+                ref={screenInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleScreenImagesChange}
+                className="hidden"
+                data-testid="input-screen-images"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => screenInputRef.current?.click()}
+                disabled={uploadingScreen || screenImages.length >= 4}
+                data-testid="button-upload-screen-images"
               >
                 <Upload className="mr-2 h-4 w-4" />
-                Upload Screen Images (Max 4)
-              </ObjectUploader>
+                {uploadingScreen ? "Uploading..." : "Upload Screen Images (Max 4)"}
+              </Button>
               {screenImages.length > 0 && (
                 <div className="flex items-center gap-2 text-sm text-green-600">
                   <Check className="h-4 w-4" />
@@ -1400,18 +1455,25 @@ export function ScreenForm({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-4">
-              <ObjectUploader
-                maxNumberOfFiles={5}
-                maxFileSize={10485760}
-                allowedFileTypes={["image/*"]}
-                onGetUploadParameters={handleGetUploadParameters}
-                onComplete={handleSurroundingImagesUploadComplete}
-                buttonVariant="outline"
-                buttonTestId="button-upload-surrounding-images"
+              <input
+                ref={surroundingInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleSurroundingImagesChange}
+                className="hidden"
+                data-testid="input-surrounding-images"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => surroundingInputRef.current?.click()}
+                disabled={uploadingSurrounding || surroundingImages.length >= 5}
+                data-testid="button-upload-surrounding-images"
               >
                 <Upload className="mr-2 h-4 w-4" />
-                Upload Surrounding Images (Max 5)
-              </ObjectUploader>
+                {uploadingSurrounding ? "Uploading..." : "Upload Surrounding Images (Max 5)"}
+              </Button>
               {surroundingImages.length > 0 && (
                 <div className="flex items-center gap-2 text-sm text-green-600">
                   <Check className="h-4 w-4" />
