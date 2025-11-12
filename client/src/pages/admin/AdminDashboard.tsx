@@ -22,36 +22,29 @@ interface DashboardStats {
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [runTour, setRunTour] = useState(false);
-  const [tourCompleted, setTourCompleted] = useState(false);
   
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/admin/stats"],
   });
 
   useEffect(() => {
-    if (tourCompleted) return;
+    // Only check the database value, not local state
+    if (!user || user.hasSeenOnboarding) return;
     
     const params = new URLSearchParams(window.location.search);
     const shouldRunTour = params.get('tour') === 'true';
     
-    if (shouldRunTour || (user && user.profileCompleted && !user.hasSeenOnboarding)) {
+    if (shouldRunTour || (user.profileCompleted && !user.hasSeenOnboarding)) {
       setTimeout(() => setRunTour(true), 500);
       
       if (shouldRunTour) {
         window.history.replaceState({}, '', window.location.pathname);
       }
     }
-  }, [user, tourCompleted]);
+  }, [user]);
 
-  const handleTourComplete = async () => {
+  const handleTourComplete = () => {
     setRunTour(false);
-    setTourCompleted(true);
-    try {
-      await apiRequest("/api/profile/complete-onboarding", "POST", {});
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    } catch (error) {
-      console.error("Failed to mark onboarding complete:", error);
-    }
   };
 
   const tourSteps: Step[] = [
