@@ -19,6 +19,15 @@ interface AdvertiserStats {
   pendingBookings: number;
 }
 
+interface RecentCampaign {
+  id: string;
+  name: string;
+  status: string;
+  budget: number;
+  screenCount: number;
+  cities: string;
+}
+
 export default function AdvertiserDashboard() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -26,6 +35,10 @@ export default function AdvertiserDashboard() {
   
   const { data: stats, isLoading } = useQuery<AdvertiserStats>({
     queryKey: ["/api/advertiser/stats"],
+  });
+
+  const { data: recentCampaigns, isLoading: isLoadingCampaigns } = useQuery<RecentCampaign[]>({
+    queryKey: ["/api/advertiser/recent-campaigns"],
   });
 
   useEffect(() => {
@@ -181,42 +194,59 @@ export default function AdvertiserDashboard() {
       {/* Active Campaigns */}
       <Card>
         <CardHeader>
-          <CardTitle>Active Campaigns</CardTitle>
+          <CardTitle>Recent Campaigns</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg hover-elevate">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="font-semibold text-foreground">Summer Sale Campaign</h3>
-                  <Badge variant="default">Live</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">3 screens • Bangalore, Mumbai</p>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-foreground">₹75,000</p>
-                <p className="text-sm text-muted-foreground">Budget</p>
-              </div>
+          {isLoadingCampaigns ? (
+            <div className="space-y-4">
+              <Skeleton className="h-20" />
+              <Skeleton className="h-20" />
             </div>
-
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg hover-elevate">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="font-semibold text-foreground">Product Launch - Delhi NCR</h3>
-                  <Badge variant="secondary">Scheduled</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">5 screens • Delhi, Noida, Gurgaon</p>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-foreground">₹1.2L</p>
-                <p className="text-sm text-muted-foreground">Budget</p>
-              </div>
+          ) : !recentCampaigns || recentCampaigns.length === 0 ? (
+            <div className="text-center py-12">
+              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground mb-4">No active campaigns yet</p>
+              <Button onClick={() => setLocation("/advertiser/campaigns/new")}>
+                Create Your First Campaign
+              </Button>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="space-y-4">
+                {recentCampaigns.map((campaign) => (
+                  <div 
+                    key={campaign.id} 
+                    className="flex items-center justify-between p-4 border border-border rounded-lg hover-elevate cursor-pointer"
+                    onClick={() => setLocation(`/advertiser/campaigns/${campaign.id}`)}
+                    data-testid={`campaign-card-${campaign.id}`}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="font-semibold text-foreground">{campaign.name}</h3>
+                        <Badge variant={campaign.status === "live" ? "default" : "secondary"}>
+                          {campaign.status === "live" ? "Live" : "Scheduled"}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {campaign.screenCount} {campaign.screenCount === 1 ? "screen" : "screens"}
+                        {campaign.cities && ` • ${campaign.cities}`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-foreground">
+                        ₹{(campaign.budget / 1000).toFixed(1)}K
+                      </p>
+                      <p className="text-sm text-muted-foreground">Budget</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-          <Button variant="outline" className="w-full mt-6" onClick={() => setLocation("/advertiser/campaigns")}>
-            View All Campaigns
-          </Button>
+              <Button variant="outline" className="w-full mt-6" onClick={() => setLocation("/advertiser/campaigns")} data-testid="button-view-all-campaigns">
+                View All Campaigns
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
 

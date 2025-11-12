@@ -1397,6 +1397,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get recent campaigns for advertiser dashboard
+  app.get("/api/advertiser/recent-campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const campaigns = await storage.getCampaignsByAdvertiser(req.user!.id);
+      
+      const recentCampaigns = await Promise.all(
+        campaigns
+          .filter(c => c.status === "live" || c.status === "approved")
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 5)
+          .map(async (campaign) => {
+            const bookings = await storage.getBookingsByCampaign(campaign.id);
+            const screenIds = Array.from(new Set(bookings.map(b => b.screenId)));
+            const screens = await Promise.all(screenIds.map(id => storage.getScreen(id)));
+            const cities = Array.from(new Set(screens.filter(s => s).map(s => s!.city)));
+            
+            return {
+              id: campaign.id,
+              name: campaign.name,
+              status: campaign.status,
+              budget: campaign.budget,
+              screenCount: screenIds.length,
+              cities: cities.join(", "),
+            };
+          })
+      );
+
+      res.json(recentCampaigns);
+    } catch (error) {
+      console.error("Recent campaigns error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get all approved screens (for discovery) with filtering
   app.get("/api/screens", authenticate, async (req, res) => {
     try {
