@@ -2329,7 +2329,11 @@ export default function CreateCampaign() {
                     </div>
                     <div>
                       <p className="text-muted-foreground">Operating Hours</p>
-                      <p className="font-semibold">{screenDetailsDialog.operationalHours}</p>
+                      <p className="font-semibold">
+                        {screenDetailsDialog.customOperatingHoursStart && screenDetailsDialog.customOperatingHoursEnd
+                          ? `${screenDetailsDialog.customOperatingHoursStart} - ${screenDetailsDialog.customOperatingHoursEnd}`
+                          : "Not specified"}
+                      </p>
                     </div>
                   </div>
                 </div>
