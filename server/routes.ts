@@ -394,7 +394,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         address, 
         city, 
         state, 
-        mobileNumber 
+        mobileNumber,
+        accountType,
+        brandName,
+        agencyName
       } = req.body;
 
       // Note: Mobile number validation happens at OTP stage (send-mobile endpoint)
@@ -410,9 +413,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (city) updateData.city = city;
       if (state) updateData.state = state;
       if (mobileNumber) updateData.mobileNumber = mobileNumber;
+      
+      // For advertisers only: handle account type
+      if (req.user!.role === "advertiser") {
+        if (accountType) {
+          updateData.accountType = accountType;
+          
+          // Validate that brand/agency name is provided based on account type
+          if (accountType === "brand") {
+            if (!brandName) {
+              return res.status(400).json({ error: "Brand name is required for brands" });
+            }
+            updateData.brandName = brandName;
+            updateData.agencyName = null; // Clear agency name if switching
+          } else if (accountType === "agency") {
+            if (!agencyName) {
+              return res.status(400).json({ error: "Agency name is required for agencies" });
+            }
+            updateData.agencyName = agencyName;
+            updateData.brandName = null; // Clear brand name if switching
+          }
+        }
+      }
 
       // Check if profile is complete
-      const isComplete = !!(name && mobileNumber && companyName && city && state && address);
+      let isComplete = !!(name && mobileNumber && companyName && city && state && address);
+      
+      // For advertisers, also require account type and corresponding name
+      if (req.user!.role === "advertiser") {
+        isComplete = isComplete && !!(accountType && (
+          (accountType === "brand" && brandName) || 
+          (accountType === "agency" && agencyName)
+        ));
+      }
+      
       if (isComplete) {
         updateData.profileCompleted = true;
       }
