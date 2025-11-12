@@ -146,9 +146,9 @@ export default function PublicHome() {
             <div className="flex items-center gap-2 sm:gap-3">
               {currentUser ? (
                 <Link href={
-                  currentUser.role === 'admin' ? '/admin/dashboard' :
-                  currentUser.role === 'screen_owner' ? '/owner/dashboard' :
-                  '/advertiser/dashboard'
+                  currentUser.role === 'admin' ? '/admin' :
+                  currentUser.role === 'screen_owner' ? '/owner' :
+                  '/advertiser'
                 }>
                   <Button size="sm" className="sm:size-default" data-testid="button-header-dashboard">
                     <LayoutDashboard className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />

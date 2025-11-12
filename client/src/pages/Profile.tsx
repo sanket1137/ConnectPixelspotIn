@@ -489,10 +489,10 @@ export default function Profile() {
               variant="outline"
               onClick={() => {
                 const dashboardPath = user?.role === "advertiser" 
-                  ? "/advertiser/dashboard?tour=true"
+                  ? "/advertiser?tour=true"
                   : user?.role === "screen_owner"
-                  ? "/owner/dashboard?tour=true"
-                  : "/admin/dashboard?tour=true";
+                  ? "/owner?tour=true"
+                  : "/admin?tour=true";
                 setLocation(dashboardPath);
               }}
               data-testid="button-replay-tour"
