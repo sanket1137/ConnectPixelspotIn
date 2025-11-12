@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -65,11 +66,26 @@ const INDUSTRIES = [
 const profileSchema = z.object({
   mobileNumber: z.string().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
   companyName: z.string().min(2, "Company name is required"),
+  accountType: z.enum(["brand", "agency"]).optional(),
+  brandName: z.string().optional(),
+  agencyName: z.string().optional(),
   industry: z.string().min(1, "Please select an industry"),
   address: z.string().min(5, "Address is required"),
   city: z.string().min(2, "City is required"),
   state: z.string().min(1, "Please select a state"),
   gstNumber: z.string().optional(),
+}).refine((data) => {
+  // For advertisers: if accountType is set, require corresponding name field
+  if (data.accountType === "brand" && !data.brandName) {
+    return false;
+  }
+  if (data.accountType === "agency" && !data.agencyName) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Please provide your brand or agency name",
+  path: ["accountType"],
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
@@ -87,6 +103,9 @@ export default function ProfileCompletion() {
     defaultValues: {
       mobileNumber: user?.mobileNumber || "",
       companyName: user?.companyName || "",
+      accountType: user?.accountType as "brand" | "agency" | undefined,
+      brandName: user?.brandName || "",
+      agencyName: user?.agencyName || "",
       industry: user?.industry || "",
       address: user?.address || "",
       city: user?.city || "",
@@ -94,6 +113,8 @@ export default function ProfileCompletion() {
       gstNumber: user?.gstNumber || "",
     },
   });
+  
+  const watchedAccountType = form.watch("accountType");
 
   const sendOTPMutation = useMutation({
     mutationFn: async (mobile: string) => {
@@ -200,12 +221,12 @@ export default function ProfileCompletion() {
 
   const handleSendOTP = () => {
     const mobile = form.getValues("mobileNumber");
-    const validation = profileSchema.shape.mobileNumber.safeParse(mobile);
+    const mobileRegex = /^[6-9]\d{9}$/;
     
-    if (!validation.success) {
+    if (!mobileRegex.test(mobile)) {
       toast({
         title: "Invalid Mobile Number",
-        description: validation.error.errors[0].message,
+        description: "Enter a valid 10-digit mobile number",
         variant: "destructive",
       });
       return;
@@ -336,6 +357,87 @@ export default function ProfileCompletion() {
                       </FormItem>
                     )}
                   />
+
+                  {/* Account Type Selection - Only for Advertisers */}
+                  {user?.role === "advertiser" && (
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="accountType"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Are you a Brand or Agency? *</FormLabel>
+                            <FormControl>
+                              <RadioGroup
+                                onValueChange={field.onChange}
+                                value={field.value}
+                                className="flex gap-4"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="brand" id="brand" data-testid="radio-brand" />
+                                  <Label htmlFor="brand" className="cursor-pointer font-normal">
+                                    I'm a Brand
+                                  </Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="agency" id="agency" data-testid="radio-agency" />
+                                  <Label htmlFor="agency" className="cursor-pointer font-normal">
+                                    I'm an Agency
+                                  </Label>
+                                </div>
+                              </RadioGroup>
+                            </FormControl>
+                            <FormDescription>
+                              This helps us personalize your experience
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Conditional Brand Name */}
+                      {watchedAccountType === "brand" && (
+                        <FormField
+                          control={form.control}
+                          name="brandName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Brand Name *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  placeholder="Enter your brand name" 
+                                  {...field} 
+                                  data-testid="input-brand-name"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+
+                      {/* Conditional Agency Name */}
+                      {watchedAccountType === "agency" && (
+                        <FormField
+                          control={form.control}
+                          name="agencyName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Agency Name *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  placeholder="Enter your agency name" 
+                                  {...field} 
+                                  data-testid="input-agency-name"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+                    </>
+                  )}
 
                   <FormField
                     control={form.control}
