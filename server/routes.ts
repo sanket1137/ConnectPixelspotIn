@@ -836,6 +836,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pendingBookings = allBookings.filter(b => b.status === "pending").length;
       const activeUsers = allUsers.filter(u => u.status === "active").length;
 
+      const now = new Date();
+      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const lastMonthUsers = allUsers.filter(u => new Date(u.createdAt) < thisMonth).length;
+      const thisMonthUsers = allUsers.filter(u => new Date(u.createdAt) >= thisMonth).length;
+      const lastMonthScreens = allScreens.filter(s => new Date(s.createdAt) < thisMonth).length;
+      const thisMonthScreens = allScreens.filter(s => new Date(s.createdAt) >= thisMonth).length;
+      const lastMonthCampaigns = allCampaigns.filter(c => new Date(c.createdAt) < thisMonth).length;
+      const thisMonthCampaigns = allCampaigns.filter(c => new Date(c.createdAt) >= thisMonth).length;
+      const lastMonthRevenue = allBookings
+        .filter(b => b.status === "completed" && new Date(b.createdAt) < thisMonth)
+        .reduce((sum, b) => sum + b.price, 0);
+      const thisMonthRevenue = allBookings
+        .filter(b => b.status === "completed" && new Date(b.createdAt) >= thisMonth)
+        .reduce((sum, b) => sum + b.price, 0);
+
+      const calculateGrowth = (current: number, previous: number) => {
+        if (previous === 0) return current > 0 ? 100 : 0;
+        return Math.round(((current / previous) - 1) * 100);
+      };
+
       res.json({
         totalUsers: allUsers.length,
         totalScreens: allScreens.length,
@@ -844,7 +866,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pendingScreens,
         pendingBookings,
         activeUsers,
-        growthRate: 15, // Mock growth rate
+        userGrowth: calculateGrowth(thisMonthUsers, lastMonthUsers),
+        screenGrowth: calculateGrowth(thisMonthScreens, lastMonthScreens),
+        campaignGrowth: calculateGrowth(thisMonthCampaigns, lastMonthCampaigns),
+        revenueGrowth: calculateGrowth(thisMonthRevenue, lastMonthRevenue),
       });
     } catch (error) {
       console.error("Admin stats error:", error);

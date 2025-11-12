@@ -16,7 +16,10 @@ interface DashboardStats {
   pendingScreens: number;
   pendingBookings: number;
   activeUsers: number;
-  growthRate: number;
+  userGrowth: number;
+  screenGrowth: number;
+  campaignGrowth: number;
+  revenueGrowth: number;
 }
 
 export default function AdminDashboard() {
@@ -96,8 +99,8 @@ export default function AdminDashboard() {
       title: "Total Users",
       value: stats?.totalUsers || 0,
       icon: Users,
-      change: "+12%",
-      positive: true,
+      change: `${stats?.userGrowth && stats.userGrowth > 0 ? '+' : ''}${stats?.userGrowth || 0}%`,
+      positive: (stats?.userGrowth || 0) >= 0,
       color: "text-chart-1",
       bgColor: "bg-chart-1/10",
     },
@@ -105,8 +108,8 @@ export default function AdminDashboard() {
       title: "Total Screens",
       value: stats?.totalScreens || 0,
       icon: Monitor,
-      change: "+8%",
-      positive: true,
+      change: `${stats?.screenGrowth && stats.screenGrowth > 0 ? '+' : ''}${stats?.screenGrowth || 0}%`,
+      positive: (stats?.screenGrowth || 0) >= 0,
       color: "text-chart-2",
       bgColor: "bg-chart-2/10",
     },
@@ -114,8 +117,8 @@ export default function AdminDashboard() {
       title: "Active Campaigns",
       value: stats?.totalCampaigns || 0,
       icon: FileText,
-      change: "+15%",
-      positive: true,
+      change: `${stats?.campaignGrowth && stats.campaignGrowth > 0 ? '+' : ''}${stats?.campaignGrowth || 0}%`,
+      positive: (stats?.campaignGrowth || 0) >= 0,
       color: "text-chart-3",
       bgColor: "bg-chart-3/10",
     },
@@ -123,8 +126,8 @@ export default function AdminDashboard() {
       title: "Total Revenue",
       value: `₹${((stats?.totalRevenue || 0) / 1000).toFixed(1)}K`,
       icon: DollarSign,
-      change: "+23%",
-      positive: true,
+      change: `${stats?.revenueGrowth && stats.revenueGrowth > 0 ? '+' : ''}${stats?.revenueGrowth || 0}%`,
+      positive: (stats?.revenueGrowth || 0) >= 0,
       color: "text-chart-4",
       bgColor: "bg-chart-4/10",
     },
