@@ -113,16 +113,29 @@ export default function ManageScreens() {
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {screens.map((screen) => (
-            <Card key={screen.id} data-testid={`card-screen-${screen.id}`}>
-              <CardHeader className="gap-2 space-y-0 pb-4">
-                <div className="flex items-start justify-between">
-                  <div className="p-3 bg-primary/10 rounded-lg">
-                    <Monitor className="w-5 h-5 text-primary" />
+            <Card key={screen.id} data-testid={`card-screen-${screen.id}`} className="overflow-hidden">
+              {/* Screen Image */}
+              <div className="relative h-48 bg-muted overflow-hidden cursor-pointer" onClick={() => setSelectedScreen(screen)}>
+                {(screen.screenImages && screen.screenImages.length > 0) || (screen.images && screen.images.length > 0) ? (
+                  <img
+                    src={(screen.screenImages?.[0] ?? screen.images?.[0]) || ''}
+                    alt={screen.name}
+                    className="w-full h-full object-cover transition-transform hover:scale-105"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-muted">
+                    <Monitor className="w-16 h-16 text-muted-foreground/50" />
                   </div>
-                  <Badge variant={getStatusBadgeVariant(screen.status)}>
-                    {screen.status}
-                  </Badge>
-                </div>
+                )}
+                <Badge variant={getStatusBadgeVariant(screen.status)} className="absolute top-3 right-3">
+                  {screen.status}
+                </Badge>
+              </div>
+              
+              <CardHeader className="gap-2 space-y-0 pb-4">
                 <CardTitle className="text-lg">{screen.name}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -197,6 +210,48 @@ export default function ManageScreens() {
           
           {selectedScreen && (
             <div className="space-y-6">
+              {/* Screen Images */}
+              {((selectedScreen.screenImages && selectedScreen.screenImages.length > 0) || (selectedScreen.images && selectedScreen.images.length > 0)) && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-lg">Screen Photos</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(selectedScreen.screenImages || selectedScreen.images || []).map((imageUrl: string, idx: number) => (
+                      <div key={idx} className="relative h-48 bg-muted rounded-lg overflow-hidden">
+                        <img
+                          src={imageUrl}
+                          alt={`Screen ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Surrounding Images */}
+              {selectedScreen.surroundingImages && selectedScreen.surroundingImages.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-lg">Surrounding Area Photos</h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    {selectedScreen.surroundingImages.map((imageUrl: string, idx: number) => (
+                      <div key={idx} className="relative h-32 bg-muted rounded-lg overflow-hidden">
+                        <img
+                          src={imageUrl}
+                          alt={`Surrounding ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Section 1 - Screen Identity */}
               <div className="space-y-3">
                 <h3 className="font-semibold text-lg">Screen Identity</h3>
