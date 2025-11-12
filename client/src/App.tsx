@@ -203,16 +203,26 @@ function Router() {
 
 function AuthenticatedLayout() {
   const { user } = useAuth();
+  const [location] = useLocation();
   
-  if (!user) {
-    return <Router />;
-  }
+  // Check if current route should show sidebar
+  const shouldShowSidebar = user && (
+    location.startsWith('/admin') ||
+    location.startsWith('/owner') ||
+    location.startsWith('/advertiser')
+  );
 
   const style = {
     "--sidebar-width": "20rem",
     "--sidebar-width-icon": "4rem",
   };
 
+  // If no user or route doesn't need sidebar, show router without sidebar
+  if (!shouldShowSidebar) {
+    return <Router />;
+  }
+
+  // Show router with sidebar for dashboard routes
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex min-h-screen w-full">
