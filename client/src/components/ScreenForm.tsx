@@ -241,17 +241,21 @@ export function ScreenForm({
 
       for (const file of Array.from(files)) {
         // Get upload URL
-        const uploadResponse = await apiRequest("POST", "/api/objects/upload", {});
+        const uploadResponse = await apiRequest("POST", "/api/objects/upload", undefined);
         const uploadData = await uploadResponse.json();
 
         // Upload file to object storage
-        await fetch(uploadData.uploadURL, {
+        const uploadResult = await fetch(uploadData.uploadURL, {
           method: "PUT",
           body: file,
           headers: {
             "Content-Type": file.type,
           },
         });
+
+        if (!uploadResult.ok) {
+          throw new Error(`Upload to storage failed: ${uploadResult.status} ${uploadResult.statusText}`);
+        }
 
         // Register file with entity
         const entityResponse = await apiRequest("PUT", "/api/objects/entity", {
@@ -269,9 +273,10 @@ export function ScreenForm({
       });
     } catch (error) {
       console.error("Upload error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
       toast({
         title: "Upload Failed",
-        description: "Failed to upload screen images. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -291,17 +296,21 @@ export function ScreenForm({
 
       for (const file of Array.from(files)) {
         // Get upload URL
-        const uploadResponse = await apiRequest("POST", "/api/objects/upload", {});
+        const uploadResponse = await apiRequest("POST", "/api/objects/upload", undefined);
         const uploadData = await uploadResponse.json();
 
         // Upload file to object storage
-        await fetch(uploadData.uploadURL, {
+        const uploadResult = await fetch(uploadData.uploadURL, {
           method: "PUT",
           body: file,
           headers: {
             "Content-Type": file.type,
           },
         });
+
+        if (!uploadResult.ok) {
+          throw new Error(`Upload to storage failed: ${uploadResult.status} ${uploadResult.statusText}`);
+        }
 
         // Register file with entity
         const entityResponse = await apiRequest("PUT", "/api/objects/entity", {
@@ -319,9 +328,10 @@ export function ScreenForm({
       });
     } catch (error) {
       console.error("Upload error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
       toast({
         title: "Upload Failed",
-        description: "Failed to upload surrounding images. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
