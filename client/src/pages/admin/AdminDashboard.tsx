@@ -114,7 +114,7 @@ export default function AdminDashboard() {
       bgColor: "bg-chart-2/10",
     },
     {
-      title: "Active Campaigns",
+      title: "Total Campaigns",
       value: stats?.totalCampaigns || 0,
       icon: FileText,
       change: `${stats?.campaignGrowth && stats.campaignGrowth > 0 ? '+' : ''}${stats?.campaignGrowth || 0}%`,
