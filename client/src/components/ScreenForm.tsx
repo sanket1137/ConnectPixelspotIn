@@ -59,7 +59,6 @@ const screenFormSchema = z.object({
   // Enhanced Location Context
   visibility: z.string().optional(),
   description: z.string().optional(),
-  operatingHoursPreset: z.string().optional(),
   customOperatingHoursStart: z.string().optional(),
   customOperatingHoursEnd: z.string().optional(),
   customOperatingDays: z.array(z.string()).optional(),
@@ -143,7 +142,6 @@ export function ScreenForm({
       environmentType: initialData?.environmentType || "",
       visibility: initialData?.visibility || "",
       description: initialData?.description || "",
-      operatingHoursPreset: initialData?.operatingHoursPreset || "",
       customOperatingHoursStart: initialData?.customOperatingHoursStart || "",
       customOperatingHoursEnd: initialData?.customOperatingHoursEnd || "",
       customOperatingDays: initialData?.customOperatingDays || [],
@@ -198,52 +196,6 @@ export function ScreenForm({
   };
 
   // Helper function to parse operating hours preset into structured data
-  const parseOperatingHoursPreset = (preset: string) => {
-    switch (preset) {
-      case "Business hours (09:00-18:00 | Mon-Fri)":
-        return {
-          start: "09:00",
-          end: "18:00",
-          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-        };
-      case "Mall hours (10:00-22:00 | Mon-Sun)":
-        return {
-          start: "10:00",
-          end: "22:00",
-          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        };
-      case "Retail (11:00-23:00 | Mon-Sun)":
-        return {
-          start: "11:00",
-          end: "23:00",
-          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        };
-      case "Airport/Highways (24/7 | Mon-Sun)":
-        return {
-          start: "00:00",
-          end: "23:59",
-          days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        };
-      case "Custom":
-        return null;
-      default:
-        return null;
-    }
-  };
-
-  // Watch operatingHoursPreset and auto-populate structured fields
-  const operatingHoursPreset = form.watch("operatingHoursPreset");
-  
-  useEffect(() => {
-    if (operatingHoursPreset && operatingHoursPreset !== "Custom") {
-      const parsed = parseOperatingHoursPreset(operatingHoursPreset);
-      if (parsed) {
-        form.setValue("customOperatingHoursStart", parsed.start);
-        form.setValue("customOperatingHoursEnd", parsed.end);
-        form.setValue("customOperatingDays", parsed.days);
-      }
-    }
-  }, [operatingHoursPreset]);
 
   const handleScreenImagesChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -792,99 +744,76 @@ export function ScreenForm({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="operatingHoursPreset"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Operating Hours</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-operating-hours">
-                            <SelectValue placeholder="Select operating hours" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {OPERATING_HOURS_PRESETS.map((preset) => (
-                            <SelectItem key={preset} value={preset}>{preset}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
 
-              {form.watch("operatingHoursPreset") === "Custom" && (
-                <div className="space-y-4 mt-4">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="customOperatingHoursStart"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Start Time</FormLabel>
-                          <FormControl>
-                            <Input type="time" {...field} data-testid="input-start-time" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="customOperatingHoursEnd"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>End Time</FormLabel>
-                          <FormControl>
-                            <Input type="time" {...field} data-testid="input-end-time" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+              <div className="space-y-4 mt-4">
+                <FormLabel>Operating Hours</FormLabel>
+                <div className="grid md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="customOperatingDays"
-                    render={() => (
+                    name="customOperatingHoursStart"
+                    render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Operating Days</FormLabel>
-                        <div className="flex flex-wrap gap-4">
-                          {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => (
-                            <FormField
-                              key={day}
-                              control={form.control}
-                              name="customOperatingDays"
-                              render={({ field }) => (
-                                <FormItem className="flex items-center space-x-2 space-y-0">
-                                  <FormControl>
-                                    <Checkbox
-                                      checked={field.value?.includes(day)}
-                                      onCheckedChange={(checked) => {
-                                        return checked
-                                          ? field.onChange([...(field.value || []), day])
-                                          : field.onChange(
-                                              field.value?.filter((value) => value !== day)
-                                            );
-                                      }}
-                                      data-testid={`checkbox-day-${day.toLowerCase()}`}
-                                    />
-                                  </FormControl>
-                                  <FormLabel className="font-normal cursor-pointer">{day}</FormLabel>
-                                </FormItem>
-                              )}
-                            />
-                          ))}
-                        </div>
+                        <FormLabel>Start Time</FormLabel>
+                        <FormControl>
+                          <Input type="time" {...field} data-testid="input-start-time" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="customOperatingHoursEnd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>End Time</FormLabel>
+                        <FormControl>
+                          <Input type="time" {...field} data-testid="input-end-time" />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
-              )}
+                <FormField
+                  control={form.control}
+                  name="customOperatingDays"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Operating Days</FormLabel>
+                      <div className="flex flex-wrap gap-4">
+                        {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => (
+                          <FormField
+                            key={day}
+                            control={form.control}
+                            name="customOperatingDays"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(day)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), day])
+                                        : field.onChange(
+                                            field.value?.filter((value) => value !== day)
+                                          );
+                                    }}
+                                    data-testid={`checkbox-day-${day.toLowerCase()}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal cursor-pointer">{day}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}
