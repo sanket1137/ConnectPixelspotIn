@@ -20,7 +20,7 @@ export default function GuidedTour({
   
   const completeOnboardingMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("/api/profile/complete-onboarding", "POST", {});
+      return await apiRequest("POST", "/api/profile/complete-onboarding", {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
