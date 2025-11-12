@@ -108,8 +108,12 @@ export function ScreenForm({
   isLoading = false 
 }: ScreenFormProps) {
   const { toast } = useToast();
-  const [screenImages, setScreenImages] = useState<string[]>([]);
-  const [surroundingImages, setSurroundingImages] = useState<string[]>([]);
+  const [screenImages, setScreenImages] = useState<string[]>(
+    (initialData as any)?.existingScreenImages || []
+  );
+  const [surroundingImages, setSurroundingImages] = useState<string[]>(
+    (initialData as any)?.existingSurroundingImages || []
+  );
   const [selectedState, setSelectedState] = useState<string>("");
   const [uploadingScreen, setUploadingScreen] = useState(false);
   const [uploadingSurrounding, setUploadingSurrounding] = useState(false);
