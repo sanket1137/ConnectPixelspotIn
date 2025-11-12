@@ -38,8 +38,18 @@ const screenFormSchema = z.object({
   city: z.string().min(2, "City is required"),
   state: z.string().min(2, "State is required"),
   pincode: z.string().regex(/^\d{6}$/, "Pincode must be 6 digits"),
-  latitude: z.string().min(1, "Latitude is required"),
-  longitude: z.string().min(1, "Longitude is required"),
+  latitude: z.string()
+    .min(1, "Latitude is required")
+    .refine((val) => {
+      const num = parseFloat(val);
+      return !isNaN(num) && num >= -90 && num <= 90;
+    }, "Latitude must be between -90 and 90"),
+  longitude: z.string()
+    .min(1, "Longitude is required")
+    .refine((val) => {
+      const num = parseFloat(val);
+      return !isNaN(num) && num >= -180 && num <= 180;
+    }, "Longitude must be between -180 and 180"),
   venueCategory: z.string().min(1, "Venue category is required"),
   avgDailyFootfall: z.string().min(1, "Average daily footfall is required"),
   trafficType: z.string().min(1, "Traffic type is required"),
