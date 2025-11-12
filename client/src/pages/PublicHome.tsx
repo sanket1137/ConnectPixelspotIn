@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Eye, Building2 } from 'lucide-react';
+import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Eye, Building2, LayoutDashboard } from 'lucide-react';
 import { Link } from 'wouter';
-import type { Screen } from '@shared/schema';
+import type { Screen, User } from '@shared/schema';
 import logo from "@assets/pixelspot-logo.png";
 
 interface PublicScreensResponse {
@@ -60,6 +60,11 @@ export default function PublicHome() {
   const [hoveredScreen, setHoveredScreen] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [showCities, setShowCities] = useState(true);
+
+  // Fetch current user
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ['/api/auth/me'],
+  });
 
   // Fetch public screens
   const { data: screens = [], isLoading: screensLoading } = useQuery<Screen[]>({
@@ -139,19 +144,35 @@ export default function PublicHome() {
             </Link>
             
             <div className="flex items-center gap-2 sm:gap-3">
-              <Link href="/login">
-                <Button variant="ghost" size="sm" className="sm:size-default" data-testid="button-header-login">
-                  <span className="hidden sm:inline">Login</span>
-                  <span className="sm:hidden">Log in</span>
-                </Button>
-              </Link>
-              <Link href="/register?role=advertiser">
-                <Button size="sm" className="sm:size-default" data-testid="button-header-signup">
-                  <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Sign Up Free</span>
-                  <span className="sm:hidden">Sign Up</span>
-                </Button>
-              </Link>
+              {currentUser ? (
+                <Link href={
+                  currentUser.role === 'admin' ? '/admin/dashboard' :
+                  currentUser.role === 'screen_owner' ? '/owner/dashboard' :
+                  '/advertiser/dashboard'
+                }>
+                  <Button size="sm" className="sm:size-default" data-testid="button-header-dashboard">
+                    <LayoutDashboard className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Go to Dashboard</span>
+                    <span className="sm:hidden">Dashboard</span>
+                  </Button>
+                </Link>
+              ) : (
+                <>
+                  <Link href="/login">
+                    <Button variant="ghost" size="sm" className="sm:size-default" data-testid="button-header-login">
+                      <span className="hidden sm:inline">Login</span>
+                      <span className="sm:hidden">Log in</span>
+                    </Button>
+                  </Link>
+                  <Link href="/register?role=advertiser">
+                    <Button size="sm" className="sm:size-default" data-testid="button-header-signup">
+                      <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Sign Up Free</span>
+                      <span className="sm:hidden">Sign Up</span>
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
