@@ -833,7 +833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .reduce((sum, b) => sum + b.price, 0);
 
       const pendingScreens = allScreens.filter(s => s.status === "pending").length;
-      const pendingBookings = allBookings.filter(b => b.status === "pending").length;
+      const pendingBookings = allBookings.filter(b => b.status === "owner_approved").length;
       const activeUsers = allUsers.filter(u => u.status === "active").length;
 
       const now = new Date();
