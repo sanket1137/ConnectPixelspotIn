@@ -22,6 +22,11 @@ export const users = pgTable("users", {
   industry: text("industry"),
   gstNumber: text("gst_number"),
   
+  // Account Type (for advertisers only)
+  accountType: text("account_type"), // "brand" or "agency" - only for advertisers
+  brandName: text("brand_name"), // filled when accountType is "brand"
+  agencyName: text("agency_name"), // filled when accountType is "agency"
+  
   // Address
   address: text("address"),
   city: text("city"),
