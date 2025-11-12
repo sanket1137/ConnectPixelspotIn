@@ -10,6 +10,7 @@ import { eq } from "drizzle-orm";
 import { getCampaignAdvice } from "./ai-advisor";
 import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
 import { notificationService } from "./notifications";
+import multer from "multer";
 
 // Extend Express Request to include user
 declare global {
@@ -631,7 +632,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========== OBJECT STORAGE ROUTES ==========
   
-  // Get upload URL for file uploads
+  // Configure multer for file uploads (store in memory)
+  const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB limit
+    }
+  });
+
+  // Upload file directly through backend (avoids CORS issues)
+  app.post("/api/objects/upload-file", authenticate, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const { entityType } = req.body;
+      if (!entityType) {
+        return res.status(400).json({ error: "entityType is required" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      
+      // Get upload URL
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      
+      // Upload file to GCS using signed URL
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: req.file.buffer,
+        headers: {
+          "Content-Type": req.file.mimetype,
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload to storage failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
+      }
+
+      // Set ACL policy
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        uploadURL,
+        {
+          owner: req.user!.id.toString(),
+          visibility: "public",
+        },
+      );
+
+      res.json({ objectPath });
+    } catch (error) {
+      console.error("File upload error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Internal server error";
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+  
+  // Get upload URL for file uploads (legacy - for direct browser uploads)
   app.post("/api/objects/upload", authenticate, async (req, res) => {
     try {
       const objectStorageService = new ObjectStorageService();

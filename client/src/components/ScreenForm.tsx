@@ -10,8 +10,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { MapPin, Upload, Check, Users, DollarSign, Monitor } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { auth } from "@/lib/firebase";
 import { 
   INDIAN_STATES,
   STATE_CITIES,
@@ -238,32 +238,31 @@ export function ScreenForm({
     setUploadingScreen(true);
     try {
       const uploadedPaths: string[] = [];
+      const token = await auth.currentUser?.getIdToken();
 
       for (const file of Array.from(files)) {
-        // Get upload URL
-        const uploadResponse = await apiRequest("POST", "/api/objects/upload", undefined);
-        const uploadData = await uploadResponse.json();
+        // Create FormData for file upload
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("entityType", "screen");
 
-        // Upload file to object storage
-        const uploadResult = await fetch(uploadData.uploadURL, {
-          method: "PUT",
-          body: file,
+        // Upload file through backend
+        const response = await fetch("/api/objects/upload-file", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
           headers: {
-            "Content-Type": file.type,
+            "Authorization": `Bearer ${token}`,
           },
         });
 
-        if (!uploadResult.ok) {
-          throw new Error(`Upload to storage failed: ${uploadResult.status} ${uploadResult.statusText}`);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Upload failed: ${response.status}`);
         }
 
-        // Register file with entity
-        const entityResponse = await apiRequest("PUT", "/api/objects/entity", {
-          fileURL: uploadData.uploadURL,
-          entityType: "screen",
-        });
-        const entityData = await entityResponse.json();
-        uploadedPaths.push(entityData.objectPath);
+        const data = await response.json();
+        uploadedPaths.push(data.objectPath);
       }
 
       setScreenImages([...screenImages, ...uploadedPaths]);
@@ -293,32 +292,31 @@ export function ScreenForm({
     setUploadingSurrounding(true);
     try {
       const uploadedPaths: string[] = [];
+      const token = await auth.currentUser?.getIdToken();
 
       for (const file of Array.from(files)) {
-        // Get upload URL
-        const uploadResponse = await apiRequest("POST", "/api/objects/upload", undefined);
-        const uploadData = await uploadResponse.json();
+        // Create FormData for file upload
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("entityType", "screen");
 
-        // Upload file to object storage
-        const uploadResult = await fetch(uploadData.uploadURL, {
-          method: "PUT",
-          body: file,
+        // Upload file through backend
+        const response = await fetch("/api/objects/upload-file", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
           headers: {
-            "Content-Type": file.type,
+            "Authorization": `Bearer ${token}`,
           },
         });
 
-        if (!uploadResult.ok) {
-          throw new Error(`Upload to storage failed: ${uploadResult.status} ${uploadResult.statusText}`);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Upload failed: ${response.status}`);
         }
 
-        // Register file with entity
-        const entityResponse = await apiRequest("PUT", "/api/objects/entity", {
-          fileURL: uploadData.uploadURL,
-          entityType: "screen",
-        });
-        const entityData = await entityResponse.json();
-        uploadedPaths.push(entityData.objectPath);
+        const data = await response.json();
+        uploadedPaths.push(data.objectPath);
       }
 
       setSurroundingImages([...surroundingImages, ...uploadedPaths]);
