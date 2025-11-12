@@ -28,17 +28,18 @@ export default function GuidedTour({
   });
 
   const handleJoyrideCallback = (data: CallBackProps) => {
-    const { status, type } = data;
-    const finishedStatuses = [STATUS.FINISHED, STATUS.SKIPPED];
+    const { status, action } = data;
+    
+    // Mark tour as complete on ANY dismissal action:
+    // - Clicking outside (overlay click)
+    // - Pressing ESC
+    // - Clicking Skip
+    // - Finishing the tour
+    // - Clicking close button
+    const tourEndedStatuses = [STATUS.FINISHED, STATUS.SKIPPED];
+    const shouldMarkComplete = tourEndedStatuses.includes(status as any) || action === 'close';
 
-    if (finishedStatuses.includes(status as any)) {
-      // Tour finished or skipped - mark onboarding as complete
-      completeOnboardingMutation.mutate();
-      onFinish?.();
-    }
-
-    // Also handle the close button click
-    if (type === EVENTS.TOUR_END && status === STATUS.FINISHED) {
+    if (shouldMarkComplete) {
       completeOnboardingMutation.mutate();
       onFinish?.();
     }
