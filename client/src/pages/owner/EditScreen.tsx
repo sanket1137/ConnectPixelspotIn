@@ -24,10 +24,25 @@ export default function EditScreen() {
   const updateMutation = useMutation({
     mutationFn: async (data: any) => {
       const idToken = await (await import("@/lib/firebase")).auth.currentUser?.getIdToken();
-      const response = await apiRequest("PATCH", `/api/owner/screens/${screenId}`, data, {
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
+      const response = await apiRequest("PATCH", `/api/owner/screens/${screenId}`, {
+        ...data,
+        pricePerDay: parseInt(data.pricePerDay),
+        minBookingDays: parseInt(data.minBookingDays),
+        durationPerSlot: parseInt(data.durationPerSlot),
+        avgDailyFootfall: parseInt(data.avgDailyFootfall),
+        avgDwellTime: data.avgDwellTime,
+        playbackSlotsPerHour: parseInt(data.playbackSlotsPerHour),
+        numberOfScreens: data.numberOfScreens ? parseInt(data.numberOfScreens) : null,
+        interestSegments: data.interestSegments ? data.interestSegments.split(',').map((s: string) => s.trim()) : [],
+        customLocationTags: data.customLocationTags ? data.customLocationTags.split(',').map((s: string) => s.trim()) : [],
+        customAudienceTags: data.customAudienceTags ? data.customAudienceTags.split(',').map((s: string) => s.trim()) : [],
+        userIntent: data.userIntent,
+        userMood: data.userMood,
+        type: data.category,
+        size: data.resolution,
+        screenImages: data.screenImages,
+        surroundingImages: data.surroundingImages,
+        imageUrl: data.screenImages.length > 0 ? data.screenImages[0] : null,
       });
       return response.json();
     },
