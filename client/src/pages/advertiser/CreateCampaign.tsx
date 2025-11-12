@@ -126,6 +126,30 @@ const affluenceLevels = [
 
 const timePreferences = ["Morning Rush", "Lunch Hours", "Evening Leisure", "Late Night"];
 
+// Helper function to calculate total slots for a screen
+const calculateTotalSlots = (screen: Screen, campaignDays: number): number => {
+  // Calculate operating hours per day from start and end times
+  const getHoursFromTime = (timeString: string | null): number => {
+    if (!timeString) return 0;
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours + (minutes / 60);
+  };
+  
+  const startHour = getHoursFromTime(screen.customOperatingHoursStart);
+  const endHour = getHoursFromTime(screen.customOperatingHoursEnd);
+  
+  // Calculate hours per day (handle overnight scenarios)
+  let hoursPerDay = endHour - startHour;
+  if (hoursPerDay < 0) {
+    hoursPerDay += 24; // Overnight operation
+  }
+  
+  // Total slots = campaign days × slots per hour × hours per day
+  const totalSlots = campaignDays * (screen.playbackSlotsPerHour || 0) * hoursPerDay;
+  
+  return Math.round(totalSlots);
+};
+
 export default function CreateCampaign() {
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -1461,6 +1485,12 @@ export default function CreateCampaign() {
                               })()}
                             </p>
                             <p className="text-muted-foreground">
+                              Total Ad Plays: <strong className="text-foreground text-primary">{filteredScreensInArea.reduce((sum, s) => {
+                                const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
+                                return sum + (calculateTotalSlots(s, duration || 1) * screenMultiplier);
+                              }, 0).toLocaleString()} slots</strong>
+                            </p>
+                            <p className="text-muted-foreground">
                               Estimated Reach: <strong className="text-foreground">{estimatedReach?.reach.toLocaleString() || 0}</strong> people
                             </p>
                             <p className="text-muted-foreground">
@@ -1535,6 +1565,22 @@ export default function CreateCampaign() {
                                 </div>
                               </div>
 
+                              {/* Total Slots */}
+                              <div className="bg-primary/5 rounded-md p-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium text-muted-foreground">Total Ad Plays</span>
+                                  <span className="text-lg font-bold text-primary">
+                                    {(() => {
+                                      const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
+                                      return (calculateTotalSlots(screen, duration || 1) * screenMultiplier).toLocaleString();
+                                    })()} slots
+                                  </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {duration || 1} days × {screen.playbackSlotsPerHour} slots/hr{screen.isMultiScreen && screen.numberOfScreens ? ` × ${screen.numberOfScreens} screens` : ''}
+                                </p>
+                              </div>
+
                               {/* Estimated Reach */}
                               <div className="pt-2 border-t">
                                 <div className="flex items-center justify-between">
@@ -1564,31 +1610,54 @@ export default function CreateCampaign() {
                           ))}
                           
                           {/* Total Summary */}
-                          <div className="border-t pt-4 mt-4">
-                            <div className="flex items-center justify-between text-lg font-semibold">
-                              <span>Total Campaign Cost</span>
-                              <span className="text-primary">
-                                ₹{filteredScreensInArea.reduce((sum, s) => {
+                          <div className="border-t pt-4 mt-4 space-y-4">
+                            {/* Total Slots Summary */}
+                            <div className="bg-primary/10 rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-muted-foreground">Total Ad Plays</span>
+                                <span className="text-2xl font-bold text-primary">
+                                  {filteredScreensInArea.reduce((sum, s) => {
+                                    const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
+                                    return sum + (calculateTotalSlots(s, duration || 1) * screenMultiplier);
+                                  }, 0).toLocaleString()} slots
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Across {filteredScreensInArea.reduce((sum, s) => {
+                                  return sum + (s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1);
+                                }, 0)} screen{filteredScreensInArea.reduce((sum, s) => {
+                                  return sum + (s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1);
+                                }, 0) !== 1 ? 's' : ''} over {duration || 1} day{(duration || 1) !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+
+                            {/* Cost Summary */}
+                            <div>
+                              <div className="flex items-center justify-between text-lg font-semibold">
+                                <span>Total Campaign Cost</span>
+                                <span className="text-primary">
+                                  ₹{filteredScreensInArea.reduce((sum, s) => {
+                                    const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
+                                    return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
+                                  }, 0).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm text-muted-foreground mt-1">
+                                <span>Your Budget</span>
+                                <span>₹{totalBudget.toLocaleString()}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm font-medium text-foreground mt-1">
+                                <span>Remaining</span>
+                                <span className={totalBudget - filteredScreensInArea.reduce((sum, s) => {
                                   const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
                                   return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
-                                }, 0).toLocaleString()}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm text-muted-foreground mt-1">
-                              <span>Your Budget</span>
-                              <span>₹{totalBudget.toLocaleString()}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm font-medium text-foreground mt-1">
-                              <span>Remaining</span>
-                              <span className={totalBudget - filteredScreensInArea.reduce((sum, s) => {
-                                const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
-                                return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
-                              }, 0) >= 0 ? "text-green-600" : "text-red-600"}>
-                                ₹{(totalBudget - filteredScreensInArea.reduce((sum, s) => {
-                                  const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
-                                  return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
-                                }, 0)).toLocaleString()}
-                              </span>
+                                }, 0) >= 0 ? "text-green-600" : "text-red-600"}>
+                                  ₹{(totalBudget - filteredScreensInArea.reduce((sum, s) => {
+                                    const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
+                                    return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
+                                  }, 0)).toLocaleString()}
+                                </span>
+                              </div>
                             </div>
                             
                             {/* Budget Warning */}
