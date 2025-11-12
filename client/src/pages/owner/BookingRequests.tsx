@@ -58,6 +58,7 @@ export default function BookingRequests() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/owner/booking-requests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/owner/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       toast({
         title: "Booking Approved",
         description: "The booking request has been approved.",
@@ -79,6 +80,7 @@ export default function BookingRequests() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/owner/booking-requests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/owner/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       setRejectDialogOpen(false);
       setRejectReason("");
       setAlternateDates({ startDate: "", endDate: "" });

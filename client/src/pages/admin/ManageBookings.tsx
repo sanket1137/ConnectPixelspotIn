@@ -77,6 +77,7 @@ export default function ManageBookings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       toast({
         title: "Booking Approved",
         description: "The booking has been approved and is now active.",
@@ -91,6 +92,7 @@ export default function ManageBookings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       setRejectDialogOpen(false);
       setAdminNotes("");
       toast({
@@ -117,6 +119,7 @@ export default function ManageBookings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       setEditDatesDialogOpen(false);
       setEditStartDate("");
       setEditEndDate("");

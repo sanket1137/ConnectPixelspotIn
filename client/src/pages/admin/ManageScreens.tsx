@@ -32,6 +32,10 @@ export default function ManageScreens() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/screens"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/screens"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/screens/locations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/screens/in-area"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/owner/screens"] });
       toast({
         title: "Screen Approved",
         description: "The screen has been activated successfully.",
@@ -53,6 +57,10 @@ export default function ManageScreens() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/screens"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/screens"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/screens/locations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/screens/in-area"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/owner/screens"] });
       setRejectDialogOpen(false);
       setScreenToReject(null);
       setRejectionReason("");

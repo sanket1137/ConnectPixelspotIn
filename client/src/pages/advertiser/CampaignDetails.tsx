@@ -83,6 +83,7 @@ export default function CampaignDetails() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/advertiser/campaigns/${params?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       setAlternativeDateDialog(false);
       toast({
         title: "Alternative Dates Accepted",
@@ -97,6 +98,7 @@ export default function CampaignDetails() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/advertiser/campaigns/${params?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       setAlternativeDateDialog(false);
       toast({
         title: "Alternative Dates Rejected",

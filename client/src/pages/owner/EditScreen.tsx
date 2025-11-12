@@ -50,6 +50,10 @@ export default function EditScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/owner/screens"] });
       queryClient.invalidateQueries({ queryKey: [`/api/owner/screens/${screenId}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/owner/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/screens"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/screens/locations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/screens/in-area"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/screens"] });
       toast({
         title: "Screen Updated",
         description: "Your screen has been updated successfully.",
