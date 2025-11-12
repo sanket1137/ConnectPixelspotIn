@@ -1618,11 +1618,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create campaign (advertiser)
   app.post("/api/advertiser/campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
+      // Validate start date is at least tomorrow
+      const startDate = new Date(req.body.startDate);
+      const tomorrow = new Date();
+      tomorrow.setHours(0, 0, 0, 0);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      if (startDate < tomorrow) {
+        return res.status(400).json({ 
+          error: "Start date must be at least tomorrow. Campaigns cannot start today or in the past." 
+        });
+      }
+
       const campaignData = {
         ...req.body,
         advertiserId: req.user!.id,
         status: "pending",
-        startDate: new Date(req.body.startDate),
+        startDate: startDate,
         endDate: new Date(req.body.endDate),
       };
 
@@ -1637,12 +1649,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create booking request (advertiser)
   app.post("/api/advertiser/bookings", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
+      // Validate start date is at least tomorrow
+      const startDate = new Date(req.body.startDate);
+      const tomorrow = new Date();
+      tomorrow.setHours(0, 0, 0, 0);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      if (startDate < tomorrow) {
+        return res.status(400).json({ 
+          error: "Start date must be at least tomorrow. Bookings cannot start today or in the past." 
+        });
+      }
+
       const booking = await storage.createBooking({
         ...req.body,
         status: "pending_owner",
         ownerApproved: false,
         approvedByAdmin: false,
-        startDate: new Date(req.body.startDate),
+        startDate: startDate,
         endDate: new Date(req.body.endDate),
       });
 
