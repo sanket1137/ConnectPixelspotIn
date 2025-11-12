@@ -80,9 +80,6 @@ export default function GuidedTour({
         buttonSkip: {
           color: "hsl(var(--muted-foreground))",
         },
-        beacon: {
-          offsetY: 10,
-        },
       }}
       locale={{
         back: "Back",
