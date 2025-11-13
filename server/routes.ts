@@ -11,6 +11,7 @@ import { getCampaignAdvice } from "./ai-advisor";
 import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
 import { notificationService } from "./notifications";
 import multer from "multer";
+import { broadcastCampaignUpdate, broadcastBookingUpdate, broadcastScreenUpdate } from "./websocket";
 
 // Extend Express Request to include user
 declare global {
@@ -932,6 +933,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Screen not found" });
       }
 
+      // Broadcast screen update
+      broadcastScreenUpdate(screen.id, "active");
+
       // Send approval email to screen owner (non-blocking, fire-and-forget)
       if (screen.ownerId) {
         storage.getUser(screen.ownerId)
@@ -962,6 +966,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!screen) {
         return res.status(404).json({ error: "Screen not found" });
       }
+
+      // Broadcast screen update
+      broadcastScreenUpdate(screen.id, "inactive");
 
       res.json(screen);
     } catch (error) {
@@ -1036,7 +1043,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const campaign = await storage.getCampaign(booking.campaignId);
       if (campaign && campaign.status === "pending") {
         await storage.updateCampaignStatus(campaign.id, "approved");
+        broadcastCampaignUpdate(campaign.id, "approved");
       }
+
+      // Broadcast booking update
+      broadcastBookingUpdate(booking.id, booking.campaignId, booking.status);
 
       // Send campaign live notifications to advertiser and screen owner
       const [updatedCampaign, screen] = await Promise.all([
@@ -1079,6 +1090,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
+
+      // Broadcast booking update
+      broadcastBookingUpdate(booking.id, booking.campaignId, booking.status);
 
       res.json(booking);
     } catch (error) {
@@ -1276,6 +1290,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Booking not found" });
       }
 
+      // Broadcast booking update
+      broadcastBookingUpdate(booking.id, booking.campaignId, booking.status);
+
       // Send notifications to advertiser and admin
       const [campaign, screen, admins] = await Promise.all([
         storage.getCampaign(booking.campaignId),
@@ -1318,6 +1335,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
+
+      // Broadcast booking update
+      broadcastBookingUpdate(booking.id, booking.campaignId, booking.status);
 
       // Send notifications to advertiser and admin
       const [campaign, screen, admins] = await Promise.all([

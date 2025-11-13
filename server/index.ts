@@ -15,7 +15,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupSecurity } from "./security";
 import { db, storage } from "./storage";
-import { setupWebSocket } from "./websocket";
+import { setupWebSocket, broadcastCampaignUpdate } from "./websocket";
 
 const app = express();
 
@@ -112,12 +112,14 @@ function startCampaignLifecycleScheduler() {
         if (campaign.status === "approved" && now >= startDate && now < endDate) {
           await storage.updateCampaignStatus(campaign.id, "live");
           console.log(`✅ Campaign ${campaign.id} updated to LIVE`);
+          broadcastCampaignUpdate(campaign.id, "live");
         }
         
         // live → completed (on end date)
         if (campaign.status === "live" && now >= endDate) {
           await storage.updateCampaignStatus(campaign.id, "completed");
           console.log(`✅ Campaign ${campaign.id} updated to COMPLETED`);
+          broadcastCampaignUpdate(campaign.id, "completed");
         }
       }
     } catch (error) {
