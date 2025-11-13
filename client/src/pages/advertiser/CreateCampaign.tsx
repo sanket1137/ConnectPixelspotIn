@@ -174,6 +174,7 @@ export default function CreateCampaign() {
   const [skipDurationRecalc, setSkipDurationRecalc] = useState(false);
   const [skipScreenRefetch, setSkipScreenRefetch] = useState(false);
   const [lockedDuration, setLockedDuration] = useState<number | null>(null);
+  const [fromCart, setFromCart] = useState(false); // Track if coming from Find Screens cart
   
   // Map state
   const [mapCenter, setMapCenter] = useState(defaultCenter);
@@ -239,7 +240,7 @@ export default function CreateCampaign() {
   const watchTargetAffluence = form.watch("targetAffluence");
   const watchTimePreference = form.watch("timePreference");
 
-  // Load pre-selected screens from localStorage (from Discover page)
+  // Load pre-selected screens from localStorage (from Find Screens cart)
   useEffect(() => {
     const SELECTED_SCREENS_KEY = "selectedScreenIds";
     const saved = localStorage.getItem(SELECTED_SCREENS_KEY);
@@ -247,26 +248,65 @@ export default function CreateCampaign() {
       try {
         const savedIds = JSON.parse(saved);
         if (Array.isArray(savedIds) && savedIds.length > 0) {
-          console.log("📦 Loading pre-selected screens from cart:", savedIds.length, "screens");
-          setSelectedScreenIds(savedIds);
+          console.log("🛒 Loading pre-selected screens from cart:", savedIds.length, "screens");
           
-          // Fetch full screen details for pre-selected screens
+          // Fetch full screen details using new by-ids endpoint
           const fetchPreselectedScreens = async () => {
             try {
-              const response = await apiRequest("GET", "/api/screens");
-              const allScreens = await response.json();
-              // Filter to only include pre-selected screens
-              const preselectedScreens = allScreens.filter((s: Screen) => savedIds.includes(s.id));
+              const idsParam = savedIds.join(',');
+              const response = await apiRequest("GET", `/api/screens/by-ids?ids=${idsParam}`);
+              const preselectedScreens = await response.json();
+              
               setScreensInArea(preselectedScreens);
-              console.log("✅ Loaded", preselectedScreens.length, "pre-selected screen details");
+              setSelectedScreenIds(savedIds);
+              setFromCart(true);
+              
+              // Calculate total budget from selected screens (7 days default)
+              const defaultDays = 7;
+              const totalCost = preselectedScreens.reduce((sum: number, screen: Screen) => {
+                return sum + (screen.pricePerDay * defaultDays * (screen.numberOfScreens || 1));
+              }, 0);
+              
+              // Set budget to calculated cost
+              form.setValue("budget", totalCost);
+              
+              // Set duration to 7 days
+              form.setValue("durationMode", "custom");
+              form.setValue("customDays", defaultDays);
+              setCalculatedDuration(defaultDays);
+              
+              // Calculate and set end date
+              const tomorrow = new Date();
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              const endDate = new Date(tomorrow);
+              endDate.setDate(endDate.getDate() + defaultDays);
+              form.setValue("endDate", endDate.toISOString().split('T')[0]);
+              
+              // Skip directly to Step 5 (Review & Upload Creative)
+              setCurrentStep(5);
+              setPlanMode("smart"); // Set to smart mode
+              
+              console.log("✅ Cart Mode Activated:", {
+                screens: preselectedScreens.length,
+                totalCost,
+                duration: defaultDays,
+                skippedToStep: 5
+              });
+              
+              toast({
+                title: "Screens Loaded from Cart",
+                description: `${preselectedScreens.length} screen(s) loaded. Skip to creative upload!`,
+              });
             } catch (error) {
-              console.error("Error fetching pre-selected screen details:", error);
+              console.error("❌ Error fetching pre-selected screen details:", error);
+              toast({
+                title: "Error Loading Cart",
+                description: "Could not load selected screens. Please try again.",
+                variant: "destructive",
+              });
             }
           };
           fetchPreselectedScreens();
-          
-          // Clear localStorage after loading to avoid conflicts
-          localStorage.removeItem(SELECTED_SCREENS_KEY);
         }
       } catch (error) {
         console.error("Error loading pre-selected screens:", error);
