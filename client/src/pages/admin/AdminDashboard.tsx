@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Users, Monitor, FileText, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,6 +34,7 @@ const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [runTour, setRunTour] = useState(false);
   
   const { data: stats, isLoading } = useQuery<DashboardStats>({
@@ -334,19 +336,31 @@ export default function AdminDashboard() {
           <CardTitle>Quick Actions</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
-          <button className="p-6 border border-border rounded-lg hover-elevate text-left transition-all">
+          <button 
+            onClick={() => setLocation("/admin/users")}
+            className="p-6 border border-border rounded-lg hover-elevate active-elevate-2 text-left transition-all"
+            data-testid="button-quick-manage-users"
+          >
             <Users className="h-8 w-8 text-primary mb-3" />
             <h3 className="font-semibold text-foreground mb-1">Manage Users</h3>
             <p className="text-sm text-muted-foreground">View and manage platform users</p>
           </button>
 
-          <button className="p-6 border border-border rounded-lg hover-elevate text-left transition-all">
+          <button 
+            onClick={() => setLocation("/admin/screens/new")}
+            className="p-6 border border-border rounded-lg hover-elevate active-elevate-2 text-left transition-all"
+            data-testid="button-quick-add-screen"
+          >
             <Monitor className="h-8 w-8 text-primary mb-3" />
             <h3 className="font-semibold text-foreground mb-1">Add Screen</h3>
             <p className="text-sm text-muted-foreground">Add admin-owned screens</p>
           </button>
 
-          <button className="p-6 border border-border rounded-lg hover-elevate text-left transition-all">
+          <button 
+            onClick={() => setLocation("/admin/analytics")}
+            className="p-6 border border-border rounded-lg hover-elevate active-elevate-2 text-left transition-all"
+            data-testid="button-quick-view-reports"
+          >
             <FileText className="h-8 w-8 text-primary mb-3" />
             <h3 className="font-semibold text-foreground mb-1">View Reports</h3>
             <p className="text-sm text-muted-foreground">Access analytics and insights</p>
