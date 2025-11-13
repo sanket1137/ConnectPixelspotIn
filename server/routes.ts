@@ -2059,6 +2059,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "OpenAI API key not configured" });
       }
 
+      // SECURITY: Check rate limits before processing
+      const { checkAIRequestLimit } = await import("./middleware/rate-limiter");
+      const rateLimitCheck = checkAIRequestLimit(userId);
+      
+      if (!rateLimitCheck.allowed) {
+        return res.status(429).json({
+          error: "Rate limit exceeded",
+          message: rateLimitCheck.reason,
+          resetAt: rateLimitCheck.resetAt,
+        });
+      }
+
       const { sendMessageToAdvisor } = await import("./ai-advisor-v2");
       
       const result = await sendMessageToAdvisor(
@@ -2069,6 +2081,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         websiteUrl,
         campaignType
       );
+      
+      // Add rate limit headers
+      res.setHeader('X-RateLimit-Remaining', rateLimitCheck.remaining.toString());
+      res.setHeader('X-RateLimit-Reset', rateLimitCheck.resetAt.toISOString());
       
       res.json(result);
     } catch (error: any) {
@@ -2203,6 +2219,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("[Admin AI Analytics] Error:", error);
       res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
+  /**
+   * Get AI security audit logs (admin only)
+   */
+  app.get("/api/admin/ai/audit-logs", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const { getRecentAuditLogs } = await import("./middleware/audit-logger");
+      const logs = getRecentAuditLogs(limit);
+      res.json({ logs });
+    } catch (error) {
+      console.error("[Admin AI Audit Logs] Error:", error);
+      res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+  });
+
+  /**
+   * Get AI security alerts (admin only)
+   */
+  app.get("/api/admin/ai/security-alerts", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const { getSecurityAlerts } = await import("./middleware/audit-logger");
+      const alerts = getSecurityAlerts(limit);
+      res.json({ alerts });
+    } catch (error) {
+      console.error("[Admin AI Security Alerts] Error:", error);
+      res.status(500).json({ error: "Failed to fetch security alerts" });
+    }
+  });
+
+  /**
+   * Get audit logs for specific user (admin only)
+   */
+  app.get("/api/admin/ai/audit-logs/:userId", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 100;
+      const { getAuditLogsForUser } = await import("./middleware/audit-logger");
+      const logs = getAuditLogsForUser(userId, limit);
+      res.json({ logs });
+    } catch (error) {
+      console.error("[Admin User Audit Logs] Error:", error);
+      res.status(500).json({ error: "Failed to fetch user audit logs" });
     }
   });
 
