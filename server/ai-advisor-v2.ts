@@ -878,7 +878,7 @@ export async function sendMessageToAdvisor(
   logAIRequest({
     timestamp: new Date(),
     userId,
-    userName: userDisplayName || 'Unknown User',
+    userName: `User ${userId.substring(0, 8)}`,
     userRole: 'advertiser',
     endpoint: '/api/ai/chat',
     conversationId: conversation.id,
