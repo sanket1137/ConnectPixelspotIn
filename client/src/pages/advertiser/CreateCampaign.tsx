@@ -586,6 +586,13 @@ export default function CreateCampaign() {
       setCampaignCreated(true);
       queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       
+      // Clear localStorage if coming from cart
+      if (fromCart) {
+        const SELECTED_SCREENS_KEY = "selectedScreenIds";
+        localStorage.removeItem(SELECTED_SCREENS_KEY);
+        console.log("🧹 Cleared cart selections from localStorage");
+      }
+      
       // Reset form and state after short delay
       setTimeout(() => {
         resetFormAndState();
@@ -2172,16 +2179,30 @@ export default function CreateCampaign() {
 
               {/* Navigation Buttons */}
               <div className="flex justify-between pt-6">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={prevStep}
-                  disabled={currentStep === 1}
-                  data-testid="button-previous"
-                >
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Previous
-                </Button>
+                <div className="flex gap-2">
+                  {fromCart && currentStep === 5 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setLocation("/advertiser/discover")}
+                      data-testid="button-back-to-find-screens"
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back to Find Screens
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={prevStep}
+                      disabled={currentStep === 1 || (fromCart && currentStep === 5)}
+                      data-testid="button-previous"
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Previous
+                    </Button>
+                  )}
+                </div>
 
                 <div className="flex gap-2">
                   {currentStep === steps.length && !campaignCreated && (
