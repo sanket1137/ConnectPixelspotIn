@@ -607,47 +607,50 @@ export default function DiscoverScreens() {
               >
                 {filteredScreens.map((screen) => {
                   const isSelected = selectedScreenIds.has(screen.id);
-                  const imageUrl = screen.images && screen.images.length > 0 
-                    ? screen.images[0] 
-                    : 'https://placehold.co/80x60/7c3aed/ffffff?text=Screen';
                   
-                  // Create custom SVG marker with embedded screen image
-                  const markerSvg = `
-                    <svg width="86" height="66" xmlns="http://www.w3.org/2000/svg">
+                  // Clean icon SVG for screen markers
+                  const iconSvg = `
+                    <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                      <!-- Drop shadow -->
                       <defs>
-                        <filter id="shadow-${screen.id}" x="-50%" y="-50%" width="200%" height="200%">
-                          <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
-                          <feOffset dx="0" dy="2" result="offsetblur"/>
+                        <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+                          <feGaussianBlur in="SourceAlpha" stdDeviation="1.5"/>
+                          <feOffset dx="0" dy="1" result="offsetblur"/>
                           <feComponentTransfer>
-                            <feFuncA type="linear" slope="0.3"/>
+                            <feFuncA type="linear" slope="0.4"/>
                           </feComponentTransfer>
                           <feMerge>
                             <feMergeNode/>
                             <feMergeNode in="SourceGraphic"/>
                           </feMerge>
                         </filter>
-                        <clipPath id="rounded-${screen.id}">
-                          <rect x="3" y="3" width="80" height="60" rx="6" ry="6"/>
-                        </clipPath>
                       </defs>
                       
-                      <!-- Outer border (white) -->
-                      <rect x="0" y="0" width="86" height="66" rx="8" ry="8" fill="white" filter="url(#shadow-${screen.id})"/>
+                      <!-- Screen background -->
+                      <rect x="8" y="10" width="32" height="22" rx="2" 
+                            fill="${isSelected ? '#10b981' : '#0d9488'}" 
+                            stroke="white" 
+                            stroke-width="2"
+                            filter="url(#shadow)"/>
                       
-                      <!-- Selection border (green if selected) -->
-                      <rect x="3" y="3" width="80" height="60" rx="6" ry="6" 
-                            fill="none" 
-                            stroke="${isSelected ? '#10b981' : '#ffffff'}" 
-                            stroke-width="3"/>
+                      <!-- Screen display area -->
+                      <rect x="10" y="12" width="28" height="18" 
+                            fill="${isSelected ? '#059669' : '#0f766e'}"
+                            rx="1"/>
                       
-                      <!-- Screen image -->
-                      <image 
-                        x="3" y="3" 
-                        width="80" height="60" 
-                        href="${imageUrl}"
-                        clip-path="url(#rounded-${screen.id})"
-                        preserveAspectRatio="xMidYMid slice"
-                      />
+                      <!-- Stand -->
+                      <rect x="20" y="32" width="8" height="2" 
+                            fill="${isSelected ? '#10b981' : '#0d9488'}"/>
+                      
+                      <!-- Base -->
+                      <rect x="16" y="34" width="16" height="3" rx="1" 
+                            fill="${isSelected ? '#10b981' : '#0d9488'}"/>
+                      
+                      <!-- Screen count badge if multi-screen -->
+                      ${screen.isMultiScreen && screen.numberOfScreens ? `
+                        <circle cx="38" cy="12" r="7" fill="#7c3aed" stroke="white" stroke-width="1.5"/>
+                        <text x="38" y="15" text-anchor="middle" fill="white" font-size="8" font-weight="bold">${screen.numberOfScreens}</text>
+                      ` : ''}
                     </svg>
                   `;
                   
@@ -657,9 +660,9 @@ export default function DiscoverScreens() {
                       position={{ lat: parseFloat(screen.latitude.toString()), lng: parseFloat(screen.longitude.toString()) }}
                       onClick={() => setSelectedScreen(screen)}
                       icon={{
-                        url: `data:image/svg+xml;base64,${btoa(markerSvg)}`,
-                        scaledSize: new google.maps.Size(86, 66),
-                        anchor: new google.maps.Point(43, 66),
+                        url: `data:image/svg+xml;base64,${btoa(iconSvg)}`,
+                        scaledSize: new google.maps.Size(48, 48),
+                        anchor: new google.maps.Point(24, 42),
                       }}
                     />
                   );
