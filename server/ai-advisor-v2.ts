@@ -389,6 +389,44 @@ Content: ${bodyText}`;
 }
 
 /**
+ * Normalize city name to handle variations (Bangalore/Bengaluru, Bombay/Mumbai, etc.)
+ */
+function normalizeCityName(cityName: string): string {
+  const cityMap: Record<string, string> = {
+    'bangalore': 'bengaluru',
+    'bombay': 'mumbai',
+    'madras': 'chennai',
+    'calcutta': 'kolkata',
+    'poona': 'pune',
+    'bengaluru': 'bengaluru',
+    'mumbai': 'mumbai',
+    'chennai': 'chennai',
+    'kolkata': 'kolkata',
+    'pune': 'pune',
+  };
+  
+  const normalized = cityMap[cityName.toLowerCase()];
+  return normalized || cityName.toLowerCase();
+}
+
+/**
+ * Check if city names match (handles variations like Bangalore/Bengaluru)
+ */
+function citiesMatch(screenCity: string, filterCity: string): boolean {
+  const normalizedScreenCity = normalizeCityName(screenCity);
+  const normalizedFilterCity = normalizeCityName(filterCity);
+  
+  // Check normalized names
+  if (normalizedScreenCity === normalizedFilterCity) {
+    return true;
+  }
+  
+  // Also check if one includes the other (for partial matches)
+  return normalizedScreenCity.includes(normalizedFilterCity) || 
+         normalizedFilterCity.includes(normalizedScreenCity);
+}
+
+/**
  * Search screens in database with intelligent scoring
  */
 async function searchScreensInDatabase(storage: IStorage, filters: SearchFilters): Promise<ScreenRecommendation[]> {
@@ -400,9 +438,9 @@ async function searchScreensInDatabase(storage: IStorage, filters: SearchFilters
   // Filter and score screens
   const scoredScreens = allScreens
     .filter(screen => {
-      // City filter (required)
+      // City filter (required) - now handles city name variations
       if (filters.cities && filters.cities.length > 0) {
-        if (!filters.cities.some(city => screen.city.toLowerCase().includes(city.toLowerCase()))) {
+        if (!filters.cities.some(city => citiesMatch(screen.city, city))) {
           return false;
         }
       }
