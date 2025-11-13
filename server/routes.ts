@@ -1683,6 +1683,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get screens by IDs (for cart pre-selection)
+  app.get("/api/screens/by-ids", authenticate, async (req, res) => {
+    try {
+      const { ids } = req.query;
+      
+      if (!ids || typeof ids !== 'string') {
+        return res.status(400).json({ error: "Screen IDs are required" });
+      }
+
+      const screenIds = ids.split(',').filter(id => id.trim());
+      
+      if (screenIds.length === 0) {
+        return res.json([]);
+      }
+
+      console.log(`🔍 [/api/screens/by-ids] Fetching ${screenIds.length} screens by IDs`);
+      
+      const allScreens = await storage.getApprovedScreens();
+      const selectedScreens = allScreens.filter(screen => screenIds.includes(screen.id));
+      
+      console.log(`   ✅ Found ${selectedScreens.length} screens`);
+      res.json(selectedScreens);
+    } catch (error) {
+      console.error("Get screens by IDs error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get campaigns (advertiser)
   app.get("/api/advertiser/campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
