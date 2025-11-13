@@ -671,7 +671,15 @@ export default function DiscoverScreens() {
                 {selectedScreen && (
                   <InfoWindow
                     position={{ lat: parseFloat(selectedScreen.latitude.toString()), lng: parseFloat(selectedScreen.longitude.toString()) }}
-                    onCloseClick={() => setSelectedScreen(null)}
+                    onCloseClick={() => {
+                      console.log('Closing InfoWindow for:', selectedScreen.name);
+                      console.log('Screen data:', {
+                        images: selectedScreen.images,
+                        screenImages: selectedScreen.screenImages,
+                        screen_images: (selectedScreen as any).screen_images
+                      });
+                      setSelectedScreen(null);
+                    }}
                     options={{
                       maxWidth: 350,
                       pixelOffset: new google.maps.Size(0, -10)
@@ -680,20 +688,35 @@ export default function DiscoverScreens() {
                     <div style={{ width: '320px', maxWidth: '320px' }}>
                       {/* Screen Image - LARGE */}
                       <div className="relative h-48 bg-gray-200 overflow-hidden rounded-md mb-3">
-                        {((selectedScreen.screenImages && selectedScreen.screenImages.length > 0) || (selectedScreen.images && selectedScreen.images.length > 0)) ? (
-                          <img
-                            src={(selectedScreen.screenImages?.[0] ?? selectedScreen.images?.[0]) || ''}
-                            alt={selectedScreen.name}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
-                            }}
-                          />
-                        ) : (
-                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e5e7eb' }}>
-                            <MapPin style={{ width: '48px', height: '48px', color: '#9ca3af' }} />
-                          </div>
-                        )}
+                        {(() => {
+                          const screenImageUrl = (selectedScreen as any).screen_images?.[0] ?? selectedScreen.screenImages?.[0] ?? selectedScreen.images?.[0];
+                          const hasImage = Boolean(screenImageUrl);
+                          
+                          console.log('🖼️ InfoWindow image check:', {
+                            screenName: selectedScreen.name,
+                            screen_images: (selectedScreen as any).screen_images,
+                            screenImages: selectedScreen.screenImages,
+                            images: selectedScreen.images,
+                            finalUrl: screenImageUrl,
+                            hasImage
+                          });
+                          
+                          return hasImage ? (
+                            <img
+                              src={screenImageUrl}
+                              alt={selectedScreen.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => {
+                                console.error('Image load error for:', screenImageUrl);
+                                e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
+                              }}
+                            />
+                          ) : (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e5e7eb' }}>
+                              <MapPin style={{ width: '48px', height: '48px', color: '#9ca3af' }} />
+                            </div>
+                          );
+                        })()}
                         <span style={{
                           position: 'absolute',
                           top: '8px',
