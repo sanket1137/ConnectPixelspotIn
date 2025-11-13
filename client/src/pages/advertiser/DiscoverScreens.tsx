@@ -680,9 +680,9 @@ export default function DiscoverScreens() {
                     <div style={{ width: '320px', maxWidth: '320px' }}>
                       {/* Screen Image - LARGE */}
                       <div className="relative h-48 bg-gray-200 overflow-hidden rounded-md mb-3">
-                        {selectedScreen.images && selectedScreen.images.length > 0 ? (
+                        {((selectedScreen.screenImages && selectedScreen.screenImages.length > 0) || (selectedScreen.images && selectedScreen.images.length > 0)) ? (
                           <img
-                            src={selectedScreen.images[0]}
+                            src={(selectedScreen.screenImages?.[0] ?? selectedScreen.images?.[0]) || ''}
                             alt={selectedScreen.name}
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             onError={(e) => {
