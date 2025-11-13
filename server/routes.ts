@@ -1667,7 +1667,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/advertiser/campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
       const campaigns = await storage.getCampaignsByAdvertiser(req.user!.id);
-      res.json(campaigns);
+      
+      // Enhance each campaign with booking statistics
+      const enhancedCampaigns = await Promise.all(
+        campaigns.map(async (campaign) => {
+          const campaignBookings = await storage.getBookingsByCampaign(campaign.id);
+          
+          const bookingStats = {
+            total: campaignBookings.length,
+            approved: campaignBookings.filter(b => b.status === "approved" || b.status === "active").length,
+            rejected: campaignBookings.filter(b => b.status === "owner_rejected" || b.status === "rejected").length,
+            pending: campaignBookings.filter(b => b.status === "pending_owner" || b.status === "owner_approved").length,
+          };
+          
+          return {
+            ...campaign,
+            bookingStats,
+          };
+        })
+      );
+      
+      res.json(enhancedCampaigns);
     } catch (error) {
       console.error("Get campaigns error:", error);
       res.status(500).json({ error: "Internal server error" });

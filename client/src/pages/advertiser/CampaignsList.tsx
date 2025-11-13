@@ -5,6 +5,15 @@ import { Badge } from "@/components/ui/badge";
 import { FileText, Calendar, DollarSign, Plus, Eye, Edit2, RefreshCw, AlertCircle } from "lucide-react";
 import { useLocation } from "wouter";
 import type { Campaign } from "@shared/schema";
+
+interface CampaignWithStats extends Campaign {
+  bookingStats?: {
+    total: number;
+    approved: number;
+    rejected: number;
+    pending: number;
+  };
+}
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
@@ -15,7 +24,7 @@ export default function CampaignsList() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
+  const { data: campaigns = [], isLoading } = useQuery<CampaignWithStats[]>({
     queryKey: ["/api/advertiser/campaigns"],
   });
 
@@ -54,6 +63,32 @@ export default function CampaignsList() {
       default:
         return "secondary";
     }
+  };
+
+  const getCampaignStatusDisplay = (campaign: CampaignWithStats): { text: string; variant: "default" | "secondary" | "destructive" | "outline" } => {
+    // If no booking stats, show basic status
+    if (!campaign.bookingStats || campaign.bookingStats.total === 0) {
+      return {
+        text: campaign.status,
+        variant: getStatusVariant(campaign.status) as "default" | "secondary" | "destructive" | "outline",
+      };
+    }
+
+    const { total, approved, rejected, pending } = campaign.bookingStats;
+
+    // Determine status text based on booking states
+    if (approved === total) {
+      return { text: `Approved (${approved}/${total})`, variant: "default" };
+    } else if (rejected === total) {
+      return { text: `Rejected (${rejected}/${total})`, variant: "destructive" };
+    } else if (approved > 0) {
+      return { text: `Partially Approved (${approved}/${total})`, variant: "secondary" };
+    } else if (pending > 0) {
+      return { text: `Pending (${pending}/${total})`, variant: "secondary" };
+    }
+
+    // Fallback
+    return { text: campaign.status, variant: getStatusVariant(campaign.status) as "default" | "secondary" | "destructive" | "outline" };
   };
 
   if (isLoading) {
@@ -110,9 +145,12 @@ export default function CampaignsList() {
                         <FileText className="h-6 w-6 text-primary" />
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
                           <h3 className="text-xl font-bold text-foreground">{campaign.name}</h3>
-                          <Badge variant={getStatusVariant(campaign.status)}>{campaign.status}</Badge>
+                          {(() => {
+                            const statusDisplay = getCampaignStatusDisplay(campaign);
+                            return <Badge variant={statusDisplay.variant} data-testid={`badge-status-${campaign.id}`}>{statusDisplay.text}</Badge>;
+                          })()}
                         </div>
                         <p className="text-sm text-muted-foreground capitalize">{campaign.objective.replace(/_/g, " ")}</p>
                       </div>
@@ -151,8 +189,11 @@ export default function CampaignsList() {
 
                       <div>
                         <p className="text-xs text-muted-foreground">Status</p>
-                        <p className="text-sm font-medium text-foreground capitalize">
-                          {campaign.status === "live" ? "Currently Running" : campaign.status}
+                        <p className="text-sm font-medium text-foreground">
+                          {(() => {
+                            const statusDisplay = getCampaignStatusDisplay(campaign);
+                            return statusDisplay.text;
+                          })()}
                         </p>
                       </div>
                     </div>
