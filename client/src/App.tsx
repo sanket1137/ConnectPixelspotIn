@@ -8,6 +8,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppSidebar } from "@/components/AppSidebar";
+import { useWebSocket } from "@/hooks/use-websocket";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
@@ -204,6 +205,9 @@ function Router() {
 function AuthenticatedLayout() {
   const { user } = useAuth();
   const [location] = useLocation();
+  
+  // Initialize WebSocket for real-time updates when user is authenticated
+  useWebSocket();
   
   // Check if current route should show sidebar
   const shouldShowSidebar = user && (
