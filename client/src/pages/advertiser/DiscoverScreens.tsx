@@ -201,7 +201,7 @@ export default function DiscoverScreens() {
       });
       return;
     }
-    setLocation("/advertiser/campaigns/new");
+    setLocation("/advertiser/quick-campaign");
   };
 
   return (

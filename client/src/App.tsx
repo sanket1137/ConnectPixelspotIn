@@ -30,6 +30,7 @@ import DiscoverScreens from "@/pages/advertiser/DiscoverScreens";
 import CampaignsList from "@/pages/advertiser/CampaignsList";
 import CampaignDetails from "@/pages/advertiser/CampaignDetails";
 import CreateCampaign from "@/pages/advertiser/CreateCampaign";
+import QuickCampaignFromCart from "@/pages/advertiser/QuickCampaignFromCart";
 import BookingManagement from "@/pages/advertiser/BookingManagement";
 import AICampaignAdvisor from "@/pages/advertiser/AICampaignAdvisor";
 import ComingSoon from "@/pages/ComingSoon";
@@ -159,6 +160,11 @@ function Router() {
       <Route path="/advertiser/discover">
         <AuthGuard allowedRoles={["advertiser"]}>
           <DiscoverScreens />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/quick-campaign">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <QuickCampaignFromCart />
         </AuthGuard>
       </Route>
       <Route path="/advertiser/campaigns">
