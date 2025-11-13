@@ -878,6 +878,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin chart data for active users and screen onboarding
+  app.get("/api/admin/chart-data", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const allScreens = await storage.getAllScreens();
+      const allCampaigns = await storage.getAllCampaigns();
+
+      // Last 7 days of active users
+      const last7Days = Array.from({length: 7}, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - (6 - i));
+        date.setHours(0, 0, 0, 0);
+        return date;
+      });
+
+      const activeUsersData = last7Days.map(date => {
+        const nextDay = new Date(date);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const activeCount = allUsers.filter(u => {
+          const createdAt = new Date(u.createdAt);
+          return createdAt < nextDay && u.status === "active";
+        }).length;
+        return {
+          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          users: activeCount,
+        };
+      });
+
+      // Screen onboarding progress
+      const activeScreens = allScreens.filter(s => s.status === "active").length;
+      const pendingScreens = allScreens.filter(s => s.status === "pending").length;
+      const inactiveScreens = allScreens.filter(s => s.status === "inactive").length;
+      
+      const screenProgressData = [
+        { status: "Active", count: activeScreens },
+        { status: "Pending", count: pendingScreens },
+        { status: "Inactive", count: inactiveScreens },
+      ];
+
+      // Advertiser portal visits (campaigns created as proxy metric)
+      const advertiserVisitsData = last7Days.map(date => {
+        const nextDay = new Date(date);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const campaignsCreated = allCampaigns.filter(c => {
+          const createdAt = new Date(c.createdAt);
+          return createdAt >= date && createdAt < nextDay;
+        }).length;
+        return {
+          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          visits: campaignsCreated,
+        };
+      });
+
+      res.json({
+        activeUsersData,
+        screenProgressData,
+        advertiserVisitsData,
+      });
+    } catch (error) {
+      console.error("Admin chart data error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get all users (admin only)
   app.get("/api/admin/users", authenticate, requireRole("admin"), async (req, res) => {
     try {
