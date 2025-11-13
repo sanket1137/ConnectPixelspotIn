@@ -275,27 +275,27 @@ export default function CreateCampaign() {
               form.setValue("customDays", defaultDays);
               setCalculatedDuration(defaultDays);
               
-              // Calculate and set end date
+              // Calculate and set end date (but allow user to change it)
               const tomorrow = new Date();
               tomorrow.setDate(tomorrow.getDate() + 1);
               const endDate = new Date(tomorrow);
               endDate.setDate(endDate.getDate() + defaultDays);
               form.setValue("endDate", endDate.toISOString().split('T')[0]);
               
-              // Skip directly to Step 5 (Review & Upload Creative)
-              setCurrentStep(5);
+              // Start at Step 1 - user will flow through: Step 1 → Step 3 → Step 6
+              setCurrentStep(1);
               setPlanMode("smart"); // Set to smart mode
               
               console.log("✅ Cart Mode Activated:", {
                 screens: preselectedScreens.length,
                 totalCost,
                 duration: defaultDays,
-                skippedToStep: 5
+                flow: "Step 1 → Step 3 → Step 6"
               });
               
               toast({
                 title: "Screens Loaded from Cart",
-                description: `${preselectedScreens.length} screen(s) loaded. Skip to creative upload!`,
+                description: `${preselectedScreens.length} screen(s) loaded. Set your campaign details!`,
               });
             } catch (error) {
               console.error("❌ Error fetching pre-selected screen details:", error);
@@ -762,12 +762,36 @@ export default function CreateCampaign() {
     }
 
     if (currentStep < steps.length) {
-      setCurrentStep(currentStep + 1);
+      // Smart navigation for cart mode: Step 1 → Step 3 → Step 6
+      if (fromCart) {
+        if (currentStep === 1) {
+          setCurrentStep(3); // Skip Step 2 (area selection)
+        } else if (currentStep === 3) {
+          setCurrentStep(6); // Skip Steps 4-5 (filters and plan)
+        } else {
+          setCurrentStep(currentStep + 1);
+        }
+      } else {
+        setCurrentStep(currentStep + 1);
+      }
     }
   };
 
   const prevStep = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
+    if (currentStep > 1) {
+      // Smart navigation for cart mode: Step 6 → Step 3 → Step 1
+      if (fromCart) {
+        if (currentStep === 6) {
+          setCurrentStep(3); // Back to duration
+        } else if (currentStep === 3) {
+          setCurrentStep(1); // Back to goal & budget
+        } else {
+          setCurrentStep(currentStep - 1);
+        }
+      } else {
+        setCurrentStep(currentStep - 1);
+      }
+    }
   };
 
   const progress = (currentStep / steps.length) * 100;
@@ -2180,7 +2204,7 @@ export default function CreateCampaign() {
               {/* Navigation Buttons */}
               <div className="flex justify-between pt-6">
                 <div className="flex gap-2">
-                  {fromCart && currentStep === 5 ? (
+                  {fromCart && currentStep === 1 ? (
                     <Button
                       type="button"
                       variant="outline"
@@ -2195,7 +2219,7 @@ export default function CreateCampaign() {
                       type="button"
                       variant="outline"
                       onClick={prevStep}
-                      disabled={currentStep === 1 || (fromCart && currentStep === 5)}
+                      disabled={currentStep === 1}
                       data-testid="button-previous"
                     >
                       <ArrowLeft className="mr-2 h-4 w-4" />
