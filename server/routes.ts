@@ -12,6 +12,7 @@ import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
 import { notificationService } from "./notifications";
 import multer from "multer";
 import { broadcastCampaignUpdate, broadcastBookingUpdate, broadcastScreenUpdate } from "./websocket";
+import { getAuthorizationUrl, getTokensFromCode, revokeToken } from "./googleOAuth";
 
 // Extend Express Request to include user
 declare global {
@@ -145,6 +146,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== AUTHENTICATION ROUTES ==========
+  
+  // Google OAuth - Initiate
+  app.get("/auth/google", (req, res) => {
+    try {
+      const role = req.query.role as 'screen_owner' | 'advertiser' | undefined;
+      
+      // Validate role if provided
+      if (role && role !== 'screen_owner' && role !== 'advertiser') {
+        return res.status(400).send('Invalid role. Must be "screen_owner" or "advertiser".');
+      }
+      
+      // Build redirect URI dynamically based on request
+      const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      const host = req.headers.host;
+      const redirectUri = `${protocol}://${host}/auth/google/callback`;
+      
+      console.log('🔐 Initiating Google OAuth with redirect URI:', redirectUri);
+      
+      // Get authorization URL
+      const authUrl = getAuthorizationUrl(redirectUri, role);
+      
+      // Redirect to Google
+      res.redirect(authUrl);
+    } catch (error) {
+      console.error('❌ OAuth initiation error:', error);
+      res.status(500).send('Failed to initiate Google authentication. Please try again.');
+    }
+  });
+  
+  // Google OAuth - Callback
+  app.get("/auth/google/callback", async (req, res) => {
+    try {
+      const { code, state, error } = req.query;
+      
+      // Check for OAuth errors
+      if (error) {
+        console.error('❌ OAuth error from Google:', error);
+        return res.redirect(`/login?error=${encodeURIComponent('Google authentication failed')}`);
+      }
+      
+      if (!code || !state) {
+        console.error('❌ Missing code or state parameter');
+        return res.redirect('/login?error=missing_parameters');
+      }
+      
+      // Build redirect URI (must match the one used in initiation)
+      const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      const host = req.headers.host;
+      const redirectUri = `${protocol}://${host}/auth/google/callback`;
+      
+      console.log('🔄 Processing OAuth callback...');
+      
+      // Exchange code for tokens and get user info
+      const { userInfo, role } = await getTokensFromCode(
+        code as string,
+        state as string,
+        redirectUri
+      );
+      
+      console.log('✅ User authenticated:', userInfo.email);
+      
+      // Check if user exists by email
+      let user = await storage.getUserByEmail(userInfo.email);
+      
+      if (!user) {
+        // Create new user account with Firebase Admin
+        console.log('📝 Creating new user account...');
+        
+        try {
+          // Create Firebase user
+          const firebaseUser = await firebaseAdmin.createUser({
+            email: userInfo.email,
+            emailVerified: userInfo.emailVerified,
+            displayName: userInfo.name,
+            photoURL: userInfo.picture,
+          });
+          
+          console.log('✅ Firebase user created:', firebaseUser.uid);
+          
+          // Create user in database
+          const userRole = role || "advertiser";
+          user = await storage.createUser({
+            email: userInfo.email,
+            name: userInfo.name,
+            role: userRole,
+            firebaseUid: firebaseUser.uid,
+            emailVerified: userInfo.emailVerified,
+            profileCompleted: false,
+          });
+          
+          console.log('✅ Database user created:', user.id);
+        } catch (firebaseError: any) {
+          // If user already exists in Firebase, try to find by UID
+          if (firebaseError.code === 'auth/email-already-exists') {
+            console.log('⚠️ Firebase user already exists, attempting to find...');
+            const existingFirebaseUser = await firebaseAdmin.getUserByEmail(userInfo.email);
+            
+            const userRole = role || "advertiser";
+            user = await storage.createUser({
+              email: userInfo.email,
+              name: userInfo.name,
+              role: userRole,
+              firebaseUid: existingFirebaseUser.uid,
+              emailVerified: userInfo.emailVerified,
+              profileCompleted: false,
+            });
+          } else {
+            throw firebaseError;
+          }
+        }
+      } else {
+        console.log('✅ Existing user found:', user.id);
+        
+        // Update email verification if needed
+        if (userInfo.emailVerified && !user.emailVerified) {
+          await storage.verifyUserEmail(user.id);
+        }
+      }
+      
+      // Create Firebase custom token for frontend authentication
+      const customToken = await firebaseAdmin.createCustomToken(user.firebaseUid!);
+      
+      console.log('✅ Custom token created for user:', user.email);
+      
+      // Redirect to frontend with token
+      // Frontend will use this token to sign in with Firebase
+      const redirectUrl = `/login?token=${encodeURIComponent(customToken)}`;
+      res.redirect(redirectUrl);
+      
+    } catch (error) {
+      console.error('❌ OAuth callback error:', error);
+      res.redirect('/login?error=authentication_failed');
+    }
+  });
   
   // Sign in / Sign up
   app.post("/api/auth/signin", async (req, res) => {
