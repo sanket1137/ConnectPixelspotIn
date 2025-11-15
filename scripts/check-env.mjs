@@ -3,42 +3,41 @@
 /**
  * Pre-build Environment Validation Script
  * Ensures all required environment variables are present before building
+ * Works with both .env.production files and Replit Secrets
  */
 
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
+import dotenv from 'dotenv';
 
 const ENV_FILE = resolve(process.cwd(), '.env.production');
 
 console.log('🔍 Validating environment configuration...\n');
 
-// Check if .env.production exists
-if (!existsSync(ENV_FILE)) {
-  console.error('❌ Error: .env.production file not found!');
-  console.error('Please create .env.production with all required variables');
-  process.exit(1);
-}
+// Load environment variables from .env.production if it exists
+// Otherwise, use process.env (Replit Secrets)
+let envVars = { ...process.env };
 
-// Load environment variables manually
-const envContent = readFileSync(ENV_FILE, 'utf-8');
-const envVars = {};
-envContent.split('\n').forEach(line => {
-  const trimmed = line.trim();
-  if (trimmed && !trimmed.startsWith('#')) {
-    const [key, ...valueParts] = trimmed.split('=');
-    if (key) {
-      envVars[key.trim()] = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
+if (existsSync(ENV_FILE)) {
+  console.log('📄 Loading variables from .env.production file...\n');
+  const envContent = readFileSync(ENV_FILE, 'utf-8');
+  envContent.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const [key, ...valueParts] = trimmed.split('=');
+      if (key) {
+        envVars[key.trim()] = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
+      }
     }
-  }
-});
+  });
+} else {
+  console.log('📦 Using environment variables from Replit Secrets/process.env...\n');
+}
 
 // Required VITE_ variables (build-time)
 const requiredViteVars = [
   'VITE_FIREBASE_API_KEY',
-  'VITE_FIREBASE_AUTH_DOMAIN',
   'VITE_FIREBASE_PROJECT_ID',
-  'VITE_FIREBASE_STORAGE_BUCKET',
-  'VITE_FIREBASE_MESSAGING_SENDER_ID',
   'VITE_FIREBASE_APP_ID',
   'VITE_GOOGLE_MAPS_API_KEY',
 ];
@@ -46,12 +45,22 @@ const requiredViteVars = [
 // Required runtime variables (server-side)
 const requiredRuntimeVars = [
   'DATABASE_URL',
-  'AWS_SES_FROM_EMAIL',
-  'AWS_SES_REGION',
   'SESSION_SECRET',
 ];
 
+// Optional but recommended variables
+const optionalVars = [
+  'VITE_FIREBASE_AUTH_DOMAIN',
+  'VITE_FIREBASE_STORAGE_BUCKET',
+  'VITE_FIREBASE_MESSAGING_SENDER_ID',
+  'AWS_SES_FROM_EMAIL',
+  'AWS_SES_REGION',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+];
+
 let hasErrors = false;
+let hasWarnings = false;
 
 // Check VITE_ variables
 console.log('Checking build-time variables (VITE_*):');
@@ -76,10 +85,25 @@ requiredRuntimeVars.forEach(varName => {
   }
 });
 
+console.log('\nChecking optional variables:');
+optionalVars.forEach(varName => {
+  if (envVars[varName]) {
+    console.log(`  ✅ ${varName}: SET`);
+  } else {
+    console.warn(`  ⚠️  ${varName}: NOT SET (optional)`);
+    hasWarnings = true;
+  }
+});
+
 if (hasErrors) {
   console.error('\n❌ Environment validation failed!');
-  console.error('Please add missing variables to .env.production');
+  console.error('Please add missing variables to Replit Secrets or .env.production');
   process.exit(1);
+}
+
+if (hasWarnings) {
+  console.log('\n⚠️  Some optional variables are not set');
+  console.log('The app will build but some features may not work');
 }
 
 console.log('\n✅ All required environment variables are set');
