@@ -244,9 +244,18 @@ function AuthenticatedLayout() {
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
-        <main className="flex-1 bg-background">
-          <Router />
-        </main>
+        <div className="flex flex-1 flex-col">
+          {/* Mobile-only header with hamburger menu */}
+          <header className="sticky top-0 z-50 flex h-14 items-center gap-4 border-b bg-background px-4 md:hidden">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <h1 className="text-lg font-semibold">Pixelspot</h1>
+          </header>
+          
+          {/* Main content area */}
+          <main className="flex-1 bg-background">
+            <Router />
+          </main>
+        </div>
       </div>
     </SidebarProvider>
   );
