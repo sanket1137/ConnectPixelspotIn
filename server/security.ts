@@ -22,11 +22,20 @@ export function setupSecurity(app: Express) {
   // Extract base domain ID for both .replit.dev and .repl.co
   const replitDomains: string[] = [];
   if (replitDevDomain) {
-    replitDomains.push(`https://${replitDevDomain}`);
-    // Also allow .repl.co variant
-    const replCoVariant = replitDevDomain.replace('.replit.dev', '.repl.co');
-    if (replCoVariant !== replitDevDomain) {
-      replitDomains.push(`https://${replCoVariant}`);
+    // Remove any https:// prefix and trailing slashes
+    const cleanDomain = replitDevDomain
+      .replace(/^https?:\/\//, '')
+      .replace(/\/$/, '');
+    
+    // Only add if it's actually a Replit domain (not a production domain)
+    if (cleanDomain.includes('replit.dev') || cleanDomain.includes('repl.co')) {
+      replitDomains.push(`https://${cleanDomain}`);
+      
+      // Also allow .repl.co variant if this is .replit.dev
+      const replCoVariant = cleanDomain.replace('.replit.dev', '.repl.co');
+      if (replCoVariant !== cleanDomain) {
+        replitDomains.push(`https://${replCoVariant}`);
+      }
     }
   }
   
