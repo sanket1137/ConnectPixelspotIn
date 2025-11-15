@@ -33,6 +33,10 @@ export default function Login() {
   const roleParam = urlParams.get('role');
   const defaultTab = roleParam === 'advertiser' ? 'signup' : 'login';
   
+  // Handle OAuth callback with custom token
+  const tokenParam = urlParams.get('token');
+  const errorParam = urlParams.get('error');
+  
   // Login form state
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -53,27 +57,54 @@ export default function Login() {
       else setLocation("/advertiser");
     }
   }, [user, setLocation]);
+  
+  // Handle OAuth callback
+  useEffect(() => {
+    if (tokenParam) {
+      // Sign in with custom token from backend OAuth
+      (async () => {
+        try {
+          const { signInWithCustomToken } = await import('firebase/auth');
+          const { auth } = await import('@/lib/firebase');
+          await signInWithCustomToken(auth, tokenParam);
+          
+          // Clear token from URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (error: any) {
+          console.error('OAuth token sign-in error:', error);
+          toast({
+            title: "Authentication failed",
+            description: "Failed to complete Google sign-in. Please try again.",
+            variant: "destructive",
+          });
+        }
+      })();
+    }
+    
+    if (errorParam) {
+      toast({
+        title: "Authentication failed",
+        description: decodeURIComponent(errorParam),
+        variant: "destructive",
+      });
+      // Clear error from URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [tokenParam, errorParam, toast]);
 
   const handleGoogleSignUp = () => {
     setShowRoleSelection(true);
   };
 
   const handleGoogleLogin = () => {
-    signInWithGoogle();
+    // Redirect to backend OAuth endpoint (no role specified for login)
+    window.location.href = '/auth/google';
   };
 
   const handleRoleSelect = async (role: "screen_owner" | "advertiser") => {
     setSelectedRole(role);
-    try {
-      await signInWithGoogle(role);
-      setShowRoleSelection(false);
-    } catch (error: any) {
-      toast({
-        title: "Sign up failed",
-        description: error.message || "Failed to sign up with Google",
-        variant: "destructive",
-      });
-    }
+    // Redirect to backend OAuth endpoint with role parameter
+    window.location.href = `/auth/google?role=${role}`;
   };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
