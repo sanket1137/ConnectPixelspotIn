@@ -5,14 +5,16 @@ import { verifyToken, auth as firebaseAdmin } from "./firebaseAdmin";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { User, Screen, Campaign, Booking } from "@shared/schema";
 import { db } from "./db";
-import { bookings } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { bookings, passwordResetTokens } from "@shared/schema";
+import { eq, and, gt } from "drizzle-orm";
 import { getCampaignAdvice } from "./ai-advisor";
 import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
 import { notificationService } from "./notifications";
 import multer from "multer";
 import { broadcastCampaignUpdate, broadcastBookingUpdate, broadcastScreenUpdate } from "./websocket";
 import { getAuthorizationUrl, getTokensFromCode, revokeToken } from "./googleOAuth";
+import { randomBytes } from "crypto";
+import { emailService } from "./email";
 
 // Extend Express Request to include user
 declare global {
@@ -405,6 +407,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, message: "Email verified successfully" });
     } catch (error) {
       console.error("Verify email OTP error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ========== PASSWORD RESET ROUTES ==========
+
+  // Request password reset (public - no authentication required)
+  app.post("/api/auth/request-password-reset", async (req, res) => {
+    try {
+      const { email, origin } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Verify user exists (but don't reveal if email doesn't exist for security)
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Return success anyway to prevent email enumeration
+        return res.json({ success: true, message: "If the email exists, a password reset link has been sent" });
+      }
+
+      // Generate secure random token
+      const token = randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+
+      // Store token in database
+      await db.insert(passwordResetTokens).values({
+        email,
+        token,
+        expiresAt,
+        used: false,
+      });
+
+      // Send password reset email with dynamic domain
+      const resetLink = `${origin || 'https://pixelspot.in'}/reset-password?token=${token}`;
+      await emailService.sendPasswordResetEmail(email, resetLink);
+
+      res.json({ success: true, message: "If the email exists, a password reset link has been sent" });
+    } catch (error) {
+      console.error("Request password reset error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Reset password with token (public - no authentication required)
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+      
+      if (!token || !newPassword) {
+        return res.status(400).json({ error: "Token and new password are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      // Find valid token
+      const [resetToken] = await db
+        .select()
+        .from(passwordResetTokens)
+        .where(
+          and(
+            eq(passwordResetTokens.token, token),
+            eq(passwordResetTokens.used, false),
+            gt(passwordResetTokens.expiresAt, new Date())
+          )
+        )
+        .limit(1);
+
+      if (!resetToken) {
+        return res.status(400).json({ error: "Invalid or expired reset token" });
+      }
+
+      // Get user by email
+      const user = await storage.getUserByEmail(resetToken.email);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Update password in Firebase
+      try {
+        await firebaseAdmin.updateUser(user.firebaseUid, {
+          password: newPassword,
+        });
+      } catch (firebaseError: any) {
+        console.error("Firebase password update error:", firebaseError);
+        return res.status(500).json({ error: "Failed to update password" });
+      }
+
+      // Mark token as used
+      await db
+        .update(passwordResetTokens)
+        .set({ used: true })
+        .where(eq(passwordResetTokens.token, token));
+
+      res.json({ success: true, message: "Password reset successfully" });
+    } catch (error) {
+      console.error("Reset password error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
