@@ -79,12 +79,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [queryClient]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("👤 Auth state changed:", user ? user.email : "null");
+      
+      if (user && !firebaseUser) {
+        // User just signed in - send to backend
+        console.log("🆕 New user detected, sending to backend...");
+        try {
+          const token = await user.getIdToken();
+          const role = localStorage.getItem('pendingRole') as "screen_owner" | "advertiser" | null;
+          localStorage.removeItem('pendingRole');
+          
+          console.log("📤 Sending sign-in request:", {
+            email: user.email,
+            name: user.displayName,
+            role: role || 'default'
+          });
+          
+          await apiRequest("POST", "/api/auth/signin", {
+            token,
+            email: user.email,
+            name: user.displayName,
+            role: role || undefined,
+          });
+          
+          console.log("✅ Backend sign-in successful");
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        } catch (error) {
+          console.error("❌ Backend sign-in failed:", error);
+        }
+      }
+      
       setFirebaseUser(user);
       setLoading(false);
     });
     return unsubscribe;
-  }, []);
+  }, [firebaseUser, queryClient]);
 
   // Fetch user data from our backend
   const { data: user } = useQuery<User>({
