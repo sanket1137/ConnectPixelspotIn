@@ -124,7 +124,7 @@ export function setupSecurity(app: Express) {
           "https://securetoken.googleapis.com",
           "https://*.firebaseio.com",
           "https://accounts.google.com",
-          process.env.REPLIT_DEV_DOMAIN ? `wss://${process.env.REPLIT_DEV_DOMAIN}` : '',
+          replitDomain ? `wss://${replitDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')}` : '',
         ].filter(Boolean),
         frameSrc: [
           "https://*.firebaseapp.com",
