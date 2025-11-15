@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { Loader2, CheckCircle, XCircle } from "lucide-react";
 export default function PasswordReset() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [resetToken, setResetToken] = useState<string>("");
   const [oobCode, setOobCode] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
@@ -20,12 +22,23 @@ export default function PasswordReset() {
   const [verifying, setVerifying] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string>("");
+  const [useCustomReset, setUseCustomReset] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
     const code = params.get("oobCode");
     const mode = params.get("mode");
 
+    // Check for custom token-based reset (new method)
+    if (token) {
+      setResetToken(token);
+      setUseCustomReset(true);
+      setLoading(false);
+      return;
+    }
+
+    // Fallback to Firebase oobCode-based reset (old method)
     if (!code || mode !== "resetPassword") {
       setError("Invalid password reset link");
       setLoading(false);
@@ -70,7 +83,17 @@ export default function PasswordReset() {
     setVerifying(true);
 
     try {
-      await confirmPasswordReset(auth, oobCode, newPassword);
+      if (useCustomReset) {
+        // Use custom backend password reset
+        await apiRequest("POST", "/api/auth/reset-password", {
+          token: resetToken,
+          newPassword,
+        });
+      } else {
+        // Use Firebase password reset
+        await confirmPasswordReset(auth, oobCode, newPassword);
+      }
+      
       setSuccess(true);
       toast({
         title: "Password reset successful",
@@ -84,7 +107,7 @@ export default function PasswordReset() {
       console.error("Error resetting password:", err);
       toast({
         title: "Error resetting password",
-        description: err.message || "Please try again or request a new reset link",
+        description: err.message || err.error || "Please try again or request a new reset link",
         variant: "destructive",
       });
     } finally {
@@ -156,7 +179,7 @@ export default function PasswordReset() {
         <CardHeader>
           <CardTitle>Reset Your Password</CardTitle>
           <CardDescription>
-            Enter a new password for {email}
+            {email ? `Enter a new password for ${email}` : 'Enter your new password below'}
           </CardDescription>
         </CardHeader>
         <CardContent>

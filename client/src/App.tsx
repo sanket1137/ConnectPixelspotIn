@@ -50,6 +50,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Login} />
       <Route path="/auth/action" component={PasswordReset} />
+      <Route path="/reset-password" component={PasswordReset} />
       
       {/* Email Verification Route (requires auth but not verified email) */}
       <Route path="/verify-email" component={EmailVerification} />
