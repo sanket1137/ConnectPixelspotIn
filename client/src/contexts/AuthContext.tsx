@@ -40,24 +40,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handleRedirectResult = async () => {
       try {
+        console.log("🔍 Checking for redirect result...");
         const result = await getRedirectResult(auth);
+        
         if (result) {
+          console.log("✅ Redirect result found:", result.user.email);
           const token = await result.user.getIdToken();
           const role = localStorage.getItem('pendingRole') as "screen_owner" | "advertiser" | null;
           localStorage.removeItem('pendingRole');
           
+          console.log("📤 Sending sign-in request to backend...", {
+            email: result.user.email,
+            name: result.user.displayName,
+            role: role || 'none'
+          });
+          
           // Send token to backend
-          await apiRequest("POST", "/api/auth/signin", {
+          const response = await apiRequest("POST", "/api/auth/signin", {
             token,
             email: result.user.email,
             name: result.user.displayName,
             role: role || undefined,
           });
           
+          console.log("✅ Sign-in successful:", response);
           queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        } else {
+          console.log("ℹ️ No redirect result found");
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("❌ Redirect result error:", error);
+        console.error("Error code:", error.code);
+        console.error("Error message:", error.message);
       }
     };
     
