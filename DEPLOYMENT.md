@@ -1,6 +1,6 @@
 # Pixelspot Production Deployment Guide
 
-Complete guide for deploying Pixelspot DOOH Advertising Platform on **Hetzner Ubuntu Server 22.04/24.04**
+Complete guide for deploying Pixelspot DOOH Advertising Platform on **Hetzner Ubuntu Server**, **Docker**, and **Replit Deployments**
 
 ---
 
@@ -8,15 +8,16 @@ Complete guide for deploying Pixelspot DOOH Advertising Platform on **Hetzner Ub
 
 1. [Prerequisites](#prerequisites)
 2. [Server Specifications](#server-specifications)
-3. [Quick Start (Automated)](#quick-start-automated)
-4. [Manual Setup (Step-by-Step)](#manual-setup-step-by-step)
-5. [Environment Variables](#environment-variables)
-6. [Database Setup](#database-setup)
-7. [Application Deployment](#application-deployment)
-8. [SSL/HTTPS Configuration](#ssl-https-configuration)
-9. [Monitoring & Maintenance](#monitoring--maintenance)
-10. [Backup & Recovery](#backup--recovery)
-11. [Troubleshooting](#troubleshooting)
+3. [Docker Deployment (Recommended)](#docker-deployment-recommended)
+4. [Quick Start (Automated PM2)](#quick-start-automated-pm2)
+5. [Manual Setup (Step-by-Step PM2)](#manual-setup-step-by-step-pm2)
+6. [Environment Variables](#environment-variables)
+7. [Database Setup](#database-setup)
+8. [Application Deployment](#application-deployment)
+9. [SSL/HTTPS Configuration](#ssl-https-configuration)
+10. [Monitoring & Maintenance](#monitoring--maintenance)
+11. [Backup & Recovery](#backup--recovery)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -68,7 +69,163 @@ Complete guide for deploying Pixelspot DOOH Advertising Platform on **Hetzner Ub
 
 ---
 
-## Quick Start (Automated)
+## Docker Deployment (Recommended)
+
+### Prerequisites for Docker
+- Docker 20.10+ and Docker Compose installed
+- PostgreSQL database (hosted separately or cloud provider like Neon)
+- All required environment variables configured
+
+### Quick Docker Setup
+
+```bash
+# 1. SSH into your server
+ssh root@YOUR_SERVER_IP
+
+# 2. Install Docker and Docker Compose
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo apt install docker-compose-plugin -y
+
+# 3. Clone the repository
+git clone https://github.com/YOUR_ORG/pixelspot.git
+cd pixelspot
+
+# 4. Configure environment variables
+cp .env.example .env
+nano .env  # Fill in all required credentials
+
+# 5. Build and start the application
+docker-compose up -d
+
+# 6. View logs
+docker-compose logs -f pixelspot
+
+# 7. Verify application is running
+curl http://localhost:5000/api/health
+```
+
+### Docker Files Created
+
+The following Docker files are now available:
+
+- **Dockerfile**: Multi-stage production build
+- **docker-compose.yml**: Single instance orchestration
+- **.dockerignore**: Excludes unnecessary files from build
+- **.env.example**: Template for all environment variables
+
+### Docker Management Commands
+
+```bash
+# View running containers
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+
+# Restart application
+docker-compose restart
+
+# Stop application
+docker-compose down
+
+# Update application
+git pull
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Access container shell
+docker-compose exec pixelspot sh
+
+# Run database migrations
+docker-compose exec pixelspot npm run db:push
+```
+
+### Docker + Nginx Reverse Proxy
+
+```bash
+# Install Nginx on host
+sudo apt install nginx -y
+
+# Create Nginx configuration
+sudo nano /etc/nginx/sites-available/pixelspot
+```
+
+Add this configuration:
+
+```nginx
+server {
+    listen 80;
+    server_name adsmanager.pixelspot.in;
+
+    location / {
+        proxy_pass http://localhost:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+```bash
+# Enable site and restart Nginx
+sudo ln -s /etc/nginx/sites-available/pixelspot /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+
+# Setup SSL with Let's Encrypt
+sudo apt install certbot python3-certbot-nginx -y
+sudo certbot --nginx -d adsmanager.pixelspot.in
+```
+
+### Docker Environment Configuration
+
+All environment variables must be set in the `.env` file. See `.env.example` for complete list.
+
+**Critical variables for Docker deployment:**
+
+```env
+# Application
+NODE_ENV=production
+PORT=5000
+
+# Database (use your PostgreSQL connection string)
+DATABASE_URL=postgresql://user:password@host:5432/pixelspot
+
+# Firebase
+FIREBASE_PROJECT_ID=your-project
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk@...
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# All other variables from .env.example
+```
+
+### Scaling with Docker (Future)
+
+Currently configured for single instance. To scale:
+
+```bash
+# Option 1: Docker Compose scale (requires session store like Redis)
+docker-compose up -d --scale pixelspot=3
+
+# Option 2: Kubernetes deployment
+# Migrate to K8s for advanced orchestration
+
+# Option 3: Use managed container services
+# - AWS ECS/Fargate
+# - Google Cloud Run
+# - Azure Container Instances
+```
+
+---
+
+## Quick Start (Automated PM2)
 
 For experienced teams, use our automated scripts:
 
@@ -103,7 +260,7 @@ Continue to [SSL/HTTPS Configuration](#ssl-https-configuration) for HTTPS setup.
 
 ---
 
-## Manual Setup (Step-by-Step)
+## Manual Setup (Step-by-Step PM2)
 
 ### Step 1: Initial Server Setup
 
