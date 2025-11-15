@@ -8,10 +8,8 @@ if (!admin.apps.length) {
     if (privateKey) {
       // Remove surrounding quotes if present
       privateKey = privateKey.replace(/^["']|["']$/g, '');
-      // Remove backslash before actual newlines (e.g., "\<newline>" -> "<newline>")
-      privateKey = privateKey.replace(/\\\n/g, '\n');
-      // Also replace double-escaped newlines if present (e.g., "\\n" -> "\n")
-      privateKey = privateKey.replace(/\\\\n/g, '\n');
+      // Replace escaped newlines with actual newlines (\\n -> \n)
+      privateKey = privateKey.replace(/\\n/g, '\n');
       // Trim any whitespace
       privateKey = privateKey.trim();
     }
