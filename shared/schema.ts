@@ -351,6 +351,21 @@ export const insertAiRateLimitSchema = createInsertSchema(aiRateLimits).omit({
   id: true,
 });
 
+// Password Reset Tokens table
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -375,3 +390,6 @@ export type InsertAiMessage = z.infer<typeof insertAiMessageSchema>;
 
 export type AiRateLimit = typeof aiRateLimits.$inferSelect;
 export type InsertAiRateLimit = z.infer<typeof insertAiRateLimitSchema>;
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;

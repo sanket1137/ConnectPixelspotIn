@@ -280,6 +280,162 @@ If you didn't request this, ignore this email.
 © 2025 Pixelspot
     `.trim();
   }
+
+  async sendPasswordResetEmail(email: string, resetLink: string): Promise<boolean> {
+    const html = this.generatePasswordResetEmailHTML(resetLink);
+    const text = this.generatePasswordResetEmailText(resetLink);
+
+    return this.sendEmail({
+      to: email,
+      subject: 'Reset Your Pixelspot Password',
+      html,
+      text,
+    });
+  }
+
+  private generatePasswordResetEmailHTML(resetLink: string): string {
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                background-color: #f5f5f5;
+                margin: 0;
+                padding: 20px;
+            }
+            .container {
+                max-width: 600px;
+                margin: 0 auto;
+                background-color: #ffffff;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            }
+            .header {
+                background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+                color: #ffffff;
+                padding: 30px 20px;
+                text-align: center;
+            }
+            .logo-text {
+                font-size: 28px;
+                font-weight: 700;
+                margin: 0;
+                letter-spacing: -0.5px;
+            }
+            .tagline {
+                font-size: 14px;
+                margin: 5px 0 0 0;
+                opacity: 0.9;
+            }
+            .content {
+                padding: 40px 30px;
+            }
+            h2 {
+                color: #0d9488;
+                margin-top: 0;
+                font-size: 24px;
+            }
+            p {
+                color: #333;
+                line-height: 1.6;
+                margin: 15px 0;
+            }
+            .reset-button {
+                display: inline-block;
+                background-color: #0d9488;
+                color: #ffffff !important;
+                padding: 14px 32px;
+                text-decoration: none;
+                border-radius: 6px;
+                margin: 20px 0;
+                font-weight: 600;
+                text-align: center;
+            }
+            .reset-button:hover {
+                background-color: #0f766e;
+            }
+            .link-box {
+                background-color: #f0fdf4;
+                border: 1px solid #bbf7d0;
+                border-radius: 6px;
+                padding: 15px;
+                margin: 20px 0;
+                word-break: break-all;
+            }
+            .footer {
+                text-align: center;
+                color: #666;
+                font-size: 14px;
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid #eee;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 class="logo-text">Pixelspot</h1>
+                <p class="tagline">Digital Outdoor Advertising</p>
+            </div>
+            <div class="content">
+            
+            <h2>Reset Your Password</h2>
+            <p>We received a request to reset your password for your Pixelspot account.</p>
+            
+            <p>Click the button below to reset your password:</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="${resetLink}" class="reset-button">Reset Password</a>
+            </div>
+            
+            <p>Or copy and paste this link into your browser:</p>
+            <div class="link-box">
+                <a href="${resetLink}" style="color: #0d9488; text-decoration: none;">${resetLink}</a>
+            </div>
+            
+            <p><strong>Important:</strong></p>
+            <ul style="color: #666; line-height: 1.8;">
+                <li>This link expires in 1 hour for your security</li>
+                <li>If you didn't request a password reset, you can safely ignore this email</li>
+                <li>Your password won't change until you create a new one</li>
+            </ul>
+            
+            <div class="footer">
+                <p>Need help? Contact us at support@pixelspot.in</p>
+                <p>&copy; 2025 Pixelspot. All rights reserved.</p>
+            </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+  }
+
+  private generatePasswordResetEmailText(resetLink: string): string {
+    return `
+Reset Your Pixelspot Password
+
+We received a request to reset your password for your Pixelspot account.
+
+Click the link below to reset your password:
+${resetLink}
+
+This link expires in 1 hour for your security.
+
+If you didn't request a password reset, you can safely ignore this email.
+Your password won't change until you create a new one.
+
+Need help? Contact us at support@pixelspot.in
+
+© 2025 Pixelspot
+    `.trim();
+  }
 }
 
 export const emailService = new AWSEmailService();
