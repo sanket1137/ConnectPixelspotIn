@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { GoogleMap, useLoadScript, Marker, InfoWindow } from "@react-google-maps/api";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Search, Plus, Check, ShoppingCart, Trash2, List, Map as MapIcon, X, AlertTriangle } from "lucide-react";
+import { MapPin, Search, Plus, Check, ShoppingCart, Trash2, List, Map as MapIcon, X, AlertTriangle, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { Screen } from "@shared/schema";
@@ -53,6 +53,7 @@ export default function DiscoverScreens() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [currentPage, setCurrentPage] = useState(1);
   const [showCart, setShowCart] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const itemsPerPage = 12;
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -68,7 +69,7 @@ export default function DiscoverScreens() {
     maxPrice: "",
   });
 
-  const [center] = useState(defaultCenter);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
   // Load selected screens and view preference from localStorage
   useEffect(() => {
@@ -88,6 +89,33 @@ export default function DiscoverScreens() {
     setViewMode(mode);
     localStorage.setItem(VIEW_PREFERENCE_KEY, mode);
   };
+
+  // Auto-fit map bounds when filtered screens change
+  useEffect(() => {
+    if (!mapRef.current || !isLoaded || viewMode !== "map" || filteredScreens.length === 0) {
+      return;
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+    
+    filteredScreens.forEach((screen) => {
+      if (screen.latitude && screen.longitude) {
+        bounds.extend(new google.maps.LatLng(screen.latitude, screen.longitude));
+      }
+    });
+
+    // Fit bounds to show all filtered screens
+    mapRef.current.fitBounds(bounds);
+
+    // If only one screen, set a reasonable zoom level
+    if (filteredScreens.length === 1) {
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.setZoom(13);
+        }
+      }, 100);
+    }
+  }, [filteredScreens, isLoaded, viewMode]);
 
   const { data: screens = [] } = useQuery<Screen[]>({
     queryKey: ["/api/screens", filters],
@@ -204,6 +232,151 @@ export default function DiscoverScreens() {
     setLocation("/advertiser/quick-campaign");
   };
 
+  // Filter panel component (reusable for both desktop and mobile)
+  const FilterPanel = () => (
+    <>
+      {/* Filter Row 1: Location and Categories */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+        {/* State Dropdown */}
+        <Select 
+          value={filters.state} 
+          onValueChange={(value) => setFilters({ ...filters, state: value === "all" ? "" : value, city: "" })}
+        >
+          <SelectTrigger data-testid="select-state">
+            <SelectValue placeholder="All States" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All States</SelectItem>
+            {locations?.states.map((state) => (
+              <SelectItem key={state} value={state}>{state}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* City Dropdown */}
+        <Select 
+          value={filters.city} 
+          onValueChange={(value) => setFilters({ ...filters, city: value === "all" ? "" : value })}
+        >
+          <SelectTrigger data-testid="select-city">
+            <SelectValue placeholder="All Cities" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Cities</SelectItem>
+            {availableCities.map((city) => (
+              <SelectItem key={city} value={city}>{city}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Venue Category Dropdown */}
+        <Select 
+          value={filters.venueCategory} 
+          onValueChange={(value) => setFilters({ ...filters, venueCategory: value === "all" ? "" : value })}
+        >
+          <SelectTrigger data-testid="select-venue-category">
+            <SelectValue placeholder="All Venues" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Venues</SelectItem>
+            {venueCategoryOptions.map((category) => (
+              <SelectItem key={category} value={category}>{category}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Screen Category Dropdown */}
+        <Select 
+          value={filters.screenCategory} 
+          onValueChange={(value) => setFilters({ ...filters, screenCategory: value === "all" ? "" : value })}
+        >
+          <SelectTrigger data-testid="select-screen-category">
+            <SelectValue placeholder="All Screen Types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Screen Types</SelectItem>
+            {screenCategoryOptions.map((category) => (
+              <SelectItem key={category} value={category}>{category}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Environment Type Dropdown */}
+        <Select 
+          value={filters.environmentType} 
+          onValueChange={(value) => setFilters({ ...filters, environmentType: value === "all" ? "" : value })}
+        >
+          <SelectTrigger data-testid="select-environment-type">
+            <SelectValue placeholder="All Environments" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Environments</SelectItem>
+            {environmentTypeOptions.map((type) => (
+              <SelectItem key={type} value={type}>{type}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Filter Row 2: Traffic Type, Price Range, and Clear */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        {/* Traffic Type Dropdown */}
+        <Select 
+          value={filters.trafficType} 
+          onValueChange={(value) => setFilters({ ...filters, trafficType: value === "all" ? "" : value })}
+        >
+          <SelectTrigger data-testid="select-traffic-type">
+            <SelectValue placeholder="All Traffic Types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Traffic Types</SelectItem>
+            {trafficTypeOptions.map((type) => (
+              <SelectItem key={type} value={type}>{type}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Min Price Input */}
+        <Input
+          type="number"
+          placeholder="Min Price ₹"
+          value={filters.minPrice}
+          onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
+          data-testid="input-min-price"
+        />
+
+        {/* Max Price Input */}
+        <Input
+          type="number"
+          placeholder="Max Price ₹"
+          value={filters.maxPrice}
+          onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
+          data-testid="input-max-price"
+        />
+
+        {/* Clear Filters Button */}
+        <Button
+          variant="outline"
+          size="default"
+          onClick={() => setFilters({ 
+            state: "", 
+            city: "", 
+            venueCategory: "", 
+            screenCategory: "", 
+            environmentType: "", 
+            trafficType: "", 
+            minPrice: "", 
+            maxPrice: "" 
+          })}
+          data-testid="button-clear-filters"
+        >
+          <X className="h-4 w-4 mr-2" />
+          Clear All
+        </Button>
+      </div>
+    </>
+  );
+
   return (
     <div className="h-screen flex flex-col">
       {/* Top Header with Filters */}
@@ -211,28 +384,49 @@ export default function DiscoverScreens() {
         <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
           {/* View Toggle and Results Count Row */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            {/* View Toggle */}
-            <div className="flex items-center gap-2 bg-muted rounded-lg p-1 w-fit">
-              <Button
-                variant={viewMode === "list" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => handleViewModeChange("list")}
-                data-testid="button-list-view"
-                className="gap-2"
-              >
-                <List className="h-4 w-4" />
-                <span className="hidden xs:inline">List</span>
-              </Button>
-              <Button
-                variant={viewMode === "map" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => handleViewModeChange("map")}
-                data-testid="button-map-view"
-                className="gap-2"
-              >
-                <MapIcon className="h-4 w-4" />
-                <span className="hidden xs:inline">Map</span>
-              </Button>
+            {/* Left side: View Toggle and Mobile Filters Button */}
+            <div className="flex items-center gap-2">
+              {/* View Toggle */}
+              <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+                <Button
+                  variant={viewMode === "list" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => handleViewModeChange("list")}
+                  data-testid="button-list-view"
+                  className="gap-2"
+                >
+                  <List className="h-4 w-4" />
+                  <span className="hidden xs:inline">List</span>
+                </Button>
+                <Button
+                  variant={viewMode === "map" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => handleViewModeChange("map")}
+                  data-testid="button-map-view"
+                  className="gap-2"
+                >
+                  <MapIcon className="h-4 w-4" />
+                  <span className="hidden xs:inline">Map</span>
+                </Button>
+              </div>
+
+              {/* Mobile Filters Button */}
+              <Sheet open={showFilters} onOpenChange={setShowFilters}>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2 md:hidden" data-testid="button-mobile-filters">
+                    <SlidersHorizontal className="h-4 w-4" />
+                    <span>Filters</span>
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-full sm:w-[400px] overflow-y-auto">
+                  <SheetHeader>
+                    <SheetTitle>Filter Screens</SheetTitle>
+                  </SheetHeader>
+                  <div className="mt-6 space-y-4">
+                    <FilterPanel />
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
 
             {/* Results Count and Cart */}
@@ -303,144 +497,9 @@ export default function DiscoverScreens() {
             </div>
           </div>
 
-          {/* Filter Row 1: Location and Categories */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-            {/* State Dropdown */}
-            <Select 
-              value={filters.state} 
-              onValueChange={(value) => setFilters({ ...filters, state: value === "all" ? "" : value, city: "" })}
-            >
-              <SelectTrigger data-testid="select-state">
-                <SelectValue placeholder="All States" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All States</SelectItem>
-                {locations?.states.map((state) => (
-                  <SelectItem key={state} value={state}>{state}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* City Dropdown */}
-            <Select 
-              value={filters.city} 
-              onValueChange={(value) => setFilters({ ...filters, city: value === "all" ? "" : value })}
-            >
-              <SelectTrigger data-testid="select-city">
-                <SelectValue placeholder="All Cities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Cities</SelectItem>
-                {availableCities.map((city) => (
-                  <SelectItem key={city} value={city}>{city}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Venue Category Dropdown */}
-            <Select 
-              value={filters.venueCategory} 
-              onValueChange={(value) => setFilters({ ...filters, venueCategory: value === "all" ? "" : value })}
-            >
-              <SelectTrigger data-testid="select-venue-category">
-                <SelectValue placeholder="All Venues" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Venues</SelectItem>
-                {venueCategoryOptions.map((category) => (
-                  <SelectItem key={category} value={category}>{category}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Screen Category Dropdown */}
-            <Select 
-              value={filters.screenCategory} 
-              onValueChange={(value) => setFilters({ ...filters, screenCategory: value === "all" ? "" : value })}
-            >
-              <SelectTrigger data-testid="select-screen-category">
-                <SelectValue placeholder="All Screen Types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Screen Types</SelectItem>
-                {screenCategoryOptions.map((category) => (
-                  <SelectItem key={category} value={category}>{category}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Environment Type Dropdown */}
-            <Select 
-              value={filters.environmentType} 
-              onValueChange={(value) => setFilters({ ...filters, environmentType: value === "all" ? "" : value })}
-            >
-              <SelectTrigger data-testid="select-environment-type">
-                <SelectValue placeholder="All Environments" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Environments</SelectItem>
-                {environmentTypeOptions.map((type) => (
-                  <SelectItem key={type} value={type}>{type}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Filter Row 2: Traffic Type, Price Range, and Clear */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            {/* Traffic Type Dropdown */}
-            <Select 
-              value={filters.trafficType} 
-              onValueChange={(value) => setFilters({ ...filters, trafficType: value === "all" ? "" : value })}
-            >
-              <SelectTrigger data-testid="select-traffic-type">
-                <SelectValue placeholder="All Traffic Types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Traffic Types</SelectItem>
-                {trafficTypeOptions.map((type) => (
-                  <SelectItem key={type} value={type}>{type}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Min Price Input */}
-            <Input
-              type="number"
-              placeholder="Min Price ₹"
-              value={filters.minPrice}
-              onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
-              data-testid="input-min-price"
-            />
-
-            {/* Max Price Input */}
-            <Input
-              type="number"
-              placeholder="Max Price ₹"
-              value={filters.maxPrice}
-              onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
-              data-testid="input-max-price"
-            />
-
-            {/* Clear Filters Button */}
-            <Button
-              variant="outline"
-              size="default"
-              onClick={() => setFilters({ 
-                state: "", 
-                city: "", 
-                venueCategory: "", 
-                screenCategory: "", 
-                environmentType: "", 
-                trafficType: "", 
-                minPrice: "", 
-                maxPrice: "" 
-              })}
-              data-testid="button-clear-filters"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Clear All
-            </Button>
+          {/* Desktop-only inline filters */}
+          <div className="hidden md:block space-y-3">
+            <FilterPanel />
           </div>
         </div>
       </div>
@@ -594,10 +653,14 @@ export default function DiscoverScreens() {
             ) : (
               <GoogleMap
                 mapContainerStyle={mapContainerStyle}
-                center={center}
+                center={defaultCenter}
                 zoom={11}
-                onCenterChanged={() => {}}
-                onZoomChanged={() => {}}
+                onLoad={(map) => {
+                  mapRef.current = map;
+                }}
+                onUnmount={() => {
+                  mapRef.current = null;
+                }}
                 options={{
                   zoomControl: true,
                   streetViewControl: false,
