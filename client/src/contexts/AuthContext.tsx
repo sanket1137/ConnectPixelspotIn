@@ -4,8 +4,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut, 
-  onAuthStateChanged,
-  sendPasswordResetEmail
+  onAuthStateChanged
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
