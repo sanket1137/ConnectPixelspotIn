@@ -50,21 +50,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInMutation = useMutation({
     mutationFn: async (role?: "screen_owner" | "advertiser") => {
-      const result = await signInWithPopup(auth, googleProvider);
-      const token = await result.user.getIdToken();
-      
-      // Send token to backend to create/update user
-      const response = await apiRequest("POST", "/api/auth/signin", {
-        token,
-        email: result.user.email,
-        name: result.user.displayName,
-        role: role || undefined,
-      });
-      
-      return response;
+      try {
+        const result = await signInWithPopup(auth, googleProvider);
+        const token = await result.user.getIdToken();
+        
+        // Send token to backend to create/update user
+        const response = await apiRequest("POST", "/api/auth/signin", {
+          token,
+          email: result.user.email,
+          name: result.user.displayName,
+          role: role || undefined,
+        });
+        
+        return response;
+      } catch (error: any) {
+        console.error("❌ Google Sign-in Error:", error);
+        console.error("Error code:", error.code);
+        console.error("Error message:", error.message);
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+    onError: (error: any) => {
+      console.error("❌ Sign-in mutation failed:", error);
     },
   });
 
