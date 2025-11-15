@@ -127,7 +127,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signUpEmailMutation.mutateAsync({ email, password, name, role });
     },
     resetPassword: async (email: string) => {
-      await sendPasswordResetEmail(auth, email);
+      const actionCodeSettings = {
+        url: `${window.location.origin}/auth/action`,
+        handleCodeInApp: true,
+      };
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
     },
     signOut: async () => {
       await signOutMutation.mutateAsync();
