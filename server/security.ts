@@ -17,25 +17,23 @@ import type { Express } from 'express';
 
 export function setupSecurity(app: Express) {
   // 1. CORS Configuration - Restrict to specific origins
-  const replitDevDomain = process.env.REPLIT_DEV_DOMAIN;
+  const replitDomain = process.env.REPLIT_DOMAINS; // Replit provides this automatically
   
   // Extract base domain ID for both .replit.dev and .repl.co
   const replitDomains: string[] = [];
-  if (replitDevDomain) {
+  if (replitDomain) {
     // Remove any https:// prefix and trailing slashes
-    const cleanDomain = replitDevDomain
+    const cleanDomain = replitDomain
       .replace(/^https?:\/\//, '')
       .replace(/\/$/, '');
     
-    // Only add if it's actually a Replit domain (not a production domain)
-    if (cleanDomain.includes('replit.dev') || cleanDomain.includes('repl.co')) {
-      replitDomains.push(`https://${cleanDomain}`);
-      
-      // Also allow .repl.co variant if this is .replit.dev
-      const replCoVariant = cleanDomain.replace('.replit.dev', '.repl.co');
-      if (replCoVariant !== cleanDomain) {
-        replitDomains.push(`https://${replCoVariant}`);
-      }
+    // Add the .replit.dev domain
+    replitDomains.push(`https://${cleanDomain}`);
+    
+    // Also allow .repl.co variant
+    const replCoVariant = cleanDomain.replace('.replit.dev', '.repl.co');
+    if (replCoVariant !== cleanDomain) {
+      replitDomains.push(`https://${replCoVariant}`);
     }
   }
   
