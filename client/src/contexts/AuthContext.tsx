@@ -1,15 +1,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { 
   User as FirebaseUser, 
-  signInWithRedirect,
-  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut, 
   onAuthStateChanged,
   sendPasswordResetEmail
 } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
@@ -18,7 +16,6 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   user: User | null;
   loading: boolean;
-  signInWithGoogle: (role?: "screen_owner" | "advertiser") => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, name: string, role: "screen_owner" | "advertiser") => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -33,88 +30,21 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pendingRole, setPendingRole] = useState<"screen_owner" | "advertiser" | null>(null);
   const queryClient = useQueryClient();
-
-  // Handle redirect result on page load
-  useEffect(() => {
-    const handleRedirectResult = async () => {
-      try {
-        console.log("🔍 Checking for redirect result...");
-        const result = await getRedirectResult(auth);
-        
-        if (result) {
-          console.log("✅ Redirect result found:", result.user.email);
-          const token = await result.user.getIdToken();
-          const role = localStorage.getItem('pendingRole') as "screen_owner" | "advertiser" | null;
-          localStorage.removeItem('pendingRole');
-          
-          console.log("📤 Sending sign-in request to backend...", {
-            email: result.user.email,
-            name: result.user.displayName,
-            role: role || 'none'
-          });
-          
-          // Send token to backend
-          const response = await apiRequest("POST", "/api/auth/signin", {
-            token,
-            email: result.user.email,
-            name: result.user.displayName,
-            role: role || undefined,
-          });
-          
-          console.log("✅ Sign-in successful:", response);
-          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-        } else {
-          console.log("ℹ️ No redirect result found");
-        }
-      } catch (error: any) {
-        console.error("❌ Redirect result error:", error);
-        console.error("Error code:", error.code);
-        console.error("Error message:", error.message);
-      }
-    };
-    
-    handleRedirectResult();
-  }, [queryClient]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log("👤 Auth state changed:", user ? user.email : "null");
-      
-      if (user && !firebaseUser) {
-        // User just signed in - send to backend
-        console.log("🆕 New user detected, sending to backend...");
-        try {
-          const token = await user.getIdToken();
-          const role = localStorage.getItem('pendingRole') as "screen_owner" | "advertiser" | null;
-          localStorage.removeItem('pendingRole');
-          
-          console.log("📤 Sending sign-in request:", {
-            email: user.email,
-            name: user.displayName,
-            role: role || 'default'
-          });
-          
-          await apiRequest("POST", "/api/auth/signin", {
-            token,
-            email: user.email,
-            name: user.displayName,
-            role: role || undefined,
-          });
-          
-          console.log("✅ Backend sign-in successful");
-          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-        } catch (error) {
-          console.error("❌ Backend sign-in failed:", error);
-        }
-      }
-      
       setFirebaseUser(user);
       setLoading(false);
+      
+      // Invalidate user query to refetch from backend
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      }
     });
     return unsubscribe;
-  }, [firebaseUser, queryClient]);
+  }, [queryClient]);
 
   // Fetch user data from our backend
   const { data: user } = useQuery<User>({
@@ -122,24 +52,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     enabled: !!firebaseUser,
   });
 
-  const signInMutation = useMutation({
-    mutationFn: async (role?: "screen_owner" | "advertiser") => {
-      try {
-        // Store role in localStorage for after redirect
-        if (role) {
-          localStorage.setItem('pendingRole', role);
-        }
-        // Use redirect mode instead of popup (more reliable for production)
-        await signInWithRedirect(auth, googleProvider);
-      } catch (error: any) {
-        console.error("❌ Google Sign-in Error:", error);
-        console.error("Error code:", error.code);
-        console.error("Error message:", error.message);
-        localStorage.removeItem('pendingRole');
-        throw error;
-      }
-    },
-  });
 
   const signInEmailMutation = useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
@@ -207,10 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextType = {
     firebaseUser,
     user: user || null,
-    loading: loading || signInMutation.isPending || signInEmailMutation.isPending || signUpEmailMutation.isPending,
-    signInWithGoogle: async (role?: "screen_owner" | "advertiser") => { 
-      await signInMutation.mutateAsync(role);
-    },
+    loading: loading || signInEmailMutation.isPending || signUpEmailMutation.isPending,
     signInWithEmail: async (email: string, password: string) => { 
       await signInEmailMutation.mutateAsync({ email, password });
     },
