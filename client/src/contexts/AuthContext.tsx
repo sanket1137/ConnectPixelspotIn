@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { 
   User as FirebaseUser, 
-  signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut, 
@@ -32,7 +33,36 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingRole, setPendingRole] = useState<"screen_owner" | "advertiser" | null>(null);
   const queryClient = useQueryClient();
+
+  // Handle redirect result on page load
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const token = await result.user.getIdToken();
+          const role = localStorage.getItem('pendingRole') as "screen_owner" | "advertiser" | null;
+          localStorage.removeItem('pendingRole');
+          
+          // Send token to backend
+          await apiRequest("POST", "/api/auth/signin", {
+            token,
+            email: result.user.email,
+            name: result.user.displayName,
+            role: role || undefined,
+          });
+          
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        }
+      } catch (error) {
+        console.error("❌ Redirect result error:", error);
+      }
+    };
+    
+    handleRedirectResult();
+  }, [queryClient]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -51,30 +81,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInMutation = useMutation({
     mutationFn: async (role?: "screen_owner" | "advertiser") => {
       try {
-        const result = await signInWithPopup(auth, googleProvider);
-        const token = await result.user.getIdToken();
-        
-        // Send token to backend to create/update user
-        const response = await apiRequest("POST", "/api/auth/signin", {
-          token,
-          email: result.user.email,
-          name: result.user.displayName,
-          role: role || undefined,
-        });
-        
-        return response;
+        // Store role in localStorage for after redirect
+        if (role) {
+          localStorage.setItem('pendingRole', role);
+        }
+        // Use redirect mode instead of popup (more reliable for production)
+        await signInWithRedirect(auth, googleProvider);
       } catch (error: any) {
         console.error("❌ Google Sign-in Error:", error);
         console.error("Error code:", error.code);
         console.error("Error message:", error.message);
+        localStorage.removeItem('pendingRole');
         throw error;
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    },
-    onError: (error: any) => {
-      console.error("❌ Sign-in mutation failed:", error);
     },
   });
 
