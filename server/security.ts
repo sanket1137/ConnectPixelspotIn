@@ -97,6 +97,8 @@ export function setupSecurity(app: Express) {
           "'unsafe-eval'", // Required for Vite in development
           "https://maps.googleapis.com",
           "https://www.gstatic.com",
+          "https://apis.google.com",
+          "https://accounts.google.com",
         ],
         styleSrc: [
           "'self'",
