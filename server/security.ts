@@ -35,6 +35,7 @@ export function setupSecurity(app: Express) {
         'https://pixelspot.in',
         'https://www.pixelspot.in',
         'https://connect.pixelspot.in',
+        'https://adsmanager.pixelspot.in',
         ...replitDomains,
       ].filter(Boolean)
     : [
