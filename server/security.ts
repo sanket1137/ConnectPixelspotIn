@@ -19,17 +19,28 @@ export function setupSecurity(app: Express) {
   // 1. CORS Configuration - Restrict to specific origins
   const replitDevDomain = process.env.REPLIT_DEV_DOMAIN;
   
+  // Extract base domain ID for both .replit.dev and .repl.co
+  const replitDomains: string[] = [];
+  if (replitDevDomain) {
+    replitDomains.push(`https://${replitDevDomain}`);
+    // Also allow .repl.co variant
+    const replCoVariant = replitDevDomain.replace('.replit.dev', '.repl.co');
+    if (replCoVariant !== replitDevDomain) {
+      replitDomains.push(`https://${replCoVariant}`);
+    }
+  }
+  
   const allowedOrigins = process.env.NODE_ENV === 'production'
     ? [
         'https://pixelspot.in',
         'https://www.pixelspot.in',
         'https://connect.pixelspot.in',
-        replitDevDomain ? `https://${replitDevDomain}` : '',
+        ...replitDomains,
       ].filter(Boolean)
     : [
         'http://localhost:5000',
         'http://127.0.0.1:5000',
-        replitDevDomain ? `https://${replitDevDomain}` : '',
+        ...replitDomains,
       ].filter(Boolean);
 
   console.log('🔧 CORS Configuration:', { 
