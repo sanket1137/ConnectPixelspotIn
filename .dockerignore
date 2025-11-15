@@ -1,0 +1,80 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Environment files (will be provided separately)
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Build outputs (will be created during build)
+dist
+build
+.output
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage
+.nyc_output
+*.test.js
+*.spec.js
+__tests__
+__mocks__
+
+# Documentation
+*.md
+docs
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Logs
+logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp
+temp
+*.tmp
+
+# Development scripts
+scripts/*.ps1
+deploy.ps1
+create-admin-users.ts
+
+# Database migrations (if needed, can be removed from ignore)
+# drizzle
+
+# Replit specific
+.replit
+replit.nix
+.config
+replit.md

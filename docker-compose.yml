@@ -1,0 +1,68 @@
+version: '3.9'
+
+services:
+  # Pixelspot Application (Single Instance)
+  pixelspot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: pixelspot-app
+    restart: unless-stopped
+    
+    # Load all environment variables from .env file
+    env_file:
+      - .env
+    
+    # Override specific environment variables if needed
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+    
+    # Expose port 5000 to host
+    ports:
+      - "5000:5000"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Volumes for persistent data
+    volumes:
+      # Application logs
+      - ./logs:/app/logs:rw
+      # If you need to persist uploaded files (optional)
+      # - ./uploads:/app/uploads:rw
+    
+    # Resource limits (adjust based on your server capacity)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Network
+    networks:
+      - pixelspot-network
+
+networks:
+  pixelspot-network:
+    driver: bridge
+    name: pixelspot-network
+
+# Note: PostgreSQL database is hosted separately on your server
+# Connect using DATABASE_URL environment variable in .env file
