@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     resetPassword: async (email: string) => {
       const actionCodeSettings = {
-        url: `${window.location.origin}/login`,
+        url: `${window.location.origin}/auth/action`,
       };
       await sendPasswordResetEmail(auth, email, actionCodeSettings);
     },
