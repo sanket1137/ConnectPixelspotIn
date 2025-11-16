@@ -40,15 +40,22 @@ const VENUE_TYPES = [
   'College',
 ];
 
-// City images mapping
-const CITY_IMAGES: Record<string, string> = {
-  'Mumbai': 'https://images.unsplash.com/photo-1566552881560-0be862a7c445?w=400',
-  'Delhi': 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400',
-  'Bengaluru': 'https://images.unsplash.com/photo-1596176530529-78163a4f7af2?w=400',
-  'Bangalore': 'https://images.unsplash.com/photo-1596176530529-78163a4f7af2?w=400',
-  'Bangalore South': 'https://images.unsplash.com/photo-1596176530529-78163a4f7af2?w=400',
-  'Gurgaon': 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400',
-  'Surat': 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=400',
+// Generate consistent gradient colors for cities based on city name
+const getCityGradient = (cityName: string): string => {
+  // Hash the city name to get a consistent number
+  let hash = 0;
+  for (let i = 0; i < cityName.length; i++) {
+    hash = cityName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // Generate hue from hash (0-360)
+  const hue = Math.abs(hash % 360);
+  
+  // Create two complementary hues for gradient
+  const hue1 = hue;
+  const hue2 = (hue + 60) % 360;
+  
+  return `linear-gradient(135deg, hsl(${hue1}, 70%, 45%) 0%, hsl(${hue2}, 75%, 35%) 100%)`;
 };
 
 export default function PublicHome() {
