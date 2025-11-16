@@ -95,11 +95,23 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-6 border-b border-sidebar-border">
-        <img 
-          src={logo} 
-          alt="PixelSpot" 
-          className="w-40 h-auto mb-2"
-        />
+        <div className="flex items-start justify-between mb-2">
+          <img 
+            src={logo} 
+            alt="PixelSpot" 
+            className="w-40 h-auto"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            data-testid="button-refresh-sidebar"
+            className="h-8 w-8 -mt-1"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
         <p className="text-xs text-muted-foreground mt-1">
           {isAdmin ? "Admin Portal" : isScreenOwner ? "Screen Owner Portal" : "Advertiser Portal"}
         </p>
@@ -134,16 +146,6 @@ export function AppSidebar() {
             <p className="text-xs font-medium text-sidebar-accent-foreground">{user?.name}</p>
             <p className="text-xs text-muted-foreground">{user?.email}</p>
           </div>
-          <Button
-            variant="ghost"
-            className="w-full justify-start"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            data-testid="button-refresh-sidebar"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Refresh Data
-          </Button>
           <Button
             variant="ghost"
             className="w-full justify-start"
