@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Sidebar,
@@ -28,14 +29,19 @@ import {
   UserCircle,
   MessageSquare,
   Shield,
+  RefreshCw,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
 import logo from "@assets/pixelspot-logo.png";
 
 export function AppSidebar() {
   const { user, signOut, isAdmin, isScreenOwner, isAdvertiser } = useAuth();
   const [location, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
@@ -69,6 +75,22 @@ export function AppSidebar() {
   ];
 
   const items = isAdmin ? adminItems : isScreenOwner ? ownerItems : advertiserItems;
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    
+    // Invalidate all queries to refetch fresh data
+    await queryClient.invalidateQueries();
+    
+    // Brief delay to show the animation
+    setTimeout(() => {
+      setIsRefreshing(false);
+      toast({
+        title: "Refreshed",
+        description: "All data has been updated",
+      });
+    }, 500);
+  };
 
   return (
     <Sidebar>
@@ -112,6 +134,16 @@ export function AppSidebar() {
             <p className="text-xs font-medium text-sidebar-accent-foreground">{user?.name}</p>
             <p className="text-xs text-muted-foreground">{user?.email}</p>
           </div>
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            data-testid="button-refresh-sidebar"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh Data
+          </Button>
           <Button
             variant="ghost"
             className="w-full justify-start"
