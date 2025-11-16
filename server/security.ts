@@ -149,7 +149,13 @@ export function setupSecurity(app: Express) {
           "https://www.google.co.in",
           "https://stats.g.doubleclick.net",
           "https://googleads.g.doubleclick.net",
+          "https://pixelspot.in",
+          "https://www.pixelspot.in",
+          "https://connect.pixelspot.in",
+          "https://adsmanager.pixelspot.in",
+          "https://www.adsmanager.pixelspot.in",
           replitDomain ? `wss://${replitDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')}` : '',
+          ...replitDomains,
         ].filter(Boolean),
         frameSrc: [
           "https://*.firebaseapp.com",
