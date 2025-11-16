@@ -40,7 +40,7 @@ const VENUE_TYPES = [
   'College',
 ];
 
-// Generate consistent gradient colors for cities based on city name
+// Generate consistent pastel gradient colors for cities based on city name
 const getCityGradient = (cityName: string): string => {
   // Hash the city name to get a consistent number
   let hash = 0;
@@ -51,11 +51,11 @@ const getCityGradient = (cityName: string): string => {
   // Generate hue from hash (0-360)
   const hue = Math.abs(hash % 360);
   
-  // Create two complementary hues for gradient
+  // Create two complementary hues for gradient (pastel colors: low saturation, high lightness)
   const hue1 = hue;
-  const hue2 = (hue + 60) % 360;
+  const hue2 = (hue + 40) % 360;
   
-  return `linear-gradient(135deg, hsl(${hue1}, 70%, 45%) 0%, hsl(${hue2}, 75%, 35%) 100%)`;
+  return `linear-gradient(135deg, hsl(${hue1}, 45%, 70%) 0%, hsl(${hue2}, 50%, 65%) 100%)`;
 };
 
 export default function PublicHome() {
@@ -299,10 +299,10 @@ export default function PublicHome() {
                     className="relative h-32 sm:h-40 overflow-hidden transition-transform group-hover:scale-105"
                     style={{ background: gradient }}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
-                      <h3 className="font-bold text-white text-sm sm:text-base mb-1">{city}</h3>
-                      <p className="text-xs text-white/90 flex items-center gap-1">
+                      <h3 className="font-bold text-white text-sm sm:text-base mb-1 drop-shadow-lg">{city}</h3>
+                      <p className="text-xs text-white/95 flex items-center gap-1 drop-shadow-md">
                         <Monitor className="w-3 h-3" />
                         {count} {count === 1 ? 'Screen' : 'Screens'}
                       </p>
