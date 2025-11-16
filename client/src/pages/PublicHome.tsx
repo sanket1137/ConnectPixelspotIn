@@ -296,12 +296,12 @@ export default function PublicHome() {
                   data-testid={`card-city-${city}`}
                 >
                   <div 
-                    className="relative h-32 sm:h-40 overflow-hidden transition-transform group-hover:scale-105"
+                    className="relative h-20 sm:h-24 overflow-hidden transition-transform group-hover:scale-105"
                     style={{ background: gradient }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                    <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
-                      <h3 className="font-bold text-white text-sm sm:text-base mb-1 drop-shadow-lg">{city}</h3>
+                    <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3">
+                      <h3 className="font-bold text-white text-sm sm:text-base mb-0.5 drop-shadow-lg">{city}</h3>
                       <p className="text-xs text-white/95 flex items-center gap-1 drop-shadow-md">
                         <Monitor className="w-3 h-3" />
                         {count} {count === 1 ? 'Screen' : 'Screens'}
