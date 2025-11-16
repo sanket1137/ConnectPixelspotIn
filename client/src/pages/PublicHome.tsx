@@ -14,7 +14,7 @@ import railwayImg from "@assets/Gemini_Generated_Image_wfa0lrwfa0lrwfa0_17632778
 import airportLargeImg from "@assets/Gemini_Generated_Image_pla8lvpla8lvpla8_1763277847120.png";
 import airportKioskImg from "@assets/Gemini_Generated_Image_ladsi7ladsi7lads_1763277847120.png";
 import corporateImg from "@assets/Gemini_Generated_Image_fjsgtufjsgtufjsg_1763277847121.png";
-import streetBillboardImg from "@assets/Gemini_Generated_Image_iv6mx4iv6mx4iv6m_1763278104633.png";
+import streetBillboardImg from "@assets/Gemini_Generated_Image_iv6mx4iv6mx4iv6m_1763277847121.png";
 import gymImg from "@assets/Gemini_Generated_Image_58c0x558c0x558c0_1763278104633.png";
 import residentialImg from "@assets/Gemini_Generated_Image_a8c8zna8c8zna8c8_1763278104633.png";
 import cafeImg from "@assets/Gemini_Generated_Image_gkftp9gkftp9gkft_1763278160282.png";
