@@ -106,6 +106,7 @@ export function setupSecurity(app: Express) {
           "'self'",
           "'unsafe-inline'",
           "https://fonts.googleapis.com",
+          "https://releases.transloadit.com",
         ],
         fontSrc: [
           "'self'",

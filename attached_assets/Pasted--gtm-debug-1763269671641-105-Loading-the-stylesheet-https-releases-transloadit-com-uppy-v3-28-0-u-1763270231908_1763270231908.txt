@@ -1,0 +1,18 @@
+?gtm_debug=1763269671641:105 Loading the stylesheet 'https://releases.transloadit.com/uppy/v3.28.0/uppy.min.css' violates the following Content Security Policy directive: "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com". Note that 'style-src-elem' was not explicitly set, so 'style-src' is used as a fallback. The action has been blocked.Understand this error
+?gtm_debug=1763269671641:131 Loading the script 'https://www.googletagmanager.com/gtm.js?id=GTM-MCQBL4QS' violates the following Content Security Policy directive: "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://www.gstatic.com https://apis.google.com https://accounts.google.com". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked.
+(anonymous) @ ?gtm_debug=1763269671641:131Understand this error
+tag_assistant_api_bin.js:3 Connecting to 'https://www.googletagmanager.com/gtag/js?id=DUMMY' violates the following Content Security Policy directive: "connect-src 'self' https://maps.googleapis.com https://firebaseinstallations.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.firebaseio.com https://accounts.google.com wss://2c97fda3-cb94-4e87-a86f-5b5302003619-00-2smyvlew0u15p.riker.replit.dev". The action has been blocked.
+B @ tag_assistant_api_bin.js:3Understand this error
+tag_assistant_api_bin.js:3 Fetch API cannot load https://www.googletagmanager.com/gtag/js?id=DUMMY. Refused to connect because it violates the document's Content Security Policy.
+B @ tag_assistant_api_bin.js:3Understand this error
+?gtm_debug=1763269671641:1 Loading the stylesheet 'https://releases.transloadit.com/uppy/v3.28.0/uppy.min.css' violates the following Content Security Policy directive: "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com". Note that 'style-src-elem' was not explicitly set, so 'style-src' is used as a fallback. The action has been blocked.Understand this error
+client:536 WebSocket connection to 'wss://2c97fda3-cb94-4e87-a86f-5b5302003619-00-2smyvlew0u15p.riker.repl.co/?token=UZQ8xakRP8dt' failed: 
+setupWebSocket @ client:536Understand this error
+client:536 Uncaught (in promise) SyntaxError: Failed to construct 'WebSocket': The URL 'wss://localhost:undefined/?token=UZQ8xakRP8dt' is invalid.
+    at setupWebSocket (client:536:19)
+    at fallback (client:509:16)
+    at WebSocket.<anonymous> (client:555:7)
+setupWebSocket @ client:536
+fallback @ client:509
+(anonymous) @ client:555Understand this error
+chunk-RPCDYKBN.js?v=4b5d8a72:21551 
