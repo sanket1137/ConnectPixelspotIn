@@ -101,6 +101,9 @@ export function setupSecurity(app: Express) {
           "https://accounts.google.com",
           "https://www.googletagmanager.com",
           "https://*.google-analytics.com",
+          "https://www.google.com",
+          "https://*.doubleclick.net",
+          "https://googleads.g.doubleclick.net",
         ],
         styleSrc: [
           "'self'",
@@ -122,6 +125,9 @@ export function setupSecurity(app: Express) {
           "https://maps.gstatic.com",
           "https://www.googletagmanager.com",
           "https://*.google-analytics.com",
+          "https://www.google.com",
+          "https://*.doubleclick.net",
+          "https://stats.g.doubleclick.net",
         ],
         connectSrc: [
           "'self'",
@@ -134,6 +140,10 @@ export function setupSecurity(app: Express) {
           "https://www.googletagmanager.com",
           "https://*.google-analytics.com",
           "https://*.analytics.google.com",
+          "https://www.google.com",
+          "https://*.doubleclick.net",
+          "https://stats.g.doubleclick.net",
+          "https://region1.google-analytics.com",
           replitDomain ? `wss://${replitDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')}` : '',
         ].filter(Boolean),
         frameSrc: [
