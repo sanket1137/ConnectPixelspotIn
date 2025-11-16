@@ -286,7 +286,7 @@ export default function PublicHome() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
             {cities.map((city) => {
               const count = cityCounts[city] || 0;
-              const imageUrl = CITY_IMAGES[city] || 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400';
+              const gradient = getCityGradient(city);
               
               return (
                 <Card
@@ -295,16 +295,11 @@ export default function PublicHome() {
                   onClick={() => handleCityClick(city)}
                   data-testid={`card-city-${city}`}
                 >
-                  <div className="relative h-32 sm:h-40 overflow-hidden">
-                    <img
-                      src={imageUrl}
-                      alt={city}
-                      className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=' + encodeURIComponent(city);
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+                  <div 
+                    className="relative h-32 sm:h-40 overflow-hidden transition-transform group-hover:scale-105"
+                    style={{ background: gradient }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
                       <h3 className="font-bold text-white text-sm sm:text-base mb-1">{city}</h3>
                       <p className="text-xs text-white/90 flex items-center gap-1">
