@@ -18,6 +18,7 @@ import streetBillboardImg from "@assets/Gemini_Generated_Image_iv6mx4iv6mx4iv6m_
 import gymImg from "@assets/Gemini_Generated_Image_58c0x558c0x558c0_1763278104633.png";
 import residentialImg from "@assets/Gemini_Generated_Image_a8c8zna8c8zna8c8_1763278104633.png";
 import cafeImg from "@assets/Gemini_Generated_Image_gkftp9gkftp9gkft_1763278160282.png";
+import discoverHeroImg from "@assets/Gemini_Generated_Image_a8c8zna8c8zna8c8_1763278499067.png";
 
 interface PublicScreensResponse {
   cities: string[];
@@ -458,7 +459,7 @@ export default function PublicHome() {
             <div className="relative mt-8 lg:mt-0">
               <div className="relative rounded-2xl overflow-hidden border border-primary/20 shadow-2xl">
                 <img 
-                  src="https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800" 
+                  src={discoverHeroImg} 
                   alt="Digital billboard in urban setting"
                   className="w-full h-auto"
                 />
