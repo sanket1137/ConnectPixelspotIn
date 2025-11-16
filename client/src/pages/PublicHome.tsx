@@ -10,6 +10,14 @@ import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filte
 import { Link } from 'wouter';
 import type { Screen, User } from '@shared/schema';
 import logo from "@assets/pixelspot-logo.png";
+import railwayImg from "@assets/Gemini_Generated_Image_wfa0lrwfa0lrwfa0_1763277847119.png";
+import airportLargeImg from "@assets/Gemini_Generated_Image_pla8lvpla8lvpla8_1763277847120.png";
+import airportKioskImg from "@assets/Gemini_Generated_Image_ladsi7ladsi7lads_1763277847120.png";
+import corporateImg from "@assets/Gemini_Generated_Image_fjsgtufjsgtufjsg_1763277847121.png";
+import streetBillboardImg from "@assets/Gemini_Generated_Image_iv6mx4iv6mx4iv6m_1763278104633.png";
+import gymImg from "@assets/Gemini_Generated_Image_58c0x558c0x558c0_1763278104633.png";
+import residentialImg from "@assets/Gemini_Generated_Image_a8c8zna8c8zna8c8_1763278104633.png";
+import cafeImg from "@assets/Gemini_Generated_Image_gkftp9gkftp9gkft_1763278160282.png";
 
 interface PublicScreensResponse {
   cities: string[];
@@ -339,7 +347,7 @@ export default function PublicHome() {
             data-testid="card-network-highway"
           >
             <img
-              src="https://images.unsplash.com/photo-1449844908441-8829872d2607?w=800"
+              src={streetBillboardImg}
               alt="Road Side Media"
               className="w-full h-full object-cover transition-transform group-hover:scale-110"
             />
@@ -358,7 +366,7 @@ export default function PublicHome() {
             data-testid="card-network-airport"
           >
             <img
-              src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800"
+              src={airportLargeImg}
               alt="Airport"
               className="w-full h-full object-cover transition-transform group-hover:scale-110"
             />
@@ -377,7 +385,7 @@ export default function PublicHome() {
             data-testid="card-network-transit"
           >
             <img
-              src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800"
+              src={railwayImg}
               alt="Transit Media"
               className="w-full h-full object-cover transition-transform group-hover:scale-110"
             />
@@ -389,11 +397,11 @@ export default function PublicHome() {
         {/* Bottom Row - Small Images */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mt-4">
           {[
-            { name: 'Café', image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400', venueType: 'Café' },
-            { name: 'Tech Parks', image: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400', venueType: 'Corporate Park' },
-            { name: 'Residential', image: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=400', venueType: 'Apartment' },
-            { name: 'Gyms', image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400', venueType: 'Gym' },
-            { name: 'City Junction', image: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=400', venueType: 'Road Junction' },
+            { name: 'Café', image: cafeImg, venueType: 'Café' },
+            { name: 'Tech Parks', image: corporateImg, venueType: 'Corporate Park' },
+            { name: 'Residential', image: residentialImg, venueType: 'Apartment' },
+            { name: 'Gyms', image: gymImg, venueType: 'Gym' },
+            { name: 'City Junction', image: airportKioskImg, venueType: 'Road Junction' },
           ].map((network) => (
             <div
               key={network.name}
@@ -409,9 +417,6 @@ export default function PublicHome() {
                 src={network.image}
                 alt={network.name}
                 className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                onError={(e) => {
-                  e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=' + encodeURIComponent(network.name);
-                }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
               <h3 className="absolute bottom-2 sm:bottom-3 left-2 sm:left-3 font-bold text-white text-xs sm:text-sm">{network.name}</h3>
