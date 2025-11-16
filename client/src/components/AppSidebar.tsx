@@ -95,7 +95,7 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-6 border-b border-sidebar-border">
-        <div className="flex items-start justify-between mb-2">
+        <div className="flex items-start gap-2 mb-2">
           <img 
             src={logo} 
             alt="PixelSpot" 
@@ -107,7 +107,7 @@ export function AppSidebar() {
             onClick={handleRefresh}
             disabled={isRefreshing}
             data-testid="button-refresh-sidebar"
-            className="h-8 w-8 -mt-1"
+            className="h-8 w-8 -mt-1 ml-auto"
           >
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
