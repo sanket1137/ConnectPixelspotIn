@@ -90,33 +90,6 @@ export default function DiscoverScreens() {
     localStorage.setItem(VIEW_PREFERENCE_KEY, mode);
   };
 
-  // Auto-fit map bounds when filtered screens change
-  useEffect(() => {
-    if (!mapRef.current || !isLoaded || viewMode !== "map" || filteredScreens.length === 0) {
-      return;
-    }
-
-    const bounds = new google.maps.LatLngBounds();
-    
-    filteredScreens.forEach((screen) => {
-      if (screen.latitude && screen.longitude) {
-        bounds.extend(new google.maps.LatLng(screen.latitude, screen.longitude));
-      }
-    });
-
-    // Fit bounds to show all filtered screens
-    mapRef.current.fitBounds(bounds);
-
-    // If only one screen, set a reasonable zoom level
-    if (filteredScreens.length === 1) {
-      setTimeout(() => {
-        if (mapRef.current) {
-          mapRef.current.setZoom(13);
-        }
-      }, 100);
-    }
-  }, [filteredScreens, isLoaded, viewMode]);
-
   const { data: screens = [] } = useQuery<Screen[]>({
     queryKey: ["/api/screens", filters],
   });
@@ -186,6 +159,36 @@ export default function DiscoverScreens() {
   const { results: filteredScreens, relaxedFilters } = getFilteredScreens();
 
   const selectedScreens = screens.filter(s => selectedScreenIds.has(s.id));
+
+  // Auto-fit map bounds when filtered screens change
+  useEffect(() => {
+    if (!mapRef.current || !isLoaded || viewMode !== "map" || filteredScreens.length === 0) {
+      return;
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+    
+    filteredScreens.forEach((screen) => {
+      if (screen.latitude && screen.longitude) {
+        bounds.extend(new google.maps.LatLng(
+          parseFloat(String(screen.latitude)), 
+          parseFloat(String(screen.longitude))
+        ));
+      }
+    });
+
+    // Fit bounds to show all filtered screens
+    mapRef.current.fitBounds(bounds);
+
+    // If only one screen, set a reasonable zoom level
+    if (filteredScreens.length === 1) {
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.setZoom(13);
+        }
+      }, 100);
+    }
+  }, [filteredScreens, isLoaded, viewMode]);
 
   // Pagination for list view
   const totalPages = Math.ceil(filteredScreens.length / itemsPerPage);
