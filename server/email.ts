@@ -316,27 +316,28 @@ If you didn't request this, ignore this email.
                 box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
             }
             .header {
-                background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+                background: #000000;
                 color: #ffffff;
                 padding: 30px 20px;
                 text-align: center;
             }
             .logo-text {
-                font-size: 28px;
-                font-weight: 700;
+                font-size: 36px;
+                font-weight: bold;
                 margin: 0;
-                letter-spacing: -0.5px;
+                color: #ffffff;
+                letter-spacing: 1px;
             }
             .tagline {
                 font-size: 14px;
-                margin: 5px 0 0 0;
-                opacity: 0.9;
+                margin: 8px 0 0 0;
+                color: #cccccc;
             }
             .content {
                 padding: 40px 30px;
             }
             h2 {
-                color: #0d9488;
+                color: #2196f3;
                 margin-top: 0;
                 font-size: 24px;
             }
@@ -347,7 +348,7 @@ If you didn't request this, ignore this email.
             }
             .reset-button {
                 display: inline-block;
-                background-color: #0d9488;
+                background-color: #2196f3;
                 color: #ffffff !important;
                 padding: 14px 32px;
                 text-decoration: none;
@@ -357,11 +358,11 @@ If you didn't request this, ignore this email.
                 text-align: center;
             }
             .reset-button:hover {
-                background-color: #0f766e;
+                background-color: #1976d2;
             }
             .link-box {
-                background-color: #f0fdf4;
-                border: 1px solid #bbf7d0;
+                background-color: #f5f5f5;
+                border: 1px solid #e0e0e0;
                 border-radius: 6px;
                 padding: 15px;
                 margin: 20px 0;
@@ -396,7 +397,7 @@ If you didn't request this, ignore this email.
             
             <p>Or copy and paste this link into your browser:</p>
             <div class="link-box">
-                <a href="${resetLink}" style="color: #0d9488; text-decoration: none;">${resetLink}</a>
+                <a href="${resetLink}" style="color: #2196f3; text-decoration: none;">${resetLink}</a>
             </div>
             
             <p><strong>Important:</strong></p>
