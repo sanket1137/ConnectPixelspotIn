@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppSidebar } from "@/components/AppSidebar";
 import { useWebSocket } from "@/hooks/use-websocket";
+import { Menu } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
@@ -247,7 +248,9 @@ function AuthenticatedLayout() {
         <div className="flex flex-1 flex-col">
           {/* Mobile-only header with hamburger menu */}
           <header className="sticky top-0 z-50 flex h-14 items-center gap-4 border-b bg-background px-4 md:hidden">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <SidebarTrigger data-testid="button-sidebar-toggle">
+              <Menu className="h-6 w-6" />
+            </SidebarTrigger>
             <h1 className="text-lg font-semibold">Pixelspot</h1>
           </header>
           
