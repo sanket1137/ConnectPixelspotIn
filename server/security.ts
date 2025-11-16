@@ -99,6 +99,8 @@ export function setupSecurity(app: Express) {
           "https://www.gstatic.com",
           "https://apis.google.com",
           "https://accounts.google.com",
+          "https://www.googletagmanager.com",
+          "https://*.google-analytics.com",
         ],
         styleSrc: [
           "'self'",
@@ -117,6 +119,8 @@ export function setupSecurity(app: Express) {
           "https:",
           "https://maps.googleapis.com",
           "https://maps.gstatic.com",
+          "https://www.googletagmanager.com",
+          "https://*.google-analytics.com",
         ],
         connectSrc: [
           "'self'",
@@ -126,11 +130,15 @@ export function setupSecurity(app: Express) {
           "https://securetoken.googleapis.com",
           "https://*.firebaseio.com",
           "https://accounts.google.com",
+          "https://www.googletagmanager.com",
+          "https://*.google-analytics.com",
+          "https://*.analytics.google.com",
           replitDomain ? `wss://${replitDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')}` : '',
         ].filter(Boolean),
         frameSrc: [
           "https://*.firebaseapp.com",
           "https://accounts.google.com",
+          "https://www.googletagmanager.com",
         ],
         objectSrc: ["'none'"],
         upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
