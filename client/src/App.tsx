@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,7 +9,9 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppSidebar } from "@/components/AppSidebar";
 import { useWebSocket } from "@/hooks/use-websocket";
-import { Menu } from "lucide-react";
+import { Menu, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
@@ -219,6 +221,8 @@ function Router() {
 function AuthenticatedLayout() {
   const { user } = useAuth();
   const [location] = useLocation();
+  const { toast } = useToast();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Initialize WebSocket for real-time updates when user is authenticated
   useWebSocket();
@@ -233,6 +237,22 @@ function AuthenticatedLayout() {
   const style = {
     "--sidebar-width": "20rem",
     "--sidebar-width-icon": "4rem",
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    
+    // Invalidate all queries to refetch fresh data
+    await queryClient.invalidateQueries();
+    
+    // Brief delay to show the animation
+    setTimeout(() => {
+      setIsRefreshing(false);
+      toast({
+        title: "Refreshed",
+        description: "All data has been updated",
+      });
+    }, 500);
   };
 
   // If no user or route doesn't need sidebar, show router without sidebar
@@ -251,7 +271,17 @@ function AuthenticatedLayout() {
             <SidebarTrigger data-testid="button-sidebar-toggle">
               <Menu className="h-6 w-6" />
             </SidebarTrigger>
-            <h1 className="text-lg font-semibold">Pixelspot</h1>
+            <h1 className="flex-1 text-lg font-semibold">Pixelspot</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              data-testid="button-refresh"
+              className="h-9 w-9"
+            >
+              <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </Button>
           </header>
           
           {/* Main content area */}
