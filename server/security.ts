@@ -21,19 +21,32 @@ export function setupSecurity(app: Express) {
   
   // Extract base domain ID for both .replit.dev and .repl.co
   const replitDomains: string[] = [];
+  const replitWsDomains: string[] = [];
+  
   if (replitDomain) {
-    // Remove any https:// prefix and trailing slashes
-    const cleanDomain = replitDomain
-      .replace(/^https?:\/\//, '')
-      .replace(/\/$/, '');
+    // Split by comma in case there are multiple domains
+    const domains = replitDomain.split(',').map(d => d.trim());
     
-    // Add the .replit.dev domain
-    replitDomains.push(`https://${cleanDomain}`);
-    
-    // Also allow .repl.co variant
-    const replCoVariant = cleanDomain.replace('.replit.dev', '.repl.co');
-    if (replCoVariant !== cleanDomain) {
-      replitDomains.push(`https://${replCoVariant}`);
+    for (const domain of domains) {
+      // Remove any https:// prefix and trailing slashes
+      const cleanDomain = domain
+        .replace(/^https?:\/\//, '')
+        .replace(/\/$/, '');
+      
+      if (!cleanDomain) continue; // Skip empty strings
+      
+      // Add the HTTPS domain
+      replitDomains.push(`https://${cleanDomain}`);
+      
+      // Add WebSocket domain
+      replitWsDomains.push(`wss://${cleanDomain}`);
+      
+      // Also allow .repl.co variant if it's a .replit.dev domain
+      if (cleanDomain.includes('.replit.dev')) {
+        const replCoVariant = cleanDomain.replace('.replit.dev', '.repl.co');
+        replitDomains.push(`https://${replCoVariant}`);
+        replitWsDomains.push(`wss://${replCoVariant}`);
+      }
     }
   }
   
@@ -154,8 +167,8 @@ export function setupSecurity(app: Express) {
           "https://connect.pixelspot.in",
           "https://adsmanager.pixelspot.in",
           "https://www.adsmanager.pixelspot.in",
-          replitDomain ? `wss://${replitDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')}` : '',
           ...replitDomains,
+          ...replitWsDomains,
         ].filter(Boolean),
         frameSrc: [
           "https://*.firebaseapp.com",
