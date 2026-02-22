@@ -1,11 +1,12 @@
 // Reference: blueprint:javascript_database
-import { 
+import {
   users, screens, campaigns, bookings, payments,
-  type User, type InsertUser, 
+  type User, type InsertUser,
   type Screen, type InsertScreen,
   type Campaign, type InsertCampaign,
   type Booking, type InsertBooking,
-  type Payment, type InsertPayment
+  type Payment, type InsertPayment,
+  blogs, type Blog, type InsertBlog
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, or, desc } from "drizzle-orm";
@@ -23,7 +24,7 @@ export interface IStorage {
   verifyUserMobile(id: string): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
   getUsersByRole(role: string): Promise<User[]>;
-  
+
   // Screen methods
   getScreen(id: string): Promise<Screen | undefined>;
   getScreensByOwner(ownerId: string): Promise<Screen[]>;
@@ -36,7 +37,7 @@ export interface IStorage {
   updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined>;
   updateScreenStatus(id: string, status: string, rejectionReason?: string): Promise<Screen | undefined>;
   deleteScreen(id: string): Promise<boolean>;
-  
+
   // Campaign methods
   getCampaign(id: string): Promise<Campaign | undefined>;
   getCampaignsByAdvertiser(advertiserId: string): Promise<Campaign[]>;
@@ -44,7 +45,7 @@ export interface IStorage {
   createCampaign(campaign: InsertCampaign): Promise<Campaign>;
   updateCampaign(id: string, data: Partial<InsertCampaign>): Promise<Campaign | undefined>;
   updateCampaignStatus(id: string, status: string): Promise<Campaign | undefined>;
-  
+
   // Booking methods
   getBooking(id: string): Promise<Booking | undefined>;
   getBookingsByScreen(screenId: string): Promise<Booking[]>;
@@ -59,12 +60,21 @@ export interface IStorage {
   rejectBookingByAdmin(id: string, notes: string): Promise<Booking | undefined>;
   acceptAlternativeDates(id: string): Promise<Booking | undefined>;
   updateBookingDates(id: string, startDate: string, endDate: string, adminNotes?: string): Promise<Booking | undefined>;
-  
+
   // Payment methods
   getPayment(id: string): Promise<Payment | undefined>;
   getPaymentByBooking(bookingId: string): Promise<Payment | undefined>;
   createPayment(payment: InsertPayment): Promise<Payment>;
   updatePaymentStatus(id: string, status: string): Promise<Payment | undefined>;
+
+  // Blog methods
+  getBlog(id: string): Promise<Blog | undefined>;
+  getBlogBySlug(slug: string): Promise<Blog | undefined>;
+  getAllBlogs(): Promise<Blog[]>;
+  getPublishedBlogs(): Promise<Blog[]>;
+  createBlog(blog: InsertBlog): Promise<Blog>;
+  updateBlog(id: string, data: Partial<InsertBlog>): Promise<Blog | undefined>;
+  deleteBlog(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -155,7 +165,7 @@ export class DatabaseStorage implements IStorage {
       .selectDistinct({ city: screens.city })
       .from(screens)
       .where(eq(screens.status, "approved"));
-    
+
     return result
       .map(r => r.city)
       .filter((city): city is string => city !== null)
@@ -232,9 +242,9 @@ export class DatabaseStorage implements IStorage {
   async getPendingBookingsForOwner(ownerId: string): Promise<any[]> {
     const ownerScreens = await this.getScreensByOwner(ownerId);
     const screenIds = ownerScreens.map(s => s.id);
-    
+
     if (screenIds.length === 0) return [];
-    
+
     const bookingsList = await db.select().from(bookings).where(
       and(
         eq(bookings.status, "pending_owner"),
@@ -273,7 +283,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async approveBookingByOwner(id: string): Promise<Booking | undefined> {
-    const [booking] = await db.update(bookings).set({ 
+    const [booking] = await db.update(bookings).set({
       ownerApproved: true,
       status: "owner_approved"
     }).where(eq(bookings.id, id)).returning();
@@ -300,16 +310,16 @@ export class DatabaseStorage implements IStorage {
   async approveBookingByAdmin(id: string): Promise<Booking | undefined> {
     // Admin can approve bookings regardless of owner approval status
     // This allows admin to bypass screen owner approval if needed
-    const [booking] = await db.update(bookings).set({ 
+    const [booking] = await db.update(bookings).set({
       approvedByAdmin: true,
       ownerApproved: true, // Auto-approve on behalf of owner when admin approves
-      status: "approved" 
+      status: "approved"
     }).where(eq(bookings.id, id)).returning();
     return booking || undefined;
   }
 
   async rejectBookingByAdmin(id: string, notes: string): Promise<Booking | undefined> {
-    const [booking] = await db.update(bookings).set({ 
+    const [booking] = await db.update(bookings).set({
       approvedByAdmin: false,
       status: "rejected",
       adminNotes: notes
@@ -365,6 +375,40 @@ export class DatabaseStorage implements IStorage {
   async updatePaymentStatus(id: string, status: string): Promise<Payment | undefined> {
     const [payment] = await db.update(payments).set({ status }).where(eq(payments.id, id)).returning();
     return payment || undefined;
+  }
+
+  // Blog methods
+  async getBlog(id: string): Promise<Blog | undefined> {
+    const [blog] = await db.select().from(blogs).where(eq(blogs.id, id));
+    return blog || undefined;
+  }
+
+  async getBlogBySlug(slug: string): Promise<Blog | undefined> {
+    const [blog] = await db.select().from(blogs).where(eq(blogs.slug, slug));
+    return blog || undefined;
+  }
+
+  async getAllBlogs(): Promise<Blog[]> {
+    return await db.select().from(blogs).orderBy(desc(blogs.createdAt));
+  }
+
+  async getPublishedBlogs(): Promise<Blog[]> {
+    return await db.select().from(blogs).where(eq(blogs.status, "published")).orderBy(desc(blogs.createdAt));
+  }
+
+  async createBlog(insertBlog: InsertBlog): Promise<Blog> {
+    const [blog] = await db.insert(blogs).values(insertBlog).returning();
+    return blog;
+  }
+
+  async updateBlog(id: string, data: Partial<InsertBlog>): Promise<Blog | undefined> {
+    const [blog] = await db.update(blogs).set({ ...data, updatedAt: new Date() }).where(eq(blogs.id, id)).returning();
+    return blog || undefined;
+  }
+
+  async deleteBlog(id: string): Promise<boolean> {
+    await db.delete(blogs).where(eq(blogs.id, id));
+    return true;
   }
 }
 

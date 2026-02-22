@@ -11,25 +11,25 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   name: text("name").notNull(),
-  
+
   // Contact Information
   phone: text("phone"),
   mobileNumber: text("mobile_number").unique(),
   mobileVerified: boolean("mobile_verified").notNull().default(false),
-  
+
   // Company/Business Information
   companyName: text("company_name"),
   industry: text("industry"),
   gstNumber: text("gst_number"),
-  
+
   // Address
   address: text("address"),
   city: text("city"),
   state: text("state"),
-  
+
   // Profile Status
   profileCompleted: boolean("profile_completed").notNull().default(false),
-  
+
   role: text("role").notNull().default("advertiser"), // admin, screen_owner, advertiser
   status: text("status").notNull().default("active"), // active, inactive, pending
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -39,14 +39,14 @@ export const users = pgTable("users", {
 export const screens = pgTable("screens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   ownerId: varchar("owner_id"), // nullable for admin-owned screens
-  
+
   // SECTION 1 — Screen Identity
   name: text("name").notNull(),
   category: text("category").notNull(), // Digital Display / LED Video Wall / Kiosk / Mall LED / Lift Display / Transit Display
   displayFormat: text("display_format").notNull(), // Portrait / Landscape / Square
   resolution: text("resolution").notNull(), // e.g., "1920x1080"
   durationPerSlot: integer("duration_per_slot").notNull(), // seconds
-  
+
   // SECTION 2 — Location & Context
   venueName: text("venue_name").notNull(),
   location: text("location").notNull(), // address
@@ -60,7 +60,7 @@ export const screens = pgTable("screens", {
   trafficType: text("traffic_type").notNull(), // Pedestrian / Seated Audience / Transit / Mixed
   timeOfDayActivity: text("time_of_day_activity").array(), // Morning Rush / Lunch Hours / Evening Leisure / Late Night
   environmentType: text("environment_type").notNull(), // Indoor / Semi-Outdoor / Outdoor Digital
-  
+
   // Enhanced Location Context
   visibility: text("visibility"), // High / Medium / Low - based on footfall and visibility
   description: text("description"), // Describe screen, surroundings, pricing justification
@@ -69,7 +69,7 @@ export const screens = pgTable("screens", {
   customOperatingDays: text("custom_operating_days"), // e.g., "Mon-Fri" for custom preset
   locationTags: text("location_tags").array(), // Nearby facilities: School, Hospital, Mall, etc.
   customLocationTags: text("custom_location_tags").array(), // User-added custom location tags
-  
+
   // SECTION 3 — Audience Demographics
   detailedAgeGroups: text("detailed_age_groups").array(), // Children (5-12) / Teenagers (13-17) / Young Adults (18-25) / Adults (26-40) / Middle Age (41-55) / Seniors (55+) / All Ages
   genderOrientation: text("gender_orientation"), // Male Dominant / Female Dominant / Mixed Gender / Family Oriented
@@ -79,11 +79,11 @@ export const screens = pgTable("screens", {
   avgDwellTime: integer("avg_dwell_time").notNull(), // minutes
   interestSegments: text("interest_segments").array(), // Fitness, Coffee, Tech, Luxury Cars, Fashion, Foodies
   customAudienceTags: text("custom_audience_tags").array(), // User-added custom audience tags for increased targeting accuracy
-  
+
   // User Intent & Mood (for campaign targeting)
   userIntent: text("user_intent").array(), // Shopping, Commuting, Dining, Fitness, Entertainment, Work, Education
   userMood: text("user_mood").array(), // Relaxed, Rushed, Social, Focused, Leisure
-  
+
   // Commercial & Campaign Data
   isMultiScreen: boolean("is_multi_screen").notNull().default(false),
   numberOfScreens: integer("number_of_screens"), // Required if isMultiScreen is true
@@ -91,7 +91,7 @@ export const screens = pgTable("screens", {
   minBookingDays: integer("min_booking_days").notNull().default(1),
   playbackSlotsPerHour: integer("playback_slots_per_hour").notNull(),
   contentTypesSupported: text("content_types_supported").array(), // Static Image / Video / Interactive / HTML5
-  
+
   // Legacy/Support fields
   type: text("type").notNull(), // backward compatibility - will map to category
   size: text("size").notNull(), // dimensions like "10x20 ft" - can be derived from resolution
@@ -111,7 +111,7 @@ export const campaigns = pgTable("campaigns", {
   advertiserId: varchar("advertiser_id").notNull(),
   name: text("name").notNull(),
   objective: text("objective").notNull(), // brand_awareness, product_launch, event_promotion, etc.
-  
+
   // New: Area-based targeting (map + radius OR city)
   targetArea: jsonb("target_area").$type<{
     type: 'map' | 'city';
@@ -123,26 +123,26 @@ export const campaigns = pgTable("campaigns", {
     city?: string;
     state?: string;
   }>(),
-  
+
   // Legacy targeting criteria (kept for backward compatibility and optional filters)
   targetLocationType: text("target_location_type"), // city, state, india, pincodes
   targetCities: text("target_cities").array(), // Array of city names
   targetState: text("target_state"), // State name for state-level targeting
   targetPincodes: text("target_pincodes").array(), // Array of pincodes
-  
+
   // Demographics & Persona
   targetAgeGroups: text("target_age_groups").array(), // 18-25, 25-40, 40-60, 60+
   targetGender: text("target_gender"), // male, female, all
   targetAffluence: text("target_affluence").array(), // Premium, Mid, Budget
   targetOccupations: text("target_occupations").array(), // Students, Working Professionals, etc.
-  
+
   // Intent & Mood
   targetIntent: text("target_intent").array(), // Shopping, Commuting, Dining, Fitness, Entertainment
   targetMood: text("target_mood").array(), // Relaxed, Rushed, Social, Focused
-  
+
   // Venue type filters (optional)
   venueTypeFilters: text("venue_type_filters").array(), // Airport, Apartment, Bus Stop, Café, Cinema, Co-working, College, Corporate Park, Flyover, Gym, Highway, Hospital, Mall, Metro, Office Building, Restaurant, Retail Store, Road Junction, Road Side, Salon, Shopping Complex, Stadium
-  
+
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
   budget: integer("budget").notNull(),
@@ -164,7 +164,7 @@ export const bookings = pgTable("bookings", {
   ownerApproved: boolean("owner_approved").notNull().default(false),
   ownerResponse: text("owner_response"), // Owner's message/feedback
   ownerRespondedAt: timestamp("owner_responded_at"),
-  alternativeDates: jsonb("alternative_dates").$type<{startDate: string; endDate: string}>(), // If owner suggests alternate dates
+  alternativeDates: jsonb("alternative_dates").$type<{ startDate: string; endDate: string }>(), // If owner suggests alternate dates
   adminNotes: text("admin_notes"), // Admin's notes for approval/rejection
   adminRespondedAt: timestamp("admin_responded_at"),
   startDate: timestamp("start_date").notNull(),
@@ -183,10 +183,25 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Blogs table for content marketing
+export const blogs = pgTable("blogs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  content: text("content").notNull(),
+  excerpt: text("excerpt"),
+  coverImage: text("cover_image"),
+  authorId: varchar("author_id").notNull(),
+  status: text("status").notNull().default("draft"), // draft, published
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   ownedScreens: many(screens),
   campaigns: many(campaigns),
+  blogs: many(blogs),
 }));
 
 export const screensRelations = relations(screens, ({ one, many }) => ({
@@ -203,6 +218,13 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
     references: [users.id],
   }),
   bookings: many(bookings),
+}));
+
+export const blogsRelations = relations(blogs, ({ one }) => ({
+  author: one(users, {
+    fields: [blogs.authorId],
+    references: [users.id],
+  }),
 }));
 
 export const bookingsRelations = relations(bookings, ({ one }) => ({
@@ -258,6 +280,12 @@ export const insertPaymentSchema = createInsertSchema(payments).omit({
   createdAt: true,
 });
 
+export const insertBlogSchema = createInsertSchema(blogs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -273,3 +301,6 @@ export type InsertBooking = z.infer<typeof insertBookingSchema>;
 
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+
+export type Blog = typeof blogs.$inferSelect;
+export type InsertBlog = z.infer<typeof insertBlogSchema>;

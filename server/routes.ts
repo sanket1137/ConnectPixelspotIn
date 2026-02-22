@@ -23,7 +23,7 @@ declare global {
 // Authentication middleware
 async function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -36,7 +36,7 @@ async function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 
   const user = await storage.getUserByFirebaseUid(decodedToken.uid);
-  
+
   if (!user) {
     return res.status(404).json({ error: "User not found" });
   }
@@ -56,9 +56,9 @@ function requireRole(...roles: string[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  
+
   // ========== PUBLIC ROUTES ==========
-  
+
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
@@ -68,14 +68,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/public/screens", async (req, res) => {
     try {
       const screens = await storage.getPublicScreens();
-      
+
       // Remove owner contact information for public viewing
       const publicScreens = screens.map(screen => ({
         ...screen,
         // Remove sensitive owner info - they'll only see it after booking
         ownerId: undefined,
       }));
-      
+
       res.json(publicScreens);
     } catch (error) {
       console.error("Get public screens error:", error);
@@ -94,11 +94,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Blog routes
+  app.get("/api/blogs", async (req, res) => {
+    try {
+      const blogs = await storage.getPublishedBlogs();
+      res.json(blogs);
+    } catch (error) {
+      console.error("Get blogs error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/blogs/:slug", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const blog = await storage.getBlogBySlug(slug);
+      if (!blog || blog.status !== "published") {
+        return res.status(404).json({ error: "Blog not found" });
+      }
+      res.json(blog);
+    } catch (error) {
+      console.error("Get blog by slug error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // DEV ONLY: Test mobile OTP sending (no auth required)
   app.post("/api/test/send-mobile-otp", async (req, res) => {
     try {
       const { mobile } = req.body;
-      
+
       if (!mobile) {
         return res.status(400).json({ error: "Mobile number is required" });
       }
@@ -106,8 +131,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const code = storeOTP(mobile, 'mobile', mobile);
       await sendMobileOTP(mobile, code);
 
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: "Mobile OTP sent (check your phone)",
         mobile: mobile,
         otp: code
@@ -122,7 +147,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/test/send-email-otp", async (req, res) => {
     try {
       const { email } = req.body;
-      
+
       if (!email) {
         return res.status(400).json({ error: "Email is required" });
       }
@@ -130,8 +155,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const code = storeOTP(email, 'email', email);
       await sendEmailOTP(email, code);
 
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: "Email OTP sent (check your inbox/console)",
         email: email,
         otp: code
@@ -143,7 +168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== AUTHENTICATION ROUTES ==========
-  
+
   // Sign in / Sign up
   app.post("/api/auth/signin", async (req, res) => {
     try {
@@ -154,7 +179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const decodedToken = await verifyToken(token);
-      
+
       if (!decodedToken) {
         return res.status(401).json({ error: "Invalid token" });
       }
@@ -165,7 +190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // If not found by UID, check by email (for existing email/password users)
       if (!user) {
         user = await storage.getUserByEmail(email);
-        
+
         // If found by email, update their Firebase UID
         if (user) {
           user = await storage.updateUser(user.id, {
@@ -176,13 +201,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!user) {
         // Create new user with selected role (or default to advertiser)
-        const userRole = role && (role === "screen_owner" || role === "advertiser") 
-          ? role 
+        const userRole = role && (role === "screen_owner" || role === "advertiser")
+          ? role
           : "advertiser";
-        
+
         // Auto-verify email for Google OAuth users
         const isGoogleUser = decodedToken.firebase?.sign_in_provider === 'google.com';
-        
+
         user = await storage.createUser({
           firebaseUid: decodedToken.uid,
           email,
@@ -215,7 +240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/send-email-otp", async (req, res) => {
     try {
       const { email } = req.body;
-      
+
       if (!email) {
         return res.status(400).json({ error: "Email is required" });
       }
@@ -245,7 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/verify-email-otp", async (req, res) => {
     try {
       const { email, code } = req.body;
-      
+
       if (!email || !code) {
         return res.status(400).json({ error: "Email and code are required" });
       }
@@ -257,7 +282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const isValid = verifyOTP(email, code);
-      
+
       if (!isValid) {
         return res.status(400).json({ error: "Invalid or expired OTP" });
       }
@@ -278,7 +303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/otp/send-email", authenticate, async (req, res) => {
     try {
       const { email } = req.body;
-      
+
       if (!email) {
         return res.status(400).json({ error: "Email is required" });
       }
@@ -297,13 +322,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/otp/verify-email", authenticate, async (req, res) => {
     try {
       const { email, code } = req.body;
-      
+
       if (!email || !code) {
         return res.status(400).json({ error: "Email and code are required" });
       }
 
       const isValid = verifyOTP(email, code);
-      
+
       if (!isValid) {
         return res.status(400).json({ error: "Invalid or expired OTP" });
       }
@@ -322,7 +347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/otp/send-mobile", authenticate, async (req, res) => {
     try {
       const { mobile } = req.body;
-      
+
       if (!mobile) {
         return res.status(400).json({ error: "Mobile number is required" });
       }
@@ -330,8 +355,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if mobile number is already registered with another user
       const existingUser = await storage.getUserByMobileNumber(mobile);
       if (existingUser && existingUser.id !== req.user!.id) {
-        return res.status(400).json({ 
-          error: "This mobile number is already registered with another account. Please use a different number or contact support." 
+        return res.status(400).json({
+          error: "This mobile number is already registered with another account. Please use a different number or contact support."
         });
       }
 
@@ -349,7 +374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/otp/verify-mobile", authenticate, async (req, res) => {
     try {
       const { mobile, code } = req.body;
-      
+
       if (!mobile || !code) {
         return res.status(400).json({ error: "Mobile and code are required" });
       }
@@ -363,14 +388,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const isValid = verifyOTP(mobile, code);
-      
+
       if (!isValid) {
         console.log(`❌ Invalid OTP for mobile: ${mobile}`);
         return res.status(400).json({ error: "Invalid or expired OTP" });
       }
 
       console.log(`✅ Valid OTP for mobile: ${mobile}, marking user as verified`);
-      
+
       // Mark mobile as verified
       await storage.verifyUserMobile(req.user!.id);
 
@@ -385,15 +410,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update user profile
   app.put("/api/profile", authenticate, async (req, res) => {
     try {
-      const { 
-        name, 
-        companyName, 
-        industry, 
-        gstNumber, 
-        address, 
-        city, 
-        state, 
-        mobileNumber 
+      const {
+        name,
+        companyName,
+        industry,
+        gstNumber,
+        address,
+        city,
+        state,
+        mobileNumber
       } = req.body;
 
       // Note: Mobile number validation happens at OTP stage (send-mobile endpoint)
@@ -423,8 +448,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Update profile error:", error);
       // Catch any unexpected database constraint violations
       if (error instanceof Error && error.message.includes("unique constraint")) {
-        return res.status(400).json({ 
-          error: "A unique constraint was violated. Please check your input and try again." 
+        return res.status(400).json({
+          error: "A unique constraint was violated. Please check your input and try again."
         });
       }
       res.status(500).json({ error: "Internal server error" });
@@ -434,13 +459,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update user profile (POST endpoint for Profile page)
   app.post("/api/profile/update", authenticate, async (req, res) => {
     try {
-      const { 
-        companyName, 
-        industry, 
-        gstNumber, 
-        address, 
-        city, 
-        state 
+      const {
+        companyName,
+        industry,
+        gstNumber,
+        address,
+        city,
+        state
       } = req.body;
 
       const updateData: any = {};
@@ -464,7 +489,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/profile/send-mobile-otp", authenticate, async (req, res) => {
     try {
       const { mobileNumber } = req.body;
-      
+
       if (!mobileNumber) {
         return res.status(400).json({ error: "Mobile number is required" });
       }
@@ -488,13 +513,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/profile/verify-mobile-otp", authenticate, async (req, res) => {
     try {
       const { mobileNumber, otp } = req.body;
-      
+
       if (!mobileNumber || !otp) {
         return res.status(400).json({ error: "Mobile number and OTP are required" });
       }
 
       const isValid = verifyOTP(mobileNumber, otp);
-      
+
       if (!isValid) {
         return res.status(400).json({ error: "Invalid or expired OTP" });
       }
@@ -516,7 +541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/dev/reset-passwords", async (req, res) => {
     try {
       const { password } = req.body;
-      
+
       if (!password) {
         return res.status(400).json({ error: "Password is required" });
       }
@@ -534,23 +559,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             password: password,
             emailVerified: true,
           });
-          results.push({ 
-            email: user.email, 
+          results.push({
+            email: user.email,
             status: "success",
-            message: `Password updated to: ${password}` 
+            message: `Password updated to: ${password}`
           });
         } catch (error: any) {
-          results.push({ 
-            email: user.email, 
-            status: "error", 
-            message: error.message 
+          results.push({
+            email: user.email,
+            status: "error",
+            message: error.message
           });
         }
       }
 
-      res.json({ 
+      res.json({
         message: "Password reset completed",
-        results 
+        results
       });
     } catch (error) {
       console.error("Reset passwords error:", error);
@@ -572,9 +597,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastSignIn: user.metadata.lastSignInTime,
         providers: user.providerData.map(p => p.providerId),
       }));
-      res.json({ 
+      res.json({
         count: users.length,
-        users 
+        users
       });
     } catch (error) {
       console.error("List Firebase users error:", error);
@@ -586,18 +611,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/dev/firebase-user/:email", async (req, res) => {
     try {
       const { email } = req.params;
-      
+
       if (!email) {
         return res.status(400).json({ error: "Email is required" });
       }
 
       // Get user by email
       const user = await firebaseAdmin.getUserByEmail(email);
-      
+
       // Delete the user
       await firebaseAdmin.deleteUser(user.uid);
-      
-      res.json({ 
+
+      res.json({
         success: true,
         message: `Firebase user ${email} (${user.uid}) deleted successfully`,
         deletedUser: {
@@ -616,7 +641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== OBJECT STORAGE ROUTES ==========
-  
+
   // Get upload URL for file uploads
   app.post("/api/objects/upload", authenticate, async (req, res) => {
     try {
@@ -661,11 +686,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const filePath = req.params.filePath;
       const objectStorageService = new ObjectStorageService();
       const file = await objectStorageService.searchPublicObject(filePath);
-      
+
       if (!file) {
         return res.status(404).json({ error: "File not found" });
       }
-      
+
       objectStorageService.downloadObject(file, res);
     } catch (error) {
       console.error("Error serving public object:", error);
@@ -678,32 +703,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const objectStorageService = new ObjectStorageService();
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
-      
+
       // Check if object is public first
       const isPublic = await objectStorageService.canAccessObjectEntity({
         objectFile,
         userId: undefined,
       });
-      
+
       if (isPublic) {
         // Object is public, serve it
         return objectStorageService.downloadObject(objectFile, res);
       }
-      
+
       // Object is private, check authentication
       if (!req.user) {
         return res.sendStatus(401);
       }
-      
+
       const canAccess = await objectStorageService.canAccessObjectEntity({
         objectFile,
         userId: req.user.id.toString(),
       });
-      
+
       if (!canAccess) {
         return res.sendStatus(401);
       }
-      
+
       objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
       console.error("Error accessing object:", error);
@@ -715,7 +740,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== ADMIN ROUTES ==========
-  
+
   // Admin dashboard stats
   app.get("/api/admin/stats", authenticate, requireRole("admin"), async (req, res) => {
     try {
@@ -770,7 +795,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const user = await storage.updateUserRole(id, role);
-      
+
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -798,7 +823,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const screen = await storage.updateScreenStatus(id, "active");
-      
+
       if (!screen) {
         return res.status(404).json({ error: "Screen not found" });
       }
@@ -829,7 +854,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { reason } = req.body;
       const screen = await storage.updateScreenStatus(id, "inactive", reason);
-      
+
       if (!screen) {
         return res.status(404).json({ error: "Screen not found" });
       }
@@ -845,25 +870,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/bookings", authenticate, requireRole("admin"), async (req, res) => {
     try {
       const bookings = await storage.getAllBookings();
-      
+
       // Enrich with screen, campaign, advertiser, and owner details
       const enrichedBookings = await Promise.all(
         bookings.map(async (booking) => {
           const screen = await storage.getScreen(booking.screenId);
           const campaign = await storage.getCampaign(booking.campaignId);
-          
+
           // Get advertiser and screen owner details
           let advertiser = null;
           let owner = null;
-          
+
           if (campaign) {
             advertiser = await storage.getUser(campaign.advertiserId);
           }
-          
+
           if (screen) {
             owner = await storage.getUser(screen.ownerId);
           }
-          
+
           return {
             ...booking,
             screen,
@@ -898,7 +923,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const booking = await storage.approveBookingByAdmin(id);
-      
+
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
@@ -938,9 +963,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { notes } = req.body;
-      
+
       const booking = await storage.rejectBookingByAdmin(id, notes);
-      
+
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
@@ -957,9 +982,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { startDate, endDate, notes } = req.body;
-      
+
       const booking = await storage.updateBookingDates(id, startDate, endDate, notes);
-      
+
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
@@ -975,14 +1000,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/screens/create", authenticate, requireRole("admin"), async (req, res) => {
     try {
       const { ownerId, ...screenData } = req.body;
-      
+
       const screen = await storage.createScreen({
         ...screenData,
         ownerId,
         ownedByAdmin: true,
         status: "active", // Admin-created screens are automatically active
       });
-      
+
       res.status(201).json(screen);
     } catch (error) {
       console.error("Admin create screen error:", error);
@@ -990,23 +1015,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin Blog Management
+  app.get("/api/admin/blogs", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const blogs = await storage.getAllBlogs();
+      res.json(blogs);
+    } catch (error) {
+      console.error("Admin get blogs error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/blogs", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const blogData = {
+        ...req.body,
+        authorId: req.user!.id,
+      };
+      const blog = await storage.createBlog(blogData);
+      res.status(201).json(blog);
+    } catch (error) {
+      console.error("Admin create blog error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/blogs/:id", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const blog = await storage.updateBlog(id, req.body);
+      if (!blog) {
+        return res.status(404).json({ error: "Blog not found" });
+      }
+      res.json(blog);
+    } catch (error) {
+      console.error("Admin update blog error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/blogs/:id", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteBlog(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin delete blog error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ========== SCREEN OWNER ROUTES ==========
-  
+
   // Owner dashboard stats
   app.get("/api/owner/stats", authenticate, requireRole("screen_owner"), async (req, res) => {
     try {
       const screens = await storage.getScreensByOwner(req.user!.id);
       const pendingBookings = await storage.getPendingBookingsForOwner(req.user!.id);
-      
+
       const activeScreens = screens.filter(s => s.status === "active").length;
       const allBookings = (await Promise.all(
         screens.map(s => storage.getBookingsByScreen(s.id))
       )).flat();
-      
+
       const totalEarnings = allBookings
         .filter(b => b.status === "completed")
         .reduce((sum, b) => sum + b.price, 0);
-      
+
       const thisMonth = new Date();
       thisMonth.setDate(1);
       const thisMonthEarnings = allBookings
@@ -1136,7 +1211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const booking = await storage.approveBookingByOwner(id);
-      
+
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
@@ -1177,9 +1252,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { reason, alternativeDates } = req.body;
-      
+
       const booking = await storage.rejectBookingByOwner(id, reason, alternativeDates);
-      
+
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
@@ -1231,22 +1306,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== ADVERTISER ROUTES ==========
-  
+
   // Advertiser dashboard stats
   app.get("/api/advertiser/stats", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
       const campaigns = await storage.getCampaignsByAdvertiser(req.user!.id);
       const activeCampaigns = campaigns.filter(c => c.status === "live").length;
       const completedCampaigns = campaigns.filter(c => c.status === "completed").length;
-      
+
       const allBookings = (await Promise.all(
         campaigns.map(c => storage.getBookingsByCampaign(c.id))
       )).flat();
-      
+
       const totalSpent = allBookings
         .filter(b => b.status === "completed")
         .reduce((sum, b) => sum + b.price, 0);
-      
+
       const pendingBookings = allBookings.filter(b => b.status === "pending").length;
 
       res.json({
@@ -1266,34 +1341,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/screens", authenticate, async (req, res) => {
     try {
       const { city, type, minPrice, maxPrice, pincode } = req.query;
-      
+
       let screens = await storage.getApprovedScreens();
-      
+
       // Apply filters
       if (city) {
-        screens = screens.filter(s => 
+        screens = screens.filter(s =>
           s.city.toLowerCase().includes((city as string).toLowerCase())
         );
       }
-      
+
       if (type) {
         screens = screens.filter(s => s.type === type);
       }
-      
+
       if (minPrice) {
         const min = parseInt(minPrice as string);
         screens = screens.filter(s => s.pricePerDay >= min);
       }
-      
+
       if (maxPrice) {
         const max = parseInt(maxPrice as string);
         screens = screens.filter(s => s.pricePerDay <= max);
       }
-      
+
       if (pincode) {
         screens = screens.filter(s => s.pincode === pincode);
       }
-      
+
       res.json(screens);
     } catch (error) {
       console.error("Get screens error:", error);
@@ -1305,12 +1380,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/screens/locations", authenticate, async (req, res) => {
     try {
       const screens = await storage.getApprovedScreens();
-      
+
       // Extract unique states and cities
       const statesSet = new Set<string>();
       const citiesByState: Record<string, Set<string>> = {};
       const allCitiesSet = new Set<string>();
-      
+
       screens.forEach(screen => {
         if (screen.state) {
           statesSet.add(screen.state);
@@ -1321,7 +1396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         allCitiesSet.add(screen.city);
       });
-      
+
       // Convert sets to sorted arrays
       const states = Array.from(statesSet).sort();
       const cities = Object.fromEntries(
@@ -1331,7 +1406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ])
       );
       const allCities = Array.from(allCitiesSet).sort();
-      
+
       res.json({ states, cities, allCities });
     } catch (error) {
       console.error("Get locations error:", error);
@@ -1343,28 +1418,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/campaign/calculate-duration", authenticate, async (req, res) => {
     try {
       const { budget, screenIds } = req.body;
-      
+
       if (!budget || !screenIds || screenIds.length === 0) {
         return res.status(400).json({ error: "Budget and screenIds required" });
       }
-      
+
       const screens = await storage.getApprovedScreens();
       const selectedScreens = screens.filter(s => screenIds.includes(s.id));
-      
+
       if (selectedScreens.length === 0) {
         return res.json({ days: 1, screensPerDay: 0 });
       }
-      
+
       // Calculate average screen cost
       const avgCostPerDay = selectedScreens.reduce((sum, s) => sum + s.pricePerDay, 0) / selectedScreens.length;
-      
+
       // Calculate total screen-days available with budget
       const totalScreenDays = Math.floor(budget / avgCostPerDay);
-      
+
       // Favor more screens over longer duration
       // Strategy: Distribute days to maximize reach
       const optimalDays = Math.max(1, Math.floor(totalScreenDays / selectedScreens.length));
-      
+
       res.json({
         days: optimalDays,
         screensPerDay: selectedScreens.length,
@@ -1381,29 +1456,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/campaign/calculate-reach", authenticate, async (req, res) => {
     try {
       const { screenIds, duration } = req.body;
-      
+
       if (!screenIds || screenIds.length === 0 || !duration) {
         return res.status(400).json({ error: "ScreenIds and duration required" });
       }
-      
+
       const screens = await storage.getApprovedScreens();
       const selectedScreens = screens.filter(s => screenIds.includes(s.id));
-      
+
       if (selectedScreens.length === 0) {
         return res.json({ reach: 0, impressions: 0 });
       }
-      
+
       // Reach = sum of (footfall × numberOfScreens × duration) for each screen
       const totalReach = selectedScreens.reduce((sum, screen) => {
         const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
         return sum + (screen.avgDailyFootfall * screenMultiplier * duration);
       }, 0);
-      
+
       // Impressions = reach × average dwell time slots
       const avgSlots = selectedScreens.reduce((sum, s) => sum + s.playbackSlotsPerHour, 0) / selectedScreens.length;
       const avgDwellMinutes = selectedScreens.reduce((sum, s) => sum + s.avgDwellTime, 0) / selectedScreens.length;
       const impressions = Math.round(totalReach * (avgDwellMinutes / 60) * avgSlots);
-      
+
       res.json({
         reach: Math.round(totalReach),
         impressions,
@@ -1419,68 +1494,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/screens/in-area", authenticate, async (req, res) => {
     try {
       const { lat, lng, radiusKm, city, budget, duration } = req.query;
-      
+
       let screens = await storage.getApprovedScreens();
-      
+
       // Filter by area (map OR city)
       if (lat && lng && radiusKm) {
         // Map-based filtering using Haversine formula
         const latitude = parseFloat(lat as string);
         const longitude = parseFloat(lng as string);
         const radius = parseFloat(radiusKm as string);
-        
+
         screens = screens.filter(screen => {
           const R = 6371; // Earth's radius in km
           const screenLat = parseFloat(screen.latitude.toString());
           const screenLng = parseFloat(screen.longitude.toString());
-          
+
           const dLat = (screenLat - latitude) * Math.PI / 180;
           const dLon = (screenLng - longitude) * Math.PI / 180;
-          const a = 
-            Math.sin(dLat/2) * Math.sin(dLat/2) +
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
             Math.cos(latitude * Math.PI / 180) * Math.cos(screenLat * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
           const distance = R * c;
-          
+
           return distance <= radius;
         });
       } else if (city) {
         // City-based filtering
-        screens = screens.filter(s => 
+        screens = screens.filter(s =>
           s.city.toLowerCase() === (city as string).toLowerCase()
         );
       }
-      
+
       // Sort by footfall (descending) for better recommendations
       screens.sort((a, b) => b.avgDailyFootfall - a.avgDailyFootfall);
-      
+
       // Filter by budget if provided: select screens that fit within budget
       if (budget && duration) {
         const budgetAmount = parseInt(budget as string);
         const durationDays = parseInt(duration as string);
-        
+
         console.log(`\n🎯 Budget Filter: Budget=₹${budgetAmount}, Duration=${durationDays} days`);
         console.log(`📊 Total screens in area: ${screens.length}`);
-        
+
         // Greedy algorithm: pick screens sorted by footfall until budget is exhausted
         const selectedScreens: typeof screens = [];
         let remainingBudget = budgetAmount;
-        
+
         for (const screen of screens) {
           const screenCost = screen.pricePerDay * durationDays;
           console.log(`   ${screen.name}: ₹${screenCost} (₹${screen.pricePerDay}/day × ${durationDays}) - ${screenCost <= remainingBudget ? '✅ SELECTED' : '❌ SKIP'} (remaining: ₹${remainingBudget})`);
-          
+
           if (screenCost <= remainingBudget) {
             selectedScreens.push(screen);
             remainingBudget -= screenCost;
           }
         }
-        
+
         console.log(`✅ Selected ${selectedScreens.length} screens, Total cost: ₹${budgetAmount - remainingBudget}, Remaining: ₹${remainingBudget}\n`);
         screens = selectedScreens;
       }
-      
+
       res.json(screens);
     } catch (error) {
       console.error("Get screens in area error:", error);
@@ -1566,7 +1641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const campaigns = await storage.getCampaignsByAdvertiser(req.user!.id);
       const campaignIds = campaigns.map(c => c.id);
-      
+
       if (campaignIds.length === 0) {
         return res.json([]);
       }
@@ -1600,13 +1675,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const campaign = await storage.getCampaign(id);
-      
+
       if (!campaign || campaign.advertiserId !== req.user!.id) {
         return res.status(404).json({ error: "Campaign not found" });
       }
 
       const campaignBookings = await storage.getBookingsByCampaign(id);
-      
+
       // Enrich bookings with screen details
       const enrichedBookings = await Promise.all(
         campaignBookings.map(async (booking) => {
@@ -1633,7 +1708,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const campaign = await storage.getCampaign(id);
-      
+
       if (!campaign || campaign.advertiserId !== req.user!.id) {
         return res.status(404).json({ error: "Campaign not found" });
       }
@@ -1662,7 +1737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const campaign = await storage.getCampaign(id);
-      
+
       if (!campaign || campaign.advertiserId !== req.user!.id) {
         return res.status(404).json({ error: "Campaign not found" });
       }
@@ -1689,13 +1764,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/advertiser/bookings/:id/accept-alternative", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       // Verify ownership
       const booking = await storage.getBooking(id);
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
-      
+
       const campaign = await storage.getCampaign(booking.campaignId);
       if (!campaign || campaign.advertiserId !== req.user!.id) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1713,13 +1788,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/advertiser/bookings/:id/reject-alternative", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       // Verify ownership
       const booking = await storage.getBooking(id);
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
-      
+
       const campaign = await storage.getCampaign(booking.campaignId);
       if (!campaign || campaign.advertiserId !== req.user!.id) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1729,7 +1804,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [updatedBooking] = await db.update(bookings).set({
         alternativeDates: null,
       }).where(eq(bookings.id, id)).returning();
-      
+
       res.json(updatedBooking);
     } catch (error) {
       console.error("Reject alternative dates error:", error);
@@ -1830,7 +1905,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const html = await response.text();
             const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
             const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
-            
+
             let textContent = html
               .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
               .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')

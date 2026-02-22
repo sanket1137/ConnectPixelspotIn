@@ -18,30 +18,32 @@ import type { Express } from 'express';
 export function setupSecurity(app: Express) {
   // 1. CORS Configuration - Restrict to specific origins
   const replitDevDomain = process.env.REPLIT_DEV_DOMAIN;
-  
+
   const allowedOrigins = process.env.NODE_ENV === 'production'
     ? [
-        'https://pixelspot.in',
-        'https://www.pixelspot.in',
-        'https://connect.pixelspot.in',
-        replitDevDomain ? `https://${replitDevDomain}` : '',
-      ].filter(Boolean)
+      'https://pixelspot.in',
+      'https://www.pixelspot.in',
+      'https://connect.pixelspot.in',
+      replitDevDomain ? `https://${replitDevDomain}` : '',
+    ].filter(Boolean)
     : [
-        'http://localhost:5000',
-        'http://127.0.0.1:5000',
-        replitDevDomain ? `https://${replitDevDomain}` : '',
-      ].filter(Boolean);
+      'http://localhost:5000',
+      'http://127.0.0.1:5000',
+      'http://localhost:5001',
+      'http://127.0.0.1:5001',
+      replitDevDomain ? `https://${replitDevDomain}` : '',
+    ].filter(Boolean);
 
-  console.log('🔧 CORS Configuration:', { 
-    NODE_ENV: process.env.NODE_ENV, 
-    allowedOrigins 
+  console.log('🔧 CORS Configuration:', {
+    NODE_ENV: process.env.NODE_ENV,
+    allowedOrigins
   });
 
   app.use(cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, Postman, etc.)
       if (!origin) return callback(null, true);
-      
+
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -124,7 +126,7 @@ export function setupSecurity(app: Express) {
   }));
 
   // 3. Rate Limiting - Prevent brute force and DDoS
-  
+
   // General API rate limit
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes

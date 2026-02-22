@@ -6,10 +6,31 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Eye, Building2 } from 'lucide-react';
+import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Eye, Building2, HelpCircle, Check } from 'lucide-react';
 import { Link } from 'wouter';
 import type { Screen } from '@shared/schema';
 import logo from "@assets/pixelspot-logo.png";
+import { SEO } from "@/components/SEO";
+
+const homepageSchema = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Pixelspot",
+  "url": "https://connect.pixelspot.in",
+  "logo": "https://connect.pixelspot.in/pixelspot-logo.png",
+  "description": "India's smartest AI-powered DOOH advertising network connecting screen owners and advertisers.",
+  "address": {
+    "@type": "PostalAddress",
+    "addressCountry": "IN"
+  },
+  "service": [
+    { "@type": "Service", "name": "DOOH Advertising" },
+    { "@type": "Service", "name": "OOH Advertising" },
+    { "@type": "Service", "name": "Digital Hoardings" },
+    { "@type": "Service", "name": "Programmatic DOOH" }
+  ]
+};
+
 
 interface PublicScreensResponse {
   cities: string[];
@@ -125,19 +146,26 @@ export default function PublicHome() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Pixelspot | India's Smartest AI-Powered DOOH Ad Network"
+        description="Scale your brand with India's largest AI-powered DOOH advertising network. Book digital screens, billboards, and transit media across 100+ cities instantly."
+        keywords="DOOH advertising India, outdoor advertising network, billboard booking India, AI advertising, digital hoardings"
+        schema={homepageSchema}
+      />
       {/* Header */}
+
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between">
             <Link href="/">
-              <img 
-                src={logo} 
-                alt="Pixelspot" 
+              <img
+                src={logo}
+                alt="Pixelspot"
                 className="h-8 sm:h-10 w-auto cursor-pointer"
                 data-testid="img-logo"
               />
             </Link>
-            
+
             <div className="flex items-center gap-2 sm:gap-3">
               <Link href="/login">
                 <Button variant="ghost" size="sm" className="sm:size-default" data-testid="button-header-login">
@@ -163,7 +191,7 @@ export default function PublicHome() {
         <div className="container mx-auto px-4 py-12 sm:py-16 md:py-20 lg:py-28 relative">
           <div className="max-w-5xl mx-auto text-center space-y-6 sm:space-y-8">
             <div className="animate-in fade-in slide-in-from-bottom-3 duration-1000">
-              <Badge className="mb-4 sm:mb-6 text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30 hover-elevate" data-testid="badge-ai-powered">
+              <Badge {...({ variant: "outline" } as any)} className="mb-4 sm:mb-6 text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30 hover-elevate" data-testid="badge-ai-powered">
                 <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 AI-Powered Smart DOOH Ad Network
               </Badge>
@@ -183,7 +211,7 @@ export default function PublicHome() {
                 Leverage AI-driven campaign creation, smart screen matching, and intelligent audience targeting. Book premium DOOH screens instantly and launch data-powered campaigns in minutes.
               </p>
             </div>
-            
+
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-300">
               <Card className="hover-elevate border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
@@ -197,7 +225,7 @@ export default function PublicHome() {
                   <p className="text-sm text-muted-foreground font-medium">Cities Covered</p>
                 </CardContent>
               </Card>
-              
+
               <Card className="hover-elevate border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
                 <CardContent className="pt-6 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2">
@@ -209,7 +237,7 @@ export default function PublicHome() {
                   <p className="text-sm text-muted-foreground font-medium">Live Screens</p>
                 </CardContent>
               </Card>
-              
+
               <Card className="hover-elevate border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
                 <CardContent className="pt-6 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2">
@@ -231,8 +259,8 @@ export default function PublicHome() {
                   <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 variant="outline"
                 className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group"
                 onClick={scrollToScreens}
@@ -259,7 +287,7 @@ export default function PublicHome() {
             {cities.map((city) => {
               const count = cityCounts[city] || 0;
               const imageUrl = CITY_IMAGES[city] || 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400';
-              
+
               return (
                 <Card
                   key={city}
@@ -302,7 +330,7 @@ export default function PublicHome() {
             Discover premium DOOH screens across diverse venue categories
           </p>
         </div>
-        
+
         {/* Collage Grid Layout */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Left Column - Large Image */}
@@ -429,8 +457,8 @@ export default function PublicHome() {
             </div>
             <div className="relative mt-8 lg:mt-0">
               <div className="relative rounded-2xl overflow-hidden border border-primary/20 shadow-2xl">
-                <img 
-                  src="https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800" 
+                <img
+                  src="https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800"
                   alt="Digital billboard in urban setting"
                   className="w-full h-auto"
                 />
@@ -873,9 +901,8 @@ export default function PublicHome() {
               <Card
                 key={screen.id}
                 id={`screen-${screen.id}`}
-                className={`hover-elevate overflow-hidden transition-all ${
-                  hoveredScreen === screen.id ? 'ring-2 ring-primary shadow-lg' : ''
-                }`}
+                className={`hover-elevate overflow-hidden transition-all ${hoveredScreen === screen.id ? 'ring-2 ring-primary shadow-lg' : ''
+                  }`}
                 onMouseEnter={() => setHoveredScreen(screen.id)}
                 onMouseLeave={() => setHoveredScreen(null)}
                 data-testid={`card-screen-${screen.id}`}
@@ -966,7 +993,97 @@ export default function PublicHome() {
         </Card>
       </div>
 
+      {/* Industries We Serve Section */}
+      <div className="container mx-auto px-4 py-16 sm:py-24 border-t">
+        <div className="text-center mb-16">
+          <Badge {...({ variant: "outline" } as any)} className="mb-4 border-primary/20 text-primary">Industries We Serve</Badge>
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">Precision Targeting for Every Industry</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
+            Pixelspot's AI-enabled network delivers high-impact outdoor advertising solutions tailored to your industry's unique audience.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          {[
+            {
+              title: "Real Estate",
+              desc: "Reach high-intent property buyers at the right moment with premium digital hoarding placements in premium residental areas.",
+              slug: "industries/real-estate"
+            },
+            {
+              title: "Automobile",
+              desc: "Drive showroom visits with high-visibility billboard advertising on major highways and high-traffic arterial roads.",
+              slug: "industries/automobile"
+            },
+            {
+              title: "Retail & Malls",
+              desc: "Influenece purchase decisions at the point of sale with smart DOOH screens located in India's top shopping malls.",
+              slug: "industries/retail"
+            }
+          ].map((industry, idx) => (
+            <Link key={idx} href={`/${industry.slug}`}>
+              <Card className="hover-elevate cursor-pointer h-full border-primary/5 bg-gradient-to-br from-background to-muted/20">
+                <CardContent className="pt-8">
+                  <h3 className="text-xl font-bold mb-3">{industry.title}</h3>
+                  <p className="text-muted-foreground mb-4">{industry.desc}</p>
+                  <div className="flex items-center text-primary font-medium text-sm">
+                    View Solutions <ArrowRight className="w-4 h-4 ml-2" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* FAQ Section */}
+      <div className="bg-muted/30 border-y">
+        <div className="container mx-auto px-4 py-16 sm:py-24">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-16">
+              <Badge {...({ variant: "outline" } as any)} className="mb-4 border-primary/20 text-primary">Frequently Asked Questions</Badge>
+              <h2 className="text-3xl sm:text-4xl font-bold mb-4">Frequently Asked Questions</h2>
+              <p className="text-muted-foreground text-lg">
+                Everything you need to know about DOOH advertising in India with Pixelspot.
+              </p>
+            </div>
+            <div className="space-y-4">
+              {[
+                {
+                  q: "What is DOOH advertising and how does it work?",
+                  a: "DOOH (Digital Out-of-Home) refers to digital media that appears in public environments. This includes digital billboards, outdoor signage, and screens in malls or transit hubs. Pixelspot allows you to book these screens digitally and manage your content remotely through our AI-powered platform."
+                },
+                {
+                  q: "How much does DOOH advertising cost in India?",
+                  a: "Cost varies based on location, screen size, and duration. Pixelspot provides transparent pricing for all screens in our network, from premium billboards in Mumbai to high-traffic junctions in Bangalore. You can start with any budget and scale as you see results."
+                },
+                {
+                  q: "Can I target specific locations or cities?",
+                  a: "Yes, Pixelspot offers granular targeting. You can browse screens by city (Mumbai, Delhi, Bangalore, etc.) or by specific locations like malls, corporate parks, or highways. Our AI-matching engine helps you find the most relevant screens for your target audience."
+                },
+                {
+                  q: "How do I measure the success of my campaign?",
+                  a: "Pixelspot provides detailed impression estimates, dwell time data, and crowd analytics for our digital screens. We use smart sensors and data-driven models to help you understand the reach and impact of your advertising."
+                }
+              ].map((faq, idx) => (
+                <Card key={idx} className="border-none shadow-sm">
+                  <CardContent className="pt-6">
+                    <h3 className="text-lg font-bold mb-3 flex items-start gap-3">
+                      <HelpCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                      {faq.q}
+                    </h3>
+                    <p className="text-muted-foreground pl-8">
+                      {faq.a}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Bottom CTA */}
+
       <div className="bg-gradient-to-br from-primary/10 to-background border-t mt-8 sm:mt-12 md:mt-16">
         <div className="container mx-auto px-4 py-12 sm:py-14 md:py-16 text-center">
           <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4">Ready to Reach Millions?</h2>
@@ -987,24 +1104,75 @@ export default function PublicHome() {
       </div>
 
       {/* Footer */}
-      <footer className="border-t bg-muted/30">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <img src={logo} alt="Pixelspot" className="h-8 w-auto" />
-              <p className="text-sm text-muted-foreground">© 2025 Pixelspot. All rights reserved.</p>
+      <footer className="border-t bg-muted/30 pt-12 pb-8">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <img src={logo} alt="Pixelspot" className="h-8 w-auto" />
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Pixelspot is India's smartest AI-powered DOOH advertising network, connecting screen owners and advertisers with data-driven precision.
+              </p>
             </div>
-            <div className="flex items-center gap-6">
-              <Link href="/register?role=screen_owner">
-                <Button variant="ghost" size="sm">List Your Screen</Button>
-              </Link>
-              <Link href="/login">
-                <Button variant="ghost" size="sm">Advertiser Login</Button>
-              </Link>
+
+            <div>
+              <h4 className="font-bold mb-4 text-sm uppercase tracking-wider">Services</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><Link href="/dooh-advertising-india" className="hover:text-primary transition-colors">DOOH Advertising</Link></li>
+                <li><Link href="/billboard-advertising-india" className="hover:text-primary transition-colors">Billboard Advertising</Link></li>
+                <li><Link href="/digital-hoardings-india" className="hover:text-primary transition-colors">Digital Hoardings</Link></li>
+                <li><Link href="/programmatic-dooh-india" className="hover:text-primary transition-colors">Programmatic DOOH</Link></li>
+                <li><Link href="/outdoor-media-buying-india" className="hover:text-primary transition-colors">Outdoor Media Buying</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-bold mb-4 text-sm uppercase tracking-wider">Popular Cities</h4>
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                <li><Link href="/cities/mumbai" className="hover:text-primary transition-colors">Mumbai</Link></li>
+                <li><Link href="/cities/delhi" className="hover:text-primary transition-colors">Delhi NCR</Link></li>
+                <li><Link href="/cities/bangalore" className="hover:text-primary transition-colors">Bangalore</Link></li>
+                <li><Link href="/cities/hyderabad" className="hover:text-primary transition-colors">Hyderabad</Link></li>
+                <li><Link href="/cities/chennai" className="hover:text-primary transition-colors">Chennai</Link></li>
+                <li><Link href="/cities/pune" className="hover:text-primary transition-colors">Pune</Link></li>
+                <li><Link href="/cities/ahmedabad" className="hover:text-primary transition-colors">Ahmedabad</Link></li>
+                <li><Link href="/cities/kolkata" className="hover:text-primary transition-colors">Kolkata</Link></li>
+                <li><Link href="/cities/surat" className="hover:text-primary transition-colors">Surat</Link></li>
+                <li><Link href="/cities/jaipur" className="hover:text-primary transition-colors">Jaipur</Link></li>
+                <li><Link href="/cities/lucknow" className="hover:text-primary transition-colors">Lucknow</Link></li>
+                <li><Link href="/cities/gurgaon" className="hover:text-primary transition-colors">Gurgaon</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-bold mb-4 text-sm uppercase tracking-wider">Support</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><Link href="/blog" className="hover:text-primary transition-colors">Our Blog</Link></li>
+                <li><Link href="/register?role=screen_owner" className="hover:text-primary transition-colors">List Your Screen</Link></li>
+                <li><Link href="/login" className="hover:text-primary transition-colors">Advertiser Login</Link></li>
+                <li><Link href="/register?role=advertiser" className="hover:text-primary transition-colors">Start for Free</Link></li>
+                <li><Link href="#" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
+                <li><Link href="#" className="hover:text-primary transition-colors">Terms of Service</Link></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="border-t pt-8">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground text-center md:text-left">
+                © 2025 Pixelspot Private Limited. All rights reserved.
+                <span className="ml-2">Connecting India through smart displays.</span>
+              </p>
+              <div className="flex items-center gap-4">
+                <Badge variant="outline" className="text-[10px] sm:text-xs">Secure Payments</Badge>
+                <Badge variant="outline" className="text-[10px] sm:text-xs">AI Verified Screens</Badge>
+              </div>
             </div>
           </div>
         </div>
       </footer>
+
     </div>
   );
 }

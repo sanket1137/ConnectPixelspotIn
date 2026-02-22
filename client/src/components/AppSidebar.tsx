@@ -11,11 +11,11 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { 
-  LayoutDashboard, 
-  Monitor, 
-  Users, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Monitor,
+  Users,
+  FileText,
   Settings,
   MapPin,
   PlusCircle,
@@ -39,6 +39,7 @@ export function AppSidebar() {
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
     { title: "Manage Users", url: "/admin/users", icon: Users },
     { title: "Manage Screens", url: "/admin/screens", icon: Monitor },
+    { title: "Manage Blogs", url: "/admin/blogs", icon: FileText },
     { title: "Campaigns & Bookings", url: "/admin/bookings", icon: FileText },
     { title: "Analytics", url: "/admin/analytics", icon: TrendingUp },
     { title: "Settings", url: "/admin/settings", icon: Settings },
@@ -69,16 +70,16 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-6 border-b border-sidebar-border">
-        <img 
-          src={logo} 
-          alt="PixelSpot" 
+        <img
+          src={logo}
+          alt="PixelSpot"
           className="w-40 h-auto mb-2"
         />
         <p className="text-xs text-muted-foreground mt-1">
           {isAdmin ? "Admin Portal" : isScreenOwner ? "Screen Owner Portal" : "Advertiser Portal"}
         </p>
       </SidebarHeader>
-      
+
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Menu</SidebarGroupLabel>
