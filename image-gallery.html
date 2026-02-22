@@ -1,0 +1,2164 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Pixelspot Image Assignment Tool</title>
+<style>
+  body { font-family: sans-serif; margin: 0; padding: 16px; background: #f5f5f5; }
+  h1 { color: #333; }
+  .stats { background: #fff3cd; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 32px; }
+  .card { background: white; border-radius: 8px; padding: 8px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform .15s; }
+  .card:hover { transform: scale(1.02); }
+  .card img { width: 100%; height: 150px; object-fit: cover; border-radius: 4px; }
+  .card .uuid { font-size: 10px; color: #666; word-break: break-all; margin: 4px 0; }
+  .card button { width: 100%; padding: 4px; font-size: 11px; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  th { background: #333; color: white; padding: 10px; text-align: left; }
+  td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+  tr.has-images td:first-child { border-left: 4px solid #28a745; }
+  tr.no-images td:first-child { border-left: 4px solid #dc3545; }
+  code { background: #f0f0f0; padding: 2px 4px; border-radius: 3px; font-size: 11px; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: #333; color: white; padding: 10px 16px; border-radius: 8px; display: none; }
+</style>
+</head>
+<body>
+<h1>🖼️ Pixelspot Image Assignment Tool</h1>
+<div class="stats">
+  <strong>GCS Images:</strong> 97 files &nbsp;|&nbsp;
+  <strong>Screens with images:</strong> 1 / 206 &nbsp;|&nbsp;
+  <strong>Screens needing images:</strong> 205
+</div>
+
+<h2>All Images in GCS (click to copy UUID)</h2>
+<div class="gallery">
+
+    <div class="card" onclick="copyUuid('070d7d37-0ef5-450f-b638-04e1fa942c6c')">
+      <img src="http://5.223.70.55/objects/uploads/070d7d37-0ef5-450f-b638-04e1fa942c6c"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">070d7d37-0ef5-450f-b638-04e1fa942c6c</div>
+      <button onclick="event.stopPropagation(); copyUuid('070d7d37-0ef5-450f-b638-04e1fa942c6c')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('08d6a3d1-1433-4ec9-ad72-ea0e542a2aa6')">
+      <img src="http://5.223.70.55/objects/uploads/08d6a3d1-1433-4ec9-ad72-ea0e542a2aa6"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">08d6a3d1-1433-4ec9-ad72-ea0e542a2aa6</div>
+      <button onclick="event.stopPropagation(); copyUuid('08d6a3d1-1433-4ec9-ad72-ea0e542a2aa6')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('08f349ee-2d16-433e-8add-13415933504a')">
+      <img src="http://5.223.70.55/objects/uploads/08f349ee-2d16-433e-8add-13415933504a"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">08f349ee-2d16-433e-8add-13415933504a</div>
+      <button onclick="event.stopPropagation(); copyUuid('08f349ee-2d16-433e-8add-13415933504a')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('09b6f2dc-62ab-46fe-afc3-71ce5d80213e')">
+      <img src="http://5.223.70.55/objects/uploads/09b6f2dc-62ab-46fe-afc3-71ce5d80213e"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">09b6f2dc-62ab-46fe-afc3-71ce5d80213e</div>
+      <button onclick="event.stopPropagation(); copyUuid('09b6f2dc-62ab-46fe-afc3-71ce5d80213e')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('0c3660f2-03c0-4157-8afd-7badbf7a15db')">
+      <img src="http://5.223.70.55/objects/uploads/0c3660f2-03c0-4157-8afd-7badbf7a15db"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">0c3660f2-03c0-4157-8afd-7badbf7a15db</div>
+      <button onclick="event.stopPropagation(); copyUuid('0c3660f2-03c0-4157-8afd-7badbf7a15db')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('11666c3e-1e23-428e-8685-6a94843fc4ea')">
+      <img src="http://5.223.70.55/objects/uploads/11666c3e-1e23-428e-8685-6a94843fc4ea"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">11666c3e-1e23-428e-8685-6a94843fc4ea</div>
+      <button onclick="event.stopPropagation(); copyUuid('11666c3e-1e23-428e-8685-6a94843fc4ea')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('12ac5ba0-b404-40c0-800f-0c2ea830ff32')">
+      <img src="http://5.223.70.55/objects/uploads/12ac5ba0-b404-40c0-800f-0c2ea830ff32"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">12ac5ba0-b404-40c0-800f-0c2ea830ff32</div>
+      <button onclick="event.stopPropagation(); copyUuid('12ac5ba0-b404-40c0-800f-0c2ea830ff32')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('1368acc5-b2fd-4c40-bb6b-610a95b84ef6')">
+      <img src="http://5.223.70.55/objects/uploads/1368acc5-b2fd-4c40-bb6b-610a95b84ef6"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">1368acc5-b2fd-4c40-bb6b-610a95b84ef6</div>
+      <button onclick="event.stopPropagation(); copyUuid('1368acc5-b2fd-4c40-bb6b-610a95b84ef6')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('156377da-f719-4034-8851-07c99e3aa4f6')">
+      <img src="http://5.223.70.55/objects/uploads/156377da-f719-4034-8851-07c99e3aa4f6"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">156377da-f719-4034-8851-07c99e3aa4f6</div>
+      <button onclick="event.stopPropagation(); copyUuid('156377da-f719-4034-8851-07c99e3aa4f6')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('17bb281a-cffc-402a-8745-b5d266b8254e')">
+      <img src="http://5.223.70.55/objects/uploads/17bb281a-cffc-402a-8745-b5d266b8254e"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">17bb281a-cffc-402a-8745-b5d266b8254e</div>
+      <button onclick="event.stopPropagation(); copyUuid('17bb281a-cffc-402a-8745-b5d266b8254e')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('1d513d85-9b47-4a9a-8927-c60cbea9b262')">
+      <img src="http://5.223.70.55/objects/uploads/1d513d85-9b47-4a9a-8927-c60cbea9b262"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">1d513d85-9b47-4a9a-8927-c60cbea9b262</div>
+      <button onclick="event.stopPropagation(); copyUuid('1d513d85-9b47-4a9a-8927-c60cbea9b262')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('1e10ae35-a7ff-403e-8c9f-ffb4b6f1a287')">
+      <img src="http://5.223.70.55/objects/uploads/1e10ae35-a7ff-403e-8c9f-ffb4b6f1a287"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">1e10ae35-a7ff-403e-8c9f-ffb4b6f1a287</div>
+      <button onclick="event.stopPropagation(); copyUuid('1e10ae35-a7ff-403e-8c9f-ffb4b6f1a287')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('2348a314-f8ec-4aa5-9c4a-61f13c03297f')">
+      <img src="http://5.223.70.55/objects/uploads/2348a314-f8ec-4aa5-9c4a-61f13c03297f"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">2348a314-f8ec-4aa5-9c4a-61f13c03297f</div>
+      <button onclick="event.stopPropagation(); copyUuid('2348a314-f8ec-4aa5-9c4a-61f13c03297f')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('29f30864-7376-410b-b3dd-68445b24cf3f')">
+      <img src="http://5.223.70.55/objects/uploads/29f30864-7376-410b-b3dd-68445b24cf3f"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">29f30864-7376-410b-b3dd-68445b24cf3f</div>
+      <button onclick="event.stopPropagation(); copyUuid('29f30864-7376-410b-b3dd-68445b24cf3f')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('2a3878b0-a278-4b08-9270-16cc76949312')">
+      <img src="http://5.223.70.55/objects/uploads/2a3878b0-a278-4b08-9270-16cc76949312"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">2a3878b0-a278-4b08-9270-16cc76949312</div>
+      <button onclick="event.stopPropagation(); copyUuid('2a3878b0-a278-4b08-9270-16cc76949312')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('2e3a0b4a-f074-4d27-a386-4b9b87168f38')">
+      <img src="http://5.223.70.55/objects/uploads/2e3a0b4a-f074-4d27-a386-4b9b87168f38"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">2e3a0b4a-f074-4d27-a386-4b9b87168f38</div>
+      <button onclick="event.stopPropagation(); copyUuid('2e3a0b4a-f074-4d27-a386-4b9b87168f38')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('2f1bed9f-7c84-4439-898d-bc1e33ac5955')">
+      <img src="http://5.223.70.55/objects/uploads/2f1bed9f-7c84-4439-898d-bc1e33ac5955"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">2f1bed9f-7c84-4439-898d-bc1e33ac5955</div>
+      <button onclick="event.stopPropagation(); copyUuid('2f1bed9f-7c84-4439-898d-bc1e33ac5955')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('3026e0ad-4eea-4e1a-a615-7896ae92cc6e')">
+      <img src="http://5.223.70.55/objects/uploads/3026e0ad-4eea-4e1a-a615-7896ae92cc6e"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">3026e0ad-4eea-4e1a-a615-7896ae92cc6e</div>
+      <button onclick="event.stopPropagation(); copyUuid('3026e0ad-4eea-4e1a-a615-7896ae92cc6e')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('30352cf8-3147-487e-85ed-781c80bc8168')">
+      <img src="http://5.223.70.55/objects/uploads/30352cf8-3147-487e-85ed-781c80bc8168"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">30352cf8-3147-487e-85ed-781c80bc8168</div>
+      <button onclick="event.stopPropagation(); copyUuid('30352cf8-3147-487e-85ed-781c80bc8168')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('33a9f875-2d75-49e8-a8bd-65d56b3ae3a1')">
+      <img src="http://5.223.70.55/objects/uploads/33a9f875-2d75-49e8-a8bd-65d56b3ae3a1"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">33a9f875-2d75-49e8-a8bd-65d56b3ae3a1</div>
+      <button onclick="event.stopPropagation(); copyUuid('33a9f875-2d75-49e8-a8bd-65d56b3ae3a1')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('3447431d-90fb-4c78-84f4-787eec38d735')">
+      <img src="http://5.223.70.55/objects/uploads/3447431d-90fb-4c78-84f4-787eec38d735"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">3447431d-90fb-4c78-84f4-787eec38d735</div>
+      <button onclick="event.stopPropagation(); copyUuid('3447431d-90fb-4c78-84f4-787eec38d735')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('36e1d994-c2f7-4890-a2ad-cadf91c7ecde')">
+      <img src="http://5.223.70.55/objects/uploads/36e1d994-c2f7-4890-a2ad-cadf91c7ecde"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">36e1d994-c2f7-4890-a2ad-cadf91c7ecde</div>
+      <button onclick="event.stopPropagation(); copyUuid('36e1d994-c2f7-4890-a2ad-cadf91c7ecde')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('40457899-c606-4579-a1af-df286164399b')">
+      <img src="http://5.223.70.55/objects/uploads/40457899-c606-4579-a1af-df286164399b"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">40457899-c606-4579-a1af-df286164399b</div>
+      <button onclick="event.stopPropagation(); copyUuid('40457899-c606-4579-a1af-df286164399b')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('40fa583e-077e-4e6e-874c-e083f9234004')">
+      <img src="http://5.223.70.55/objects/uploads/40fa583e-077e-4e6e-874c-e083f9234004"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">40fa583e-077e-4e6e-874c-e083f9234004</div>
+      <button onclick="event.stopPropagation(); copyUuid('40fa583e-077e-4e6e-874c-e083f9234004')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('44258af4-4d65-4f1f-836d-544e2d9df2e5')">
+      <img src="http://5.223.70.55/objects/uploads/44258af4-4d65-4f1f-836d-544e2d9df2e5"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">44258af4-4d65-4f1f-836d-544e2d9df2e5</div>
+      <button onclick="event.stopPropagation(); copyUuid('44258af4-4d65-4f1f-836d-544e2d9df2e5')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('4432f23a-0456-443a-97d6-cb5f1a699d5f')">
+      <img src="http://5.223.70.55/objects/uploads/4432f23a-0456-443a-97d6-cb5f1a699d5f"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">4432f23a-0456-443a-97d6-cb5f1a699d5f</div>
+      <button onclick="event.stopPropagation(); copyUuid('4432f23a-0456-443a-97d6-cb5f1a699d5f')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('47ba9e09-6d8b-4a61-b840-59d42f281d64')">
+      <img src="http://5.223.70.55/objects/uploads/47ba9e09-6d8b-4a61-b840-59d42f281d64"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">47ba9e09-6d8b-4a61-b840-59d42f281d64</div>
+      <button onclick="event.stopPropagation(); copyUuid('47ba9e09-6d8b-4a61-b840-59d42f281d64')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('4cac0d15-3157-4036-a6d0-ec119a947fa7')">
+      <img src="http://5.223.70.55/objects/uploads/4cac0d15-3157-4036-a6d0-ec119a947fa7"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">4cac0d15-3157-4036-a6d0-ec119a947fa7</div>
+      <button onclick="event.stopPropagation(); copyUuid('4cac0d15-3157-4036-a6d0-ec119a947fa7')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('537b1297-b75b-47cc-a548-8aec14fd3c51')">
+      <img src="http://5.223.70.55/objects/uploads/537b1297-b75b-47cc-a548-8aec14fd3c51"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">537b1297-b75b-47cc-a548-8aec14fd3c51</div>
+      <button onclick="event.stopPropagation(); copyUuid('537b1297-b75b-47cc-a548-8aec14fd3c51')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('5614b7bb-694a-49e6-8fde-32acf40f52a0')">
+      <img src="http://5.223.70.55/objects/uploads/5614b7bb-694a-49e6-8fde-32acf40f52a0"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">5614b7bb-694a-49e6-8fde-32acf40f52a0</div>
+      <button onclick="event.stopPropagation(); copyUuid('5614b7bb-694a-49e6-8fde-32acf40f52a0')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('56d80deb-09d4-431c-b6cf-899e804f3295')">
+      <img src="http://5.223.70.55/objects/uploads/56d80deb-09d4-431c-b6cf-899e804f3295"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">56d80deb-09d4-431c-b6cf-899e804f3295</div>
+      <button onclick="event.stopPropagation(); copyUuid('56d80deb-09d4-431c-b6cf-899e804f3295')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('5a48fcdc-754f-4977-8ec5-fe7485230caa')">
+      <img src="http://5.223.70.55/objects/uploads/5a48fcdc-754f-4977-8ec5-fe7485230caa"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">5a48fcdc-754f-4977-8ec5-fe7485230caa</div>
+      <button onclick="event.stopPropagation(); copyUuid('5a48fcdc-754f-4977-8ec5-fe7485230caa')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('5a69c441-5cb6-4a07-870a-304c262860c2')">
+      <img src="http://5.223.70.55/objects/uploads/5a69c441-5cb6-4a07-870a-304c262860c2"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">5a69c441-5cb6-4a07-870a-304c262860c2</div>
+      <button onclick="event.stopPropagation(); copyUuid('5a69c441-5cb6-4a07-870a-304c262860c2')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('5da51bf3-ef8d-49a1-9867-b73a81aca5de')">
+      <img src="http://5.223.70.55/objects/uploads/5da51bf3-ef8d-49a1-9867-b73a81aca5de"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">5da51bf3-ef8d-49a1-9867-b73a81aca5de</div>
+      <button onclick="event.stopPropagation(); copyUuid('5da51bf3-ef8d-49a1-9867-b73a81aca5de')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('6a802dfc-90d7-4527-b942-7eaa72e53aff')">
+      <img src="http://5.223.70.55/objects/uploads/6a802dfc-90d7-4527-b942-7eaa72e53aff"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">6a802dfc-90d7-4527-b942-7eaa72e53aff</div>
+      <button onclick="event.stopPropagation(); copyUuid('6a802dfc-90d7-4527-b942-7eaa72e53aff')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('6c4d4a68-cc85-4792-854d-b0884b1bb59c')">
+      <img src="http://5.223.70.55/objects/uploads/6c4d4a68-cc85-4792-854d-b0884b1bb59c"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">6c4d4a68-cc85-4792-854d-b0884b1bb59c</div>
+      <button onclick="event.stopPropagation(); copyUuid('6c4d4a68-cc85-4792-854d-b0884b1bb59c')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('702f8717-4399-4663-9935-e153ad92a414')">
+      <img src="http://5.223.70.55/objects/uploads/702f8717-4399-4663-9935-e153ad92a414"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">702f8717-4399-4663-9935-e153ad92a414</div>
+      <button onclick="event.stopPropagation(); copyUuid('702f8717-4399-4663-9935-e153ad92a414')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('71ea1f72-2c0f-426c-9f4e-a771a7feb51a')">
+      <img src="http://5.223.70.55/objects/uploads/71ea1f72-2c0f-426c-9f4e-a771a7feb51a"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">71ea1f72-2c0f-426c-9f4e-a771a7feb51a</div>
+      <button onclick="event.stopPropagation(); copyUuid('71ea1f72-2c0f-426c-9f4e-a771a7feb51a')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('7a1d5e28-6e96-483b-86d2-d3fb9b833d05')">
+      <img src="http://5.223.70.55/objects/uploads/7a1d5e28-6e96-483b-86d2-d3fb9b833d05"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">7a1d5e28-6e96-483b-86d2-d3fb9b833d05</div>
+      <button onclick="event.stopPropagation(); copyUuid('7a1d5e28-6e96-483b-86d2-d3fb9b833d05')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('7d6a49e1-6ede-4f57-a556-8a6807137fd1')">
+      <img src="http://5.223.70.55/objects/uploads/7d6a49e1-6ede-4f57-a556-8a6807137fd1"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">7d6a49e1-6ede-4f57-a556-8a6807137fd1</div>
+      <button onclick="event.stopPropagation(); copyUuid('7d6a49e1-6ede-4f57-a556-8a6807137fd1')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('7de7848d-c43c-405b-bb4b-400e6092ec32')">
+      <img src="http://5.223.70.55/objects/uploads/7de7848d-c43c-405b-bb4b-400e6092ec32"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">7de7848d-c43c-405b-bb4b-400e6092ec32</div>
+      <button onclick="event.stopPropagation(); copyUuid('7de7848d-c43c-405b-bb4b-400e6092ec32')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('7e256aa9-aaa6-46a0-bbd4-2fffb0bd9d8b')">
+      <img src="http://5.223.70.55/objects/uploads/7e256aa9-aaa6-46a0-bbd4-2fffb0bd9d8b"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">7e256aa9-aaa6-46a0-bbd4-2fffb0bd9d8b</div>
+      <button onclick="event.stopPropagation(); copyUuid('7e256aa9-aaa6-46a0-bbd4-2fffb0bd9d8b')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('7f719ace-6846-49b4-9050-2bb13d5e2af4')">
+      <img src="http://5.223.70.55/objects/uploads/7f719ace-6846-49b4-9050-2bb13d5e2af4"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">7f719ace-6846-49b4-9050-2bb13d5e2af4</div>
+      <button onclick="event.stopPropagation(); copyUuid('7f719ace-6846-49b4-9050-2bb13d5e2af4')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('80781b2d-0e94-48e8-8624-bccbb801f1b5')">
+      <img src="http://5.223.70.55/objects/uploads/80781b2d-0e94-48e8-8624-bccbb801f1b5"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">80781b2d-0e94-48e8-8624-bccbb801f1b5</div>
+      <button onclick="event.stopPropagation(); copyUuid('80781b2d-0e94-48e8-8624-bccbb801f1b5')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('83e18cc1-c33d-403c-902c-cc979d288c4f')">
+      <img src="http://5.223.70.55/objects/uploads/83e18cc1-c33d-403c-902c-cc979d288c4f"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">83e18cc1-c33d-403c-902c-cc979d288c4f</div>
+      <button onclick="event.stopPropagation(); copyUuid('83e18cc1-c33d-403c-902c-cc979d288c4f')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('872a7b58-4294-4c6a-b1e2-084c9883ef50')">
+      <img src="http://5.223.70.55/objects/uploads/872a7b58-4294-4c6a-b1e2-084c9883ef50"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">872a7b58-4294-4c6a-b1e2-084c9883ef50</div>
+      <button onclick="event.stopPropagation(); copyUuid('872a7b58-4294-4c6a-b1e2-084c9883ef50')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('88c2f7ce-082a-4aba-8423-5c70c1aa4ecc')">
+      <img src="http://5.223.70.55/objects/uploads/88c2f7ce-082a-4aba-8423-5c70c1aa4ecc"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">88c2f7ce-082a-4aba-8423-5c70c1aa4ecc</div>
+      <button onclick="event.stopPropagation(); copyUuid('88c2f7ce-082a-4aba-8423-5c70c1aa4ecc')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('8a33805b-02f8-482b-ab56-f85babdf5a30')">
+      <img src="http://5.223.70.55/objects/uploads/8a33805b-02f8-482b-ab56-f85babdf5a30"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">8a33805b-02f8-482b-ab56-f85babdf5a30</div>
+      <button onclick="event.stopPropagation(); copyUuid('8a33805b-02f8-482b-ab56-f85babdf5a30')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('8a619dbf-4813-4197-9335-97ef7c7932c0')">
+      <img src="http://5.223.70.55/objects/uploads/8a619dbf-4813-4197-9335-97ef7c7932c0"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">8a619dbf-4813-4197-9335-97ef7c7932c0</div>
+      <button onclick="event.stopPropagation(); copyUuid('8a619dbf-4813-4197-9335-97ef7c7932c0')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('8f7d4a8a-d8da-497f-a5f0-2a3e7251270b')">
+      <img src="http://5.223.70.55/objects/uploads/8f7d4a8a-d8da-497f-a5f0-2a3e7251270b"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">8f7d4a8a-d8da-497f-a5f0-2a3e7251270b</div>
+      <button onclick="event.stopPropagation(); copyUuid('8f7d4a8a-d8da-497f-a5f0-2a3e7251270b')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('8ff3a4ac-349f-4008-9698-bebb277808c0')">
+      <img src="http://5.223.70.55/objects/uploads/8ff3a4ac-349f-4008-9698-bebb277808c0"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">8ff3a4ac-349f-4008-9698-bebb277808c0</div>
+      <button onclick="event.stopPropagation(); copyUuid('8ff3a4ac-349f-4008-9698-bebb277808c0')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('92dc9248-92c5-4a36-90fc-f93bcb3a00bd')">
+      <img src="http://5.223.70.55/objects/uploads/92dc9248-92c5-4a36-90fc-f93bcb3a00bd"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">92dc9248-92c5-4a36-90fc-f93bcb3a00bd</div>
+      <button onclick="event.stopPropagation(); copyUuid('92dc9248-92c5-4a36-90fc-f93bcb3a00bd')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('97671376-ad69-4101-af02-c922342759ad')">
+      <img src="http://5.223.70.55/objects/uploads/97671376-ad69-4101-af02-c922342759ad"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">97671376-ad69-4101-af02-c922342759ad</div>
+      <button onclick="event.stopPropagation(); copyUuid('97671376-ad69-4101-af02-c922342759ad')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('9e47b89b-d4dc-4d16-9d74-da313027c25d')">
+      <img src="http://5.223.70.55/objects/uploads/9e47b89b-d4dc-4d16-9d74-da313027c25d"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">9e47b89b-d4dc-4d16-9d74-da313027c25d</div>
+      <button onclick="event.stopPropagation(); copyUuid('9e47b89b-d4dc-4d16-9d74-da313027c25d')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('a05afa57-7aa0-4417-9a25-1e4858be2a31')">
+      <img src="http://5.223.70.55/objects/uploads/a05afa57-7aa0-4417-9a25-1e4858be2a31"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">a05afa57-7aa0-4417-9a25-1e4858be2a31</div>
+      <button onclick="event.stopPropagation(); copyUuid('a05afa57-7aa0-4417-9a25-1e4858be2a31')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('a4a4b75a-8db8-4b33-83c6-5c955f5582d8')">
+      <img src="http://5.223.70.55/objects/uploads/a4a4b75a-8db8-4b33-83c6-5c955f5582d8"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">a4a4b75a-8db8-4b33-83c6-5c955f5582d8</div>
+      <button onclick="event.stopPropagation(); copyUuid('a4a4b75a-8db8-4b33-83c6-5c955f5582d8')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('a4bde61d-36e4-4af7-9528-9a04d2b3d58a')">
+      <img src="http://5.223.70.55/objects/uploads/a4bde61d-36e4-4af7-9528-9a04d2b3d58a"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">a4bde61d-36e4-4af7-9528-9a04d2b3d58a</div>
+      <button onclick="event.stopPropagation(); copyUuid('a4bde61d-36e4-4af7-9528-9a04d2b3d58a')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('a57631dd-d514-4e0a-a0bb-92ae46284d21')">
+      <img src="http://5.223.70.55/objects/uploads/a57631dd-d514-4e0a-a0bb-92ae46284d21"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">a57631dd-d514-4e0a-a0bb-92ae46284d21</div>
+      <button onclick="event.stopPropagation(); copyUuid('a57631dd-d514-4e0a-a0bb-92ae46284d21')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('a8cffb73-48c4-40f8-a052-7da77ad81e16')">
+      <img src="http://5.223.70.55/objects/uploads/a8cffb73-48c4-40f8-a052-7da77ad81e16"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">a8cffb73-48c4-40f8-a052-7da77ad81e16</div>
+      <button onclick="event.stopPropagation(); copyUuid('a8cffb73-48c4-40f8-a052-7da77ad81e16')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('a9e3d22b-9cf7-442d-8e7c-b9eb51097ce7')">
+      <img src="http://5.223.70.55/objects/uploads/a9e3d22b-9cf7-442d-8e7c-b9eb51097ce7"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">a9e3d22b-9cf7-442d-8e7c-b9eb51097ce7</div>
+      <button onclick="event.stopPropagation(); copyUuid('a9e3d22b-9cf7-442d-8e7c-b9eb51097ce7')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('ab063124-8551-40f3-9085-6c032cba44bc')">
+      <img src="http://5.223.70.55/objects/uploads/ab063124-8551-40f3-9085-6c032cba44bc"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">ab063124-8551-40f3-9085-6c032cba44bc</div>
+      <button onclick="event.stopPropagation(); copyUuid('ab063124-8551-40f3-9085-6c032cba44bc')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('ac8acd6d-141f-4363-8ac4-dcd915475729')">
+      <img src="http://5.223.70.55/objects/uploads/ac8acd6d-141f-4363-8ac4-dcd915475729"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">ac8acd6d-141f-4363-8ac4-dcd915475729</div>
+      <button onclick="event.stopPropagation(); copyUuid('ac8acd6d-141f-4363-8ac4-dcd915475729')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('aca24886-bd8b-494d-b3d9-e3390717e301')">
+      <img src="http://5.223.70.55/objects/uploads/aca24886-bd8b-494d-b3d9-e3390717e301"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">aca24886-bd8b-494d-b3d9-e3390717e301</div>
+      <button onclick="event.stopPropagation(); copyUuid('aca24886-bd8b-494d-b3d9-e3390717e301')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('ad44d291-9694-4d60-95de-1829284ed3ae')">
+      <img src="http://5.223.70.55/objects/uploads/ad44d291-9694-4d60-95de-1829284ed3ae"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">ad44d291-9694-4d60-95de-1829284ed3ae</div>
+      <button onclick="event.stopPropagation(); copyUuid('ad44d291-9694-4d60-95de-1829284ed3ae')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('ae8e3f11-c20b-497d-ab92-45ccbba99621')">
+      <img src="http://5.223.70.55/objects/uploads/ae8e3f11-c20b-497d-ab92-45ccbba99621"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">ae8e3f11-c20b-497d-ab92-45ccbba99621</div>
+      <button onclick="event.stopPropagation(); copyUuid('ae8e3f11-c20b-497d-ab92-45ccbba99621')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('af2d9234-26fc-4b83-b68f-91ef4d38a999')">
+      <img src="http://5.223.70.55/objects/uploads/af2d9234-26fc-4b83-b68f-91ef4d38a999"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">af2d9234-26fc-4b83-b68f-91ef4d38a999</div>
+      <button onclick="event.stopPropagation(); copyUuid('af2d9234-26fc-4b83-b68f-91ef4d38a999')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('af75bf54-1246-497f-9d84-151c1968aaf1')">
+      <img src="http://5.223.70.55/objects/uploads/af75bf54-1246-497f-9d84-151c1968aaf1"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">af75bf54-1246-497f-9d84-151c1968aaf1</div>
+      <button onclick="event.stopPropagation(); copyUuid('af75bf54-1246-497f-9d84-151c1968aaf1')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('b2c01b82-09a2-4e6e-96e6-9f22e2a0c21f')">
+      <img src="http://5.223.70.55/objects/uploads/b2c01b82-09a2-4e6e-96e6-9f22e2a0c21f"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">b2c01b82-09a2-4e6e-96e6-9f22e2a0c21f</div>
+      <button onclick="event.stopPropagation(); copyUuid('b2c01b82-09a2-4e6e-96e6-9f22e2a0c21f')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('b6f686d9-a7a8-4f1b-9483-be76d937f3ea')">
+      <img src="http://5.223.70.55/objects/uploads/b6f686d9-a7a8-4f1b-9483-be76d937f3ea"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">b6f686d9-a7a8-4f1b-9483-be76d937f3ea</div>
+      <button onclick="event.stopPropagation(); copyUuid('b6f686d9-a7a8-4f1b-9483-be76d937f3ea')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('b9340d6a-b6f3-46a4-856b-21b90d517368')">
+      <img src="http://5.223.70.55/objects/uploads/b9340d6a-b6f3-46a4-856b-21b90d517368"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">b9340d6a-b6f3-46a4-856b-21b90d517368</div>
+      <button onclick="event.stopPropagation(); copyUuid('b9340d6a-b6f3-46a4-856b-21b90d517368')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('b9cafdd1-3536-4f1c-9cf3-2f8d1837ddb3')">
+      <img src="http://5.223.70.55/objects/uploads/b9cafdd1-3536-4f1c-9cf3-2f8d1837ddb3"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">b9cafdd1-3536-4f1c-9cf3-2f8d1837ddb3</div>
+      <button onclick="event.stopPropagation(); copyUuid('b9cafdd1-3536-4f1c-9cf3-2f8d1837ddb3')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('bc634d7d-cf8e-4b85-926b-f8c0e5819e2a')">
+      <img src="http://5.223.70.55/objects/uploads/bc634d7d-cf8e-4b85-926b-f8c0e5819e2a"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">bc634d7d-cf8e-4b85-926b-f8c0e5819e2a</div>
+      <button onclick="event.stopPropagation(); copyUuid('bc634d7d-cf8e-4b85-926b-f8c0e5819e2a')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('bd0f7bd4-3dfc-4261-b72b-74a350eaa5ff')">
+      <img src="http://5.223.70.55/objects/uploads/bd0f7bd4-3dfc-4261-b72b-74a350eaa5ff"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">bd0f7bd4-3dfc-4261-b72b-74a350eaa5ff</div>
+      <button onclick="event.stopPropagation(); copyUuid('bd0f7bd4-3dfc-4261-b72b-74a350eaa5ff')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('c4f97617-ecf4-4433-adad-767d0bca1a0d')">
+      <img src="http://5.223.70.55/objects/uploads/c4f97617-ecf4-4433-adad-767d0bca1a0d"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">c4f97617-ecf4-4433-adad-767d0bca1a0d</div>
+      <button onclick="event.stopPropagation(); copyUuid('c4f97617-ecf4-4433-adad-767d0bca1a0d')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('c698b311-68fc-4f94-b926-b2ce358e29fe')">
+      <img src="http://5.223.70.55/objects/uploads/c698b311-68fc-4f94-b926-b2ce358e29fe"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">c698b311-68fc-4f94-b926-b2ce358e29fe</div>
+      <button onclick="event.stopPropagation(); copyUuid('c698b311-68fc-4f94-b926-b2ce358e29fe')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('cb92b707-153e-4400-8ee9-d528d2e98ac2')">
+      <img src="http://5.223.70.55/objects/uploads/cb92b707-153e-4400-8ee9-d528d2e98ac2"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">cb92b707-153e-4400-8ee9-d528d2e98ac2</div>
+      <button onclick="event.stopPropagation(); copyUuid('cb92b707-153e-4400-8ee9-d528d2e98ac2')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('cba07ae5-25c2-4b7b-bfda-7a1e55f508ea')">
+      <img src="http://5.223.70.55/objects/uploads/cba07ae5-25c2-4b7b-bfda-7a1e55f508ea"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">cba07ae5-25c2-4b7b-bfda-7a1e55f508ea</div>
+      <button onclick="event.stopPropagation(); copyUuid('cba07ae5-25c2-4b7b-bfda-7a1e55f508ea')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('d37eabe4-8f8f-4217-9725-2cfc72edc947')">
+      <img src="http://5.223.70.55/objects/uploads/d37eabe4-8f8f-4217-9725-2cfc72edc947"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">d37eabe4-8f8f-4217-9725-2cfc72edc947</div>
+      <button onclick="event.stopPropagation(); copyUuid('d37eabe4-8f8f-4217-9725-2cfc72edc947')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('d39fa0d0-101b-4327-b88b-cd5ea29ba956')">
+      <img src="http://5.223.70.55/objects/uploads/d39fa0d0-101b-4327-b88b-cd5ea29ba956"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">d39fa0d0-101b-4327-b88b-cd5ea29ba956</div>
+      <button onclick="event.stopPropagation(); copyUuid('d39fa0d0-101b-4327-b88b-cd5ea29ba956')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('d3da5253-69d1-4412-92a7-e41e15d4a9c6')">
+      <img src="http://5.223.70.55/objects/uploads/d3da5253-69d1-4412-92a7-e41e15d4a9c6"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">d3da5253-69d1-4412-92a7-e41e15d4a9c6</div>
+      <button onclick="event.stopPropagation(); copyUuid('d3da5253-69d1-4412-92a7-e41e15d4a9c6')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('d4a51879-c617-4520-ba94-d63967071278')">
+      <img src="http://5.223.70.55/objects/uploads/d4a51879-c617-4520-ba94-d63967071278"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">d4a51879-c617-4520-ba94-d63967071278</div>
+      <button onclick="event.stopPropagation(); copyUuid('d4a51879-c617-4520-ba94-d63967071278')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('d54fcce0-ea74-4c89-ae7a-c6c63fa89764')">
+      <img src="http://5.223.70.55/objects/uploads/d54fcce0-ea74-4c89-ae7a-c6c63fa89764"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">d54fcce0-ea74-4c89-ae7a-c6c63fa89764</div>
+      <button onclick="event.stopPropagation(); copyUuid('d54fcce0-ea74-4c89-ae7a-c6c63fa89764')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('d6d8635f-02fd-488f-b6cc-05f351dfcc2b')">
+      <img src="http://5.223.70.55/objects/uploads/d6d8635f-02fd-488f-b6cc-05f351dfcc2b"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">d6d8635f-02fd-488f-b6cc-05f351dfcc2b</div>
+      <button onclick="event.stopPropagation(); copyUuid('d6d8635f-02fd-488f-b6cc-05f351dfcc2b')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('d76bc036-71e5-477c-8c7a-c872be206bc7')">
+      <img src="http://5.223.70.55/objects/uploads/d76bc036-71e5-477c-8c7a-c872be206bc7"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">d76bc036-71e5-477c-8c7a-c872be206bc7</div>
+      <button onclick="event.stopPropagation(); copyUuid('d76bc036-71e5-477c-8c7a-c872be206bc7')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('de28c4a1-da21-4915-976e-257431946b0d')">
+      <img src="http://5.223.70.55/objects/uploads/de28c4a1-da21-4915-976e-257431946b0d"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">de28c4a1-da21-4915-976e-257431946b0d</div>
+      <button onclick="event.stopPropagation(); copyUuid('de28c4a1-da21-4915-976e-257431946b0d')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('e0592653-ffb7-448f-9006-9c97e179dd0c')">
+      <img src="http://5.223.70.55/objects/uploads/e0592653-ffb7-448f-9006-9c97e179dd0c"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">e0592653-ffb7-448f-9006-9c97e179dd0c</div>
+      <button onclick="event.stopPropagation(); copyUuid('e0592653-ffb7-448f-9006-9c97e179dd0c')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('e0e9a3ed-a603-4411-9862-62883053d393')">
+      <img src="http://5.223.70.55/objects/uploads/e0e9a3ed-a603-4411-9862-62883053d393"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">e0e9a3ed-a603-4411-9862-62883053d393</div>
+      <button onclick="event.stopPropagation(); copyUuid('e0e9a3ed-a603-4411-9862-62883053d393')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('e64d8f49-0ef3-4e3f-9819-29683d318923')">
+      <img src="http://5.223.70.55/objects/uploads/e64d8f49-0ef3-4e3f-9819-29683d318923"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">e64d8f49-0ef3-4e3f-9819-29683d318923</div>
+      <button onclick="event.stopPropagation(); copyUuid('e64d8f49-0ef3-4e3f-9819-29683d318923')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('ea09e6ff-f09b-4601-beca-4caa4a46326d')">
+      <img src="http://5.223.70.55/objects/uploads/ea09e6ff-f09b-4601-beca-4caa4a46326d"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">ea09e6ff-f09b-4601-beca-4caa4a46326d</div>
+      <button onclick="event.stopPropagation(); copyUuid('ea09e6ff-f09b-4601-beca-4caa4a46326d')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('edf69b8a-6e11-4cbf-9ca0-ecc7c94a6f53')">
+      <img src="http://5.223.70.55/objects/uploads/edf69b8a-6e11-4cbf-9ca0-ecc7c94a6f53"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">edf69b8a-6e11-4cbf-9ca0-ecc7c94a6f53</div>
+      <button onclick="event.stopPropagation(); copyUuid('edf69b8a-6e11-4cbf-9ca0-ecc7c94a6f53')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('efc6aac5-da08-4d09-a83e-ca8cf7905934')">
+      <img src="http://5.223.70.55/objects/uploads/efc6aac5-da08-4d09-a83e-ca8cf7905934"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">efc6aac5-da08-4d09-a83e-ca8cf7905934</div>
+      <button onclick="event.stopPropagation(); copyUuid('efc6aac5-da08-4d09-a83e-ca8cf7905934')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('f03015d9-89ab-4028-b0d2-875ab20700fa')">
+      <img src="http://5.223.70.55/objects/uploads/f03015d9-89ab-4028-b0d2-875ab20700fa"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">f03015d9-89ab-4028-b0d2-875ab20700fa</div>
+      <button onclick="event.stopPropagation(); copyUuid('f03015d9-89ab-4028-b0d2-875ab20700fa')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('f35a813a-cf5a-408e-b8a3-3ee5259fbf75')">
+      <img src="http://5.223.70.55/objects/uploads/f35a813a-cf5a-408e-b8a3-3ee5259fbf75"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">f35a813a-cf5a-408e-b8a3-3ee5259fbf75</div>
+      <button onclick="event.stopPropagation(); copyUuid('f35a813a-cf5a-408e-b8a3-3ee5259fbf75')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('f45ee016-92c0-4695-a7d5-2e0baf789a62')">
+      <img src="http://5.223.70.55/objects/uploads/f45ee016-92c0-4695-a7d5-2e0baf789a62"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">f45ee016-92c0-4695-a7d5-2e0baf789a62</div>
+      <button onclick="event.stopPropagation(); copyUuid('f45ee016-92c0-4695-a7d5-2e0baf789a62')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('f98ac3e6-09ce-47c8-ada0-35e2af1b39f4')">
+      <img src="http://5.223.70.55/objects/uploads/f98ac3e6-09ce-47c8-ada0-35e2af1b39f4"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">f98ac3e6-09ce-47c8-ada0-35e2af1b39f4</div>
+      <button onclick="event.stopPropagation(); copyUuid('f98ac3e6-09ce-47c8-ada0-35e2af1b39f4')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('fa0c419d-010e-49b6-b8c5-c443fa31b576')">
+      <img src="http://5.223.70.55/objects/uploads/fa0c419d-010e-49b6-b8c5-c443fa31b576"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">fa0c419d-010e-49b6-b8c5-c443fa31b576</div>
+      <button onclick="event.stopPropagation(); copyUuid('fa0c419d-010e-49b6-b8c5-c443fa31b576')">📋 Copy UUID</button>
+    </div>
+
+    <div class="card" onclick="copyUuid('fb944d8a-1371-48c3-96b1-7993837f5bef')">
+      <img src="http://5.223.70.55/objects/uploads/fb944d8a-1371-48c3-96b1-7993837f5bef"
+           onerror="this.style.display='none'; this.nextSibling.style.display='block'"
+           loading="lazy" />
+      <div class="video-placeholder" style="display:none">📹 Media file</div>
+      <div class="uuid">fb944d8a-1371-48c3-96b1-7993837f5bef</div>
+      <button onclick="event.stopPropagation(); copyUuid('fb944d8a-1371-48c3-96b1-7993837f5bef')">📋 Copy UUID</button>
+    </div>
+</div>
+
+<h2>All Screens</h2>
+<p>Green border = has images. Red border = needs images.</p>
+<table>
+  <thead><tr><th>Screen ID</th><th>Name</th><th>Current Images</th></tr></thead>
+  <tbody>
+    <tr class="no-images">
+      <td><code>215e8905-17be-484c-8b88-1d979e9038eb</code></td>
+      <td>ANDHERI D N NAGAR</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>7f1ddc11-014e-485b-82f9-8b15df3c881a</code></td>
+      <td>Atithi Gardenia - Tavarekere</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>aad38f3f-b043-4bd5-b93b-d7ceb047bd45</code></td>
+      <td>Ayodhya Sagar - Basaweshwara Nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>b275c9e4-c938-49c9-84b9-a47c8ede4e01</code></td>
+      <td>Ayodhya Upachar - Banashankari</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>b82790c6-59dc-45d8-ac14-483d43636194</code></td>
+      <td>Bakasura Bandi - Sunkadakatte</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>90fb5d4b-53ab-4e05-a320-31b3e3d293f8</code></td>
+      <td>Banashankari TTMC Screen</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>47d9d5f1-7453-4132-9f56-2c814f20bc4f</code></td>
+      <td>Barista Aerocity, Mohali</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>2c093f43-d253-4638-bf06-947dcfdfc7d4</code></td>
+      <td>Barista Amayra Kharar Road, Mohali</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e4a0e351-d712-4553-ae05-ad852da39718</code></td>
+      <td>Barista Barista - RC Millennium</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>066fe7fa-cce0-4fdb-a566-baed65e3a536</code></td>
+      <td>Barista Barista Ambience</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>d2266fa7-7241-4d7b-8d95-299815df0a3a</code></td>
+      <td>Barista Barista Band Stand</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>74c86df1-a802-4136-8960-8e8763458c5d</code></td>
+      <td>Barista Barista Basant Lok</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>75565ac3-ace7-49d3-9490-ae916bd952f0</code></td>
+      <td>Barista Barista Charmwood Plaza</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>022e5175-f9c7-4e05-b8a1-61ca787f9981</code></td>
+      <td>Barista Barista Chembur</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>62e4365b-2818-4889-aaaa-8d16d495d101</code></td>
+      <td>Barista Barista Club link Mind Space</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>6e519672-a891-4638-9dc7-1aec2fe2a22b</code></td>
+      <td>Barista Barista Connaught Place</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>fba391d0-001f-4048-a204-112a438f5af9</code></td>
+      <td>Barista Barista DLF Galleria</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>2d03ae8b-877a-4f44-9e64-fd525f332cdc</code></td>
+      <td>Barista Barista DLF Qutub Plaza</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>867b2668-bb13-4f23-ab4a-aeb3320675aa</code></td>
+      <td>Barista Barista Defence Colony</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>26cdc09a-4340-4689-b4b9-6d6fbd351065</code></td>
+      <td>Barista Barista Diner, Sector 90</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>db3caca9-b701-4a2c-83ee-fdda75c77f3d</code></td>
+      <td>Barista Barista East Patel Nagar, Delhi</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>b015790d-548f-41c5-8ff2-47b4f96dd29a</code></td>
+      <td>Barista Barista Elan Epic Mall</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>fd22d57a-467c-48f8-8039-5c3ca3361e8b</code></td>
+      <td>Barista Barista Elan Miracle Mall</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>aaad3f47-9023-42ab-ad1f-5c1efabff630</code></td>
+      <td>Barista Barista Fr Gallery On MG</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>b9bf31d3-25e6-4986-993a-d6ebe416ce34</code></td>
+      <td>Barista Barista Fr Ireo City Central, Gurgaon</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>9a2d6765-0462-48b7-ab18-77b188aee9c6</code></td>
+      <td>Barista Barista Fr M3M Urbana</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>faf075cd-c852-4815-84a7-7e71b8899ea0</code></td>
+      <td>Barista Barista Fr Paras Trinity</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e8e22241-8e4c-4928-8417-910fa1790a52</code></td>
+      <td>Barista Barista Fr Primus Hospital</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>99b4dff2-769c-4b3e-9ebf-64504ccc9c35</code></td>
+      <td>Barista Barista Fr Sector 22 Gurgaon</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>9c401417-2d45-4e8b-b513-e39cdf8dd1b7</code></td>
+      <td>Barista Barista Fr Sector 36D, Chandigarh</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>349291b3-ef62-4ff7-99ff-07def40e4711</code></td>
+      <td>Barista Barista Fr World Street, Faridabad</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>c985320d-a484-44ec-8baa-0512de28001d</code></td>
+      <td>Barista Barista Garodia Nagar Ghatkopar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>d0c55a47-9489-4ffa-814d-e6384cf3d7e3</code></td>
+      <td>Barista Barista Janatha Petrol Pump, Gurgaon</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>b7370d00-3648-4550-8e0c-9ed854c3a713</code></td>
+      <td>Barista Barista M3M 65th Avenue</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>c9429118-4396-47e0-b014-9582a72b8068</code></td>
+      <td>Barista Barista Noida Sector 18</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>307f10d3-4db9-4354-82da-58673a9b914b</code></td>
+      <td>Barista Barista Rajiv Chowk</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>25087df5-fcb7-4b7d-a6a7-02591945d3d9</code></td>
+      <td>Barista Barista SDA Colony</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>7285d677-4656-40d1-a00d-57bed059dfd7</code></td>
+      <td>Barista Barista SHIMPOLI BORIVALI</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>c274047e-6070-4549-a400-11c5c1b1789e</code></td>
+      <td>Barista Barista Shipra Mall</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f894fa0c-06bc-48fb-a01d-79396c2bc3dd</code></td>
+      <td>Barista Barista Shivaji Park</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>fcce01a0-df13-4ed9-aecd-081a85014039</code></td>
+      <td>Barista Barista Signature Global Mall, Ghaziabad</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>1918eb53-a13e-47dc-8713-efd993c28be8</code></td>
+      <td>Barista Barista Stellar IT Park cafe</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>2ea5c6fb-a1d7-49e7-8ef6-b97de12e6e1c</code></td>
+      <td>Barista Barista Versova</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f87d6203-acd3-4203-b59c-243db7dc7559</code></td>
+      <td>Barista Barista Ville Parle</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>4a34baa2-8f9b-4f31-81fd-2d91920f31ae</code></td>
+      <td>Barista Gold Homes, Mohali</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>76dd58d2-ccc2-4473-ba83-480b4f374f57</code></td>
+      <td>Barista MIDC Mahakali Caves, Mumbai</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>a84ab9ee-9775-414c-be76-73b21c464f70</code></td>
+      <td>Barista Mohali SAS nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>d0f35636-c2b7-409f-afd2-eba238142fb4</code></td>
+      <td>Barista New Town Square</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>295b4271-130a-44dc-b5b4-c8d5a9a4be5d</code></td>
+      <td>Barista Phase 10, Mohali</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>205b43d5-f615-4c39-ba06-5deef3093a94</code></td>
+      <td>Barista Sec 82, Mohali</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f265f5d5-1c59-451a-b6df-b7a8a6c9693d</code></td>
+      <td>Barista Sector 10, Chandigarh</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>d459566e-f5d6-461c-9e2d-2c5fd21e1ee2</code></td>
+      <td>Barista Sector 35, Chandigarh</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5f018384-de0b-4d20-8f03-ce1afe984118</code></td>
+      <td>Barista TDI, Mohali</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>491b826d-4469-4d85-9562-022d4458e804</code></td>
+      <td>Barista Uber Mews Gate, Mohali</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e0d4d8f4-4d01-4d9b-b51d-f6567f69d222</code></td>
+      <td>CCD 4th Block jayanagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e7101f46-062e-46d7-8239-2f400674d454</code></td>
+      <td>CCD 9 AVENUE BUILDING WAKAD PUNE</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>743836ca-515e-4337-94c7-78c2c4a5160a</code></td>
+      <td>CCD AASHIRWAD-CHOWK-DWARKA</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5fb2b188-cc5a-4e9f-a561-076497e8d7f0</code></td>
+      <td>CCD Art Of Living</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>1b1bd132-7cb6-4cba-9712-cb6d0269a10a</code></td>
+      <td>CCD Azad Building</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e57597d1-7b03-4500-859c-63fcb3fe4bdb</code></td>
+      <td>CCD B Block Janakpuri</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>76dd829b-aa2e-4c3d-abeb-531da75af0c4</code></td>
+      <td>CCD BELLANDUR VILLAGE</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>6a0c01d0-9067-4b34-9ef1-e81ef2dd17d1</code></td>
+      <td>CCD BOTANICAL GARDEN</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>53dbe3b3-9614-4b01-bd17-fba6fc15604a</code></td>
+      <td>CCD Banjara Hills</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>1ed9cba3-88ac-47a9-95a1-ef69e76a114c</code></td>
+      <td>CCD Bharat ARK</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f030f470-0006-4b35-ac94-7850e002ee4b</code></td>
+      <td>CCD Brigade Meadows</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>453a1ec1-5536-4311-9f6b-f89ad2e31cb9</code></td>
+      <td>CCD C.M.H</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>91b5d56d-7507-4122-a3c9-2f0c3c3ab541</code></td>
+      <td>CCD CCD DelhiCantt</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>ebdc69a9-e046-4be7-87d8-7929293e379d</code></td>
+      <td>CCD CCD Gokul Regency</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>a0523c0a-2729-4a79-9e5d-99207adb3d24</code></td>
+      <td>CCD CUNNINGHAM ROAD OPP</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>98f05ec7-f369-49ed-bf3d-979200803c12</code></td>
+      <td>CCD City Pride</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>61082339-d2d4-462e-8f58-7e788b143e53</code></td>
+      <td>CCD Coconut Groove</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>7915d7dd-7dd1-4b08-a9ea-25a6bc9c7392</code></td>
+      <td>CCD DILSUKH NAGAR</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>c7502af1-9f4e-4a1a-bde6-b2bec456be54</code></td>
+      <td>CCD Dev Chaya Building Haji Ali</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>c7108cbb-1ac5-4144-866e-9468759e0943</code></td>
+      <td>CCD Dr. Rajkumar Road</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>ca7dab77-5877-49a9-b1a4-60f69dc8aed9</code></td>
+      <td>CCD GREEN PARK MAIN NEW DELHI</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>1e1fb3db-e7ef-4cff-b58c-07222930ae35</code></td>
+      <td>CCD Gangenahalli</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>659b6f57-c51e-4595-8388-fde6b8b92cde</code></td>
+      <td>CCD Gini Jony</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>cd897084-0ca4-4577-9cdb-67ce0a0caab8</code></td>
+      <td>CCD Grotto Church</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>0f3417a5-a849-49c7-b567-13cc33a8fc1b</code></td>
+      <td>CCD HARLUR ROAD</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e2bec17d-9f2e-4778-ad98-7443c60554b1</code></td>
+      <td>CCD HOT N SPICY</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>13b06094-cb4b-408a-ab6c-e782c987a80b</code></td>
+      <td>CCD HRBR RING ROAD KALYANAGAR BENGALURU</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f445d946-ec43-49c0-ad01-7b6485fbabbd</code></td>
+      <td>CCD HSR LAYOUT 17th Cross Road (sec 4)</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>7d3fbf77-13a4-405f-a09c-13712f4c3d60</code></td>
+      <td>CCD HSR Layout Sector 1</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>dfbbca9e-323d-47b4-9dab-e090096ae145</code></td>
+      <td>CCD HSR SEC 1</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>29bca526-2194-46aa-910c-253e2ffc8b05</code></td>
+      <td>CCD Hari Om Tower</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5e946fa6-d231-4860-aa61-68c3ee424e25</code></td>
+      <td>CCD Hotel lee Cardrey</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>86a4fe1f-7edf-46f6-84a0-75c8c83d3dc4</code></td>
+      <td>CCD Hyderguda</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>a526fc0f-d986-44d5-99bf-83942fe480bb</code></td>
+      <td>CCD INDIRANAGAR (100 FT RD)</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>d6c7769c-f037-45cd-a530-a384dd812712</code></td>
+      <td>CCD J BLOCK RAJOURI GARDEN DELHI</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f8cf08d3-a34b-4745-82dd-6d1aedccf827</code></td>
+      <td>CCD JP NAGAR Phase 1</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5057905c-3e69-43cf-b3a8-2a68001ca494</code></td>
+      <td>CCD JP NAGAR-5TH PHASE-SARAKI</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>af0793c6-20c2-4784-9626-23f4af2175fc</code></td>
+      <td>CCD Jayanagar T Block</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>12892cbd-93c2-40cb-8568-1d65d1dd9224</code></td>
+      <td>CCD KAMLANAGAR BUILDING NO 26B1 & 27 A1 DEL</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5b0883a3-bb76-474c-a69b-9864a59d27e4</code></td>
+      <td>CCD KRISHNAI APARTMENT</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>42262f5d-495f-418c-bc1d-be6a39fee018</code></td>
+      <td>CCD Kalyannagar Kammanahalli Main Rd</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>b0f11f62-7c58-4e26-b400-38fb10c9bd25</code></td>
+      <td>CCD Kasturi Nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>c062aa95-9a36-45aa-86a5-78c66fc7de6f</code></td>
+      <td>CCD Lalwani Regency</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>8cc7fe17-e0ca-4d96-8216-7bd256a4a630</code></td>
+      <td>CCD MALLESWARAM NO225 & 226 PAPA JOHNS BENG</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>14e2b44a-40c9-45e2-a4a9-5220576f4c49</code></td>
+      <td>CCD Majestic Height</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f919c6e3-50a3-49d6-a20c-c683c5121dac</code></td>
+      <td>CCD Mango Suits</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>0b6ef558-6436-4636-856f-a73ae558822d</code></td>
+      <td>CCD Mansarovar Garden</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>1d626723-9171-4087-af0b-78abde94d6e9</code></td>
+      <td>CCD Miyapur</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>78376bed-5f44-4e92-bc75-6a640a791447</code></td>
+      <td>CCD NANDI DURGA ROAD JAYAMAHAL EXTENSON BLR</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>8e9bb074-9931-455a-83d3-c8c09791fbd6</code></td>
+      <td>CCD NATHAN PRIDUS KARTHIKNAGAR</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>b84c4e1e-ad5c-4035-a221-404b03ecbc50</code></td>
+      <td>CCD NFC Lounge</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>70196dcb-e62b-4321-927f-ce6b0bc4e39c</code></td>
+      <td>CCD Noor Café</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>44f50d5c-9b89-4d2e-b67c-4cc7b128444d</code></td>
+      <td>CCD Old Rajender Nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>02766743-626d-4426-8087-ac7c9c6186f8</code></td>
+      <td>CCD Orchid Plaza</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>eab7dbcb-69a4-4ddc-9019-e8a9d247804a</code></td>
+      <td>CCD PRANJEE MARINA</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>d7dcb8a0-ffce-4a11-acd8-73ccc54d8e12</code></td>
+      <td>CCD Paschim Vihar East Delhi</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>eea84a25-f9e4-4f43-842a-2b47507bbca7</code></td>
+      <td>CCD Peenya HPCL Petrol Bunk</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>8841fd7a-edb2-4b9e-ae4d-9f96f7bfe888</code></td>
+      <td>CCD Persian Café</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>6dc04e85-e705-4ed6-a676-9292909453ec</code></td>
+      <td>CCD Powai Lake</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>9090e14d-4b95-48f1-9508-b0ee8c56315b</code></td>
+      <td>CCD Prashanth Vihar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>fadad8f7-7003-4532-b9d0-32493ed1b4cb</code></td>
+      <td>CCD Privelege Inn</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>726c0c47-947e-49c5-b7f6-9f6834e3f205</code></td>
+      <td>CCD R R NAGAR</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>40d783ff-feca-4184-a576-2e92ef3f365d</code></td>
+      <td>CCD R.T. NAGAR</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>4001bef5-66d8-4132-964c-611a9fcf1d26</code></td>
+      <td>CCD Rajouri Garden</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>960c4637-6d14-4088-9204-c5a18e9a7bca</code></td>
+      <td>CCD S R Nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>d7a2835d-9891-4702-a9d6-bbe0d5bf3b79</code></td>
+      <td>CCD SATELLITE GARDEN-FILMCITY</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>3db59079-9c38-405c-b7b9-0f4265326b2f</code></td>
+      <td>CCD SHANTI NIKETAN</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>269750a6-3353-456a-a6e5-64e5906b6498</code></td>
+      <td>CCD SHER-E-PUNJAB (Andheri E)</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>01ed070c-7308-4a3c-8a91-b88ebbc7fbea</code></td>
+      <td>CCD SRF BANASHANKARI</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>288f83c7-b485-4f86-a999-a0bb77d0b29d</code></td>
+      <td>CCD Sarath City Mall</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>53395d18-e7c9-49c1-b7e4-c082d5b185d7</code></td>
+      <td>CCD Sarita Vihar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>d7341955-15d0-4c1d-92ee-634e56764eea</code></td>
+      <td>CCD Sea Green</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>699c7a98-38c7-4634-afdc-a37358659787</code></td>
+      <td>CCD Smokin Joe</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>504b60c6-5166-4f31-9534-5fcc5a66ecd9</code></td>
+      <td>CCD Star City Mall Mayurvihar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>306d2e46-e09a-446b-a16d-064b70a66edf</code></td>
+      <td>CCD TELECOM NAGAR</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>ea30847a-d988-4c0c-80ac-ee884455046a</code></td>
+      <td>CCD The Square Jubilee Hills</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>6090c52b-98a6-42da-93a4-1fb7cdf7a2f1</code></td>
+      <td>CCD Toli Chowki</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>b9b392bc-1b9e-4889-8188-196b65a0ba5f</code></td>
+      <td>CCD Top N Town</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>41596f18-5eba-4570-8bb3-c43772f0ac65</code></td>
+      <td>CCD Vasant Marvel</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>2e2f7b2b-6a72-4068-ab70-41eb8a4dc383</code></td>
+      <td>CCD Vasant Vihar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>b73694fc-f23f-4e2f-95b5-2a856b48526b</code></td>
+      <td>CCD Vijaya Bank</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>0b3d262b-a805-4f71-9ed4-1b13ba1601d9</code></td>
+      <td>CCD WHITEFIELD MAIN ROAD</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5216c3f5-700f-4d1c-b29e-644b7dc0dbf1</code></td>
+      <td>CCD Yummy Tummy</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>fdcf7731-7cb4-4382-ac88-0bc699e5a305</code></td>
+      <td>CCD ZEN BUSINESS CENTRE PUNE</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>3412e1d2-49ca-4d44-b9ee-ac8d9f31f8f9</code></td>
+      <td>CCD habsi guda</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>79a9b8f2-21cf-4c2e-8029-d2febaf25628</code></td>
+      <td>Cafe Gokulam - Singasandra</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e0a2bc2e-9225-49c9-9056-6f2d9e200312</code></td>
+      <td>Cafe Krishnam - Jayanagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5531eb96-55de-45a9-992d-ff0a0588dd61</code></td>
+      <td>Cinema_ Box 01</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>6a3638f4-8f96-4027-8fee-7c9999482c48</code></td>
+      <td>Coffee makers - HSR Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>3820692d-8819-4544-ac87-2f7f3fd583b2</code></td>
+      <td>Concourse ITPL - Whitefield</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>307bd5b5-d1a1-47bd-9d47-a21df34e5139</code></td>
+      <td>Durgashree Samruddhi Grand - R. T. Nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5b8402e2-99d0-457a-8065-c82a81ca20a8</code></td>
+      <td>Durgashree Samruddhi Grand - Sunkadakatte</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e815104e-4ac9-4714-b131-12fa3fd8a90e</code></td>
+      <td>Durgashree Samruddhi Grand Veg - Muthasandra</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e4104fee-f8f1-4575-9944-a2f56b3cd2df</code></td>
+      <td>Happy Kydz - Indiranagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>0c6ff948-b62d-4972-8c4d-4d27de72516f</code></td>
+      <td>Hotel Anand Bhavan - Zoo Rd</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>b166de4d-ba20-40fe-babf-3ecf46c492bd</code></td>
+      <td>Hotel Ayodhya Upahar - Malleshwaram</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="has-images">
+      <td><code>fae5b29b-bcbc-4ef5-982f-89467853079e</code></td>
+      <td>Hotel Durgashree Samruddhi Garden - Pindakuru Thimmanahalli</td>
+      <td><code>/objects/uploads/4cac0d15-3157-4036-a6d0-ec119a947fa7</code></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>14b9fc26-83ea-49e1-966d-e41620b4eb94</code></td>
+      <td>Hotel Halli Nanasu - Doddaballapura</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>081ea1bc-6209-4bef-a26b-14f7c9d3ad8e</code></td>
+      <td>Jagpreet Singh</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>59dc2b4b-70b5-416c-b541-78417930392b</code></td>
+      <td>Kadamba Veg Restaurant - Basaveshwar Nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>09c99b8d-ce8b-41df-a27c-e33375392a7a</code></td>
+      <td>Krishna leela grand - Bagulur Main Road</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>16b772eb-580d-48a1-a919-9e58d9f6af71</code></td>
+      <td>Maratha Darshan - Vasanth Nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>9af561be-23a8-4e2d-962d-53f4a42e096f</code></td>
+      <td>Mayura Sagar Restaurant - Brookefield</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>cc44bf16-8349-4fbb-894b-a9b671374177</code></td>
+      <td>Minerva Screen</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>40de220c-ab6a-43ff-99ac-3e0fa17d319e</code></td>
+      <td>Neelanjana Mahesh Prasad - Ramakrishnanagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>09db7086-8b9d-4371-bf0d-d5ad727e6f04</code></td>
+      <td>New Krishna Sagar - TC Palya</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>701253ae-b588-411f-b472-d92aec52e122</code></td>
+      <td>New Shanthi Sagar - Vijaynagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f597559d-3934-40aa-a8f8-b2df16acc3a1</code></td>
+      <td>New Udupi Grand - HSR Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e590a10c-f0b5-49a2-801a-354b244d3925</code></td>
+      <td>OPP BOMBAY OXYGEN COMPANY Andheri -W</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>27ab0618-60cb-4294-b594-a5e45e77c31c</code></td>
+      <td>Old Original Hotel Vinayaka Mylari - Doora</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>05367f4b-7f28-4592-b338-85f0967dfdc9</code></td>
+      <td>Playville - Whitefield</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>9cfaac0a-2fce-4024-ac96-3db67b11333e</code></td>
+      <td>Playville Kids Play Zone - Kempegowda Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f32e1e37-2107-4b41-aaa0-ee8a9546fb59</code></td>
+      <td>Raithana Aramane - Dasarahalli</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>c27d9402-98e3-4c08-a061-978006a45059</code></td>
+      <td>SLV Food Joint - HRBR Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>9f5f20df-6784-4837-800d-e0564df7b8e9</code></td>
+      <td>Sassy AF Café - HSR Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5b2cd378-8b0e-4b9c-8c64-72fb84c5e67e</code></td>
+      <td>Sendhoor Coffee - HSR Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>a55c44bc-869d-4bdf-b340-79aed9800d58</code></td>
+      <td>Shre Sadashiva Handlooms and Gift Centers</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>a43f83f6-9dfa-4297-9434-a5430831dc2c</code></td>
+      <td>Shri Krishna Nandagokula - Kasturi Nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>a38afc75-c338-4498-8f19-9c91b79f8e90</code></td>
+      <td>Sri Ganesh Grand - Doddaballapura</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>6e9d3a14-c18d-4693-9f8d-e9a82aa6d559</code></td>
+      <td>Sri Krishna Nalapaka - HSR Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>966ab7c1-3d37-492d-9400-2bf204389ddb</code></td>
+      <td>Sri Mandarthi Vaibhava</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>67ba9834-8f14-468d-a694-6fc344d60cd7</code></td>
+      <td>Sri Manjunatha Grand Veg - Nagavara</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>02ff7668-2125-4227-9eb5-8f83e9d5088a</code></td>
+      <td>Sri Udupi Food Hub - Commercial Street</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>2db7cd33-bf89-4fe0-bd18-221107d35fe4</code></td>
+      <td>Sri Udupi Food Hub - Indiranagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>e85d90d0-435e-419d-9d46-ed3a1b4be771</code></td>
+      <td>Sri Udupi Food Hub - Koramangala</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>710a4024-f5ec-4dea-9408-287049466272</code></td>
+      <td>Sri Udupi Food Hub - Tilaknagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>1367b1cf-82e2-4ac1-8a2e-c26279427f0a</code></td>
+      <td>Sri Udupi Food Hub - Whitefield</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>d412c53c-7619-4313-bdde-ae342f0f5ae5</code></td>
+      <td>Sri Udupi Food Hub 3rd block - Jayanagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>01fa6adf-cd46-4d59-8185-338fe720f91a</code></td>
+      <td>Sri Udupi Food Hub Hopefarm - Whitefield</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>cf02bf83-d20f-419d-9ea1-a83a7163b5e3</code></td>
+      <td>Sri Udupi Park - Brigade Road</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5b6d7a71-7d4b-481f-a5af-f4f7c9350a05</code></td>
+      <td>Sri Vishnu Brindavana - Kasavanahalli</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>a04980fc-4bbd-4858-8193-4a8753d20f72</code></td>
+      <td>Sri Vishnu Grand - Bellandur</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>47f7029c-ffa3-4056-b6cb-a19f116bd8aa</code></td>
+      <td>Sri Vishnu Park Restaurant - BTM Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>83b82381-c667-4ade-ace3-c9df250efa57</code></td>
+      <td>Srinidhi Upachar -Dodda Banaswadi</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>cecb0a52-997a-417e-a764-5006bdb2cdfa</code></td>
+      <td>Srinidhi Veg Food Court - Kalyan Nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>94982b35-67b3-454f-9082-42ac92ef0a37</code></td>
+      <td>The Rasaganga - Bellandur</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>03923983-0666-46b3-9861-05345156ef01</code></td>
+      <td>Top In Town Hyper Market - Whitefield</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>0a09d635-f4f8-40cc-8f4a-60baed4553f9</code></td>
+      <td>Udupi Food Park - Singasandra</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f0504368-baa3-4aea-bc14-0ec27b122811</code></td>
+      <td>Udupi Garden Veg Restaurant - Bagalakunte</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>37c431b8-36ca-4e71-8628-248484c956ed</code></td>
+      <td>Udupi Garden Veg Restaurant - Kothanur</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>1477b1ea-fe3f-4535-bece-8084d9f22b80</code></td>
+      <td>Udupi Gardenia -Banjara Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>eecdeea1-40dd-4b27-869a-fa42a31e2976</code></td>
+      <td>Udupi Gardenia -Jayanti Nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>5a7a7104-5510-44d6-a37d-249c8569a892</code></td>
+      <td>Udupi Gardenia -Munireddy Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>136c7c40-363c-471c-9baa-24c10415c499</code></td>
+      <td>Udupi Krishna Dhama - Arehalli Guddadahalli</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>a20bf2ad-4bf1-471e-8708-a6490b6e78e1</code></td>
+      <td>Udupi Mane Thindi</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>84791612-2c6b-4b11-8b98-b8fc2c72da01</code></td>
+      <td>Udupi Palace</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>758bcbfa-48d4-4112-86ea-3e1556ca7882</code></td>
+      <td>Udupi Swada - Kumaraswamy Layout</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>299561e7-ef43-4027-8088-e9937848bf3a</code></td>
+      <td>Udupi Upachar - Hebbal</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>62fd900d-d2d0-4b7b-859c-77454140d5fa</code></td>
+      <td>Udupi Vaibhav - Kothanur</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>f0ab89da-79cb-4c86-bb3a-68d3ec5c7df3</code></td>
+      <td>Udupi Vaibhav Veg Restaurant - Tata nagar</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>732b0d94-751d-443a-92b6-c3239714f854</code></td>
+      <td>WORLI DAIRY SEA-FACE</td>
+      <td><em>— no images —</em></td>
+    </tr>
+
+    <tr class="no-images">
+      <td><code>762b2f5f-0213-4484-a62c-4cacaa224343</code></td>
+      <td>WORLI DAIRY SEA-FACE #2</td>
+      <td><em>— no images —</em></td>
+    </tr></tbody>
+</table>
+
+<div class="toast" id="toast">UUID copied!</div>
+
+<script>
+function copyUuid(uuid) {
+  navigator.clipboard.writeText(uuid).then(() => {
+    const t = document.getElementById('toast');
+    t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', 1500);
+  });
+}
+</script>
+</body>
+</html>

@@ -56,6 +56,8 @@ export function setupSecurity(app: Express) {
         'https://www.pixelspot.in',
         'https://connect.pixelspot.in',
         'https://adsmanager.pixelspot.in',
+        'http://5.223.70.55',
+        'https://5.223.70.55',
         ...replitDomains,
       ].filter(Boolean)
     : [
@@ -176,7 +178,7 @@ export function setupSecurity(app: Express) {
           "https://www.googletagmanager.com",
         ],
         objectSrc: ["'none'"],
-        upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+        upgradeInsecureRequests: process.env.ENABLE_HTTPS === 'true' ? [] : null,
       },
     },
     // X-Content-Type-Options

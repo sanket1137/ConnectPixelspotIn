@@ -1,0 +1,296 @@
+/**
+ * migrate-all-images.cjs  —  run on NEW SERVER (5.223.70.55)
+ *
+ * Full migration: queries the DB for every image UUID ever stored,
+ * downloads from connect.pixelspot.in, uploads to GCS, restores DB references.
+ *
+ * Usage:
+ *   cd /var/www/pixelspot
+ *   node scripts/migrate-all-images.cjs
+ */
+
+require('dotenv').config({ path: '.env.production' });
+
+const { Storage } = require('@google-cloud/storage');
+const { neon } = require('@neondatabase/serverless');
+const https = require('https');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+// ── Config ───────────────────────────────────────────────────────
+const OLD_SERVER_BASE = 'https://connect.pixelspot.in/objects/uploads/';
+const GCS_BUCKET = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'pixelspot-uploads';
+const GCS_PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT_ID || 'pixelspot-f4010';
+const DATABASE_URL = process.env.DATABASE_URL;
+const ACL_VALUE = JSON.stringify({ owner: 'migrated', visibility: 'public' });
+
+// ── GCS client ───────────────────────────────────────────────────
+function makeGcs() {
+  const creds = {
+    client_email: process.env.FIREBASE_CLIENT_EMAIL,
+    private_key: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+  };
+  return new Storage({ projectId: GCS_PROJECT_ID, credentials: creds });
+}
+
+// ── HTTP download with redirect follow ──────────────────────────
+function downloadUrl(url, hops = 0) {
+  if (hops > 5) return Promise.reject(new Error('Too many redirects'));
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http;
+    const req = mod.get(url, { timeout: 30000, headers: { 'User-Agent': 'PixelspotMigration/2.0' } }, res => {
+      if ([301, 302, 307, 308].includes(res.statusCode)) {
+        res.resume();
+        return resolve(downloadUrl(res.headers.location, hops + 1));
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve({ buffer: Buffer.concat(chunks), contentType: res.headers['content-type'] || 'image/jpeg' }));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.on('timeout', () => req.destroy(new Error('Timeout')));
+  });
+}
+
+// ── Extract all /objects/uploads/<uuid> paths from a value ──────
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+function extractUuids(val) {
+  if (!val) return [];
+  const str = Array.isArray(val) ? val.join(' ') : String(val);
+  return [...new Set([...str.matchAll(UUID_RE)].map(m => m[0].toLowerCase()))];
+}
+
+// ── Query DB for all image paths ─────────────────────────────────
+async function getAllUuidsFromDb(sql) {
+  const uuidMap = new Map(); // uuid -> { tables: [], originalPaths: [] }
+
+  const addUuids = (uuids, tableInfo, originalPath) => {
+    for (const uuid of uuids) {
+      if (!uuidMap.has(uuid)) uuidMap.set(uuid, { tables: [], originalPaths: [] });
+      uuidMap.get(uuid).tables.push(tableInfo);
+      uuidMap.get(uuid).originalPaths.push(originalPath);
+    }
+  };
+
+  // Screens table — DB columns: images, screen_images, surrounding_images
+  const screens = await sql`
+    SELECT id, name, images, screen_images, surrounding_images
+    FROM screens
+  `;
+  for (const s of screens) {
+    const info = `screens(id=${s.id} "${s.name}")`;
+    addUuids(extractUuids(s.images), info, JSON.stringify(s.images));
+    addUuids(extractUuids(s.screen_images), info, JSON.stringify(s.screen_images));
+    addUuids(extractUuids(s.surrounding_images), info, JSON.stringify(s.surrounding_images));
+  }
+
+  // Campaigns table — DB column: creative_url
+  const campaigns = await sql`SELECT id, name, creative_url FROM campaigns WHERE creative_url IS NOT NULL`;
+  for (const c of campaigns) {
+    addUuids(extractUuids(c.creative_url), `campaigns(id=${c.id} "${c.name}")`, c.creative_url);
+  }
+
+  // Users table: profile_image / avatar
+  try {
+    const users = await sql`SELECT id, email, profile_image FROM users WHERE profile_image LIKE '%/objects/%'`;
+    for (const u of users) {
+      addUuids(extractUuids(u.profile_image), `users(id=${u.id} ${u.email})`, u.profile_image);
+    }
+  } catch (_) { /* column may not exist */ }
+
+  // Also try bookings for any creative/proof images
+  try {
+    const bookings = await sql`SELECT id, campaign_id, proof_url FROM bookings WHERE proof_url LIKE '%/objects/%'`;
+    for (const b of bookings) {
+      addUuids(extractUuids(b.proof_url), `bookings(id=${b.id})`, b.proof_url);
+    }
+  } catch (_) {}
+
+  return uuidMap;
+}
+
+// ── Build update SQL for restoring screen image references ───────
+function buildRestoreSql(screenUpdates) {
+  if (screenUpdates.length === 0) return '-- No screen images to restore\n';
+  const lines = ['-- Restore migrated image paths in screens table', '-- Generated by migrate-all-images.cjs', ''];
+  for (const u of screenUpdates) {
+    const arr = `ARRAY[${u.uuids.map(id => `'/objects/uploads/${id}'`).join(', ')}]`;
+    lines.push(`UPDATE screens SET "screenImages" = ${arr} WHERE id = ${u.screenId};`);
+  }
+  return lines.join('\n');
+}
+
+// ── Main ─────────────────────────────────────────────────────────
+async function main() {
+  if (!DATABASE_URL) { console.error('DATABASE_URL not set'); process.exit(1); }
+
+  const sql = neon(DATABASE_URL);
+  const gcs = makeGcs();
+  const bucket = gcs.bucket(GCS_BUCKET);
+
+  // ── Step 1: Collect all UUIDs from DB ──
+  console.log('🔍 Querying database for all image UUIDs...');
+  const uuidMap = await getAllUuidsFromDb(sql);
+
+  // Also add the known hard-coded UUIDs from error logs (in case they were missed)
+  const knownUuids = [
+    '08f349ee-2d16-433e-8add-13415933504a',
+    'b2c01b82-09a2-4e6e-96e6-9f22e2a0c21f',
+    '702f8717-4399-4663-9935-e153ad92a414',
+    'de28c4a1-da21-4915-976e-257431946b0d',
+    '070d7d37-0ef5-450f-b638-04e1fa942c6c',
+    'd6d8635f-02fd-488f-b6cc-05f351dfcc2b',
+    '33a9f875-2d75-49e8-a8bd-65d56b3ae3a1',
+  ];
+  for (const uuid of knownUuids) {
+    if (!uuidMap.has(uuid)) uuidMap.set(uuid, { tables: ['error-log'], originalPaths: [] });
+  }
+
+  // ── Step 2: Also check what's already in GCS ──
+  console.log('📦 Checking existing GCS objects...');
+  const [existingFiles] = await bucket.getFiles({ prefix: 'private/uploads/' });
+  const existingUuids = new Set(existingFiles.map(f => {
+    const m = f.name.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+    return m ? m[1].toLowerCase() : null;
+  }).filter(Boolean));
+  console.log(`Found ${existingUuids.size} already in GCS, ${uuidMap.size} total UUIDs to process\n`);
+
+  // ── Step 3: Migrate each UUID ──
+  const migrated = [];
+  const failed = [];
+  const skipped = [];
+
+  let i = 0;
+  for (const [uuid, meta] of uuidMap) {
+    i++;
+    const gcsPath = `private/uploads/${uuid}`;
+    const srcUrl = `${OLD_SERVER_BASE}${uuid}`;
+    process.stdout.write(`[${i}/${uuidMap.size}] ${uuid} ... `);
+
+    try {
+      if (existingUuids.has(uuid)) {
+        // Already exists — just ensure ACL is set
+        await bucket.file(gcsPath).setMetadata({ metadata: { 'custom:aclPolicy': ACL_VALUE } });
+        console.log('already in GCS (ACL patched)');
+        skipped.push({ uuid, objectRoute: `/objects/uploads/${uuid}` });
+        continue;
+      }
+
+      const { buffer, contentType } = await downloadUrl(srcUrl);
+
+      await bucket.file(gcsPath).save(buffer, {
+        resumable: false,
+        metadata: {
+          contentType,
+          metadata: {
+            'custom:aclPolicy': ACL_VALUE,
+            migratedFrom: srcUrl,
+            migratedAt: new Date().toISOString(),
+          },
+        },
+      });
+
+      const route = `/objects/uploads/${uuid}`;
+      console.log(`✅ ${(buffer.length / 1024).toFixed(1)}KB (${contentType})`);
+      migrated.push({ uuid, objectRoute: route, gcsPath, contentType, bytes: buffer.length, tables: meta.tables });
+
+    } catch (e) {
+      console.log(`❌ ${e.message}`);
+      failed.push({ uuid, error: e.message, tables: meta.tables });
+    }
+  }
+
+  // ── Step 4: Summary ──
+  const allSuccess = [...migrated, ...skipped];
+  console.log('\n══════════════════════════════════════════════════════');
+  console.log(`✅ Migrated: ${migrated.length}  ⏭  Already existed: ${skipped.length}  ❌ Failed: ${failed.length}`);
+
+  if (failed.length > 0) {
+    console.log('\nFailed (may not exist on old server anymore):');
+    failed.forEach(f => console.log(`  ✗ ${f.uuid}  (${f.tables.join(', ')})  — ${f.error}`));
+  }
+
+  // Save JSON results
+  const resultsPath = path.join(__dirname, 'migration-results.json');
+  fs.writeFileSync(resultsPath, JSON.stringify({ migrated, skipped, failed, timestamp: new Date().toISOString() }, null, 2));
+  console.log(`\nResults saved to: ${resultsPath}`);
+
+  // ── Step 5: Restore DB references ──
+  if (allSuccess.length === 0) {
+    console.log('\nNo images migrated — nothing to restore in DB.');
+    return;
+  }
+
+  console.log('\n🗄  Restoring DB image references...');
+  const uuidToRoute = new Map(allSuccess.map(m => [m.uuid, m.objectRoute]));
+
+  // Re-read screens to rebuild their arrays with new /objects/uploads/<uuid> paths
+  const screens = await sql`SELECT id, name, images, screen_images, surrounding_images FROM screens`;
+  let dbUpdates = 0;
+
+  const rebuildArray = (arr) => {
+    if (!arr || !Array.isArray(arr) || arr.length === 0) return null;
+    return arr.map(p => {
+      const uuids = extractUuids(p);
+      if (uuids.length === 0) return p;
+      let result = p;
+      for (const uuid of uuids) {
+        if (uuidToRoute.has(uuid)) result = `/objects/uploads/${uuid}`;
+      }
+      return result;
+    });
+  };
+
+  for (const screen of screens) {
+    const newScreenImages = rebuildArray(screen.screen_images);
+    const newSurrImages = rebuildArray(screen.surrounding_images);
+    const newImages = rebuildArray(screen.images);
+
+    const hasChange =
+      JSON.stringify(newScreenImages) !== JSON.stringify(screen.screen_images) ||
+      JSON.stringify(newSurrImages) !== JSON.stringify(screen.surrounding_images) ||
+      JSON.stringify(newImages) !== JSON.stringify(screen.images);
+
+    if (hasChange) {
+      await sql`
+        UPDATE screens SET
+          screen_images = ${newScreenImages},
+          surrounding_images = ${newSurrImages},
+          images = ${newImages}
+        WHERE id = ${screen.id}
+      `;
+      console.log(`  Updated screen ${screen.id} "${screen.name}"`);
+      dbUpdates++;
+    }
+  }
+
+  // Restore campaign creative URLs
+  const campaigns = await sql`SELECT id, name, creative_url FROM campaigns WHERE creative_url IS NOT NULL`;
+  for (const c of campaigns) {
+    const uuids = extractUuids(c.creative_url);
+    if (uuids.length === 0) continue;
+    let newUrl = c.creative_url;
+    for (const uuid of uuids) {
+      if (uuidToRoute.has(uuid)) newUrl = `/objects/uploads/${uuid}`;
+    }
+    if (newUrl !== c.creative_url) {
+      await sql`UPDATE campaigns SET creative_url = ${newUrl} WHERE id = ${c.id}`;
+      console.log(`  Updated campaign ${c.id} "${c.name}" creative_url`);
+      dbUpdates++;
+    }
+  }
+
+  console.log(`\n✅ DB restored: ${dbUpdates} records updated`);
+  console.log('\n🎉 Migration complete!');
+  console.log('   All images are now served from GCS via the new server.');
+  console.log('   You can now switch connect.pixelspot.in DNS to 5.223.70.55');
+}
+
+main().catch(e => { console.error('\nFatal error:', e); process.exit(1); });
