@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { VENUE_CATEGORIES } from "@shared/constants";
 import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor as MonitorIcon, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign, Users, Clock, AlertTriangle, Eye, X } from "lucide-react";
 import {
   Dialog,
@@ -100,12 +101,7 @@ const objectives = [
   { value: "local_promotion", label: "Local Promotion" },
 ];
 
-const venueTypes = [
-  "Airport", "Apartment", "Bus Stop", "Café", "Cinema", "Co-working", 
-  "College", "Corporate Park", "Flyover", "Gym", "Highway", "Hospital", 
-  "Mall", "Metro", "Office Building", "Restaurant", "Retail Store", 
-  "Road Junction", "Road Side", "Salon", "Shopping Complex", "Stadium"
-];
+const venueTypes = [...VENUE_CATEGORIES];
 
 // Match database values from shared/constants.ts
 const ageGroups = [

@@ -99,6 +99,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get per-city screen counts (accounting for multi-screen listings)
+  app.get("/api/public/city-stats", async (req, res) => {
+    try {
+      const cityStats = await storage.getCityStats();
+      res.json({ cityStats });
+    } catch (error) {
+      console.error("Get city stats error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get public platform stats (total physical screens, cities, advertisers)
+  app.get("/api/public/stats", async (req, res) => {
+    try {
+      const stats = await storage.getPublicStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Get public stats error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // DEV ONLY: Test mobile OTP sending (no auth required)
   app.post("/api/test/send-mobile-otp", async (req, res) => {
     try {

@@ -12,6 +12,7 @@
 import OpenAI from "openai";
 import type { IStorage } from "./storage";
 import type { Screen, AiConversation, AiMessage } from "@shared/schema";
+import { normalizeCityName, CITY_ALIASES } from "@shared/constants";
 import { redactAIResponse } from "./middleware/pii-redaction";
 import { logAIRequest, detectSensitiveFieldRequest } from "./middleware/audit-logger";
 
@@ -389,32 +390,12 @@ Content: ${bodyText}`;
 }
 
 /**
- * Normalize city name to handle variations (Bangalore/Bengaluru, Bombay/Mumbai, etc.)
- */
-function normalizeCityName(cityName: string): string {
-  const cityMap: Record<string, string> = {
-    'bangalore': 'bengaluru',
-    'bombay': 'mumbai',
-    'madras': 'chennai',
-    'calcutta': 'kolkata',
-    'poona': 'pune',
-    'bengaluru': 'bengaluru',
-    'mumbai': 'mumbai',
-    'chennai': 'chennai',
-    'kolkata': 'kolkata',
-    'pune': 'pune',
-  };
-  
-  const normalized = cityMap[cityName.toLowerCase()];
-  return normalized || cityName.toLowerCase();
-}
-
-/**
  * Check if city names match (handles variations like Bangalore/Bengaluru)
+ * Uses the shared normalizeCityName from @shared/constants
  */
 function citiesMatch(screenCity: string, filterCity: string): boolean {
-  const normalizedScreenCity = normalizeCityName(screenCity);
-  const normalizedFilterCity = normalizeCityName(filterCity);
+  const normalizedScreenCity = normalizeCityName(screenCity).toLowerCase();
+  const normalizedFilterCity = normalizeCityName(filterCity).toLowerCase();
   
   // Check normalized names
   if (normalizedScreenCity === normalizedFilterCity) {

@@ -36,6 +36,8 @@ export interface IStorage {
   getApprovedScreens(): Promise<Screen[]>;
   getPublicScreens(): Promise<Screen[]>;
   getDistinctCities(): Promise<string[]>;
+  getCityStats(): Promise<{ city: string; screenCount: number }[]>;
+  getPublicStats(): Promise<{ totalPhysicalScreens: number; totalCities: number; totalAdvertisers: number }>;
   createScreen(screen: InsertScreen): Promise<Screen>;
   updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined>;
   updateScreenStatus(id: string, status: string, rejectionReason?: string): Promise<Screen | undefined>;
@@ -190,6 +192,41 @@ export class DatabaseStorage implements IStorage {
       .map(r => r.city)
       .filter((city): city is string => city !== null)
       .sort();
+  }
+
+  async getCityStats(): Promise<{ city: string; screenCount: number }[]> {
+    // Get per-city screen counts accounting for multi-screen listings
+    const result = await db.execute(drizzleSql`
+      SELECT city,
+        SUM(CASE WHEN is_multi_screen = true AND number_of_screens IS NOT NULL
+                 THEN number_of_screens ELSE 1 END)::int AS screen_count
+      FROM screens WHERE status = 'active'
+      GROUP BY city ORDER BY screen_count DESC
+    `);
+    return (result.rows as any[]).map(r => ({
+      city: r.city as string,
+      screenCount: Number(r.screen_count),
+    }));
+  }
+
+  async getPublicStats(): Promise<{ totalPhysicalScreens: number; totalCities: number; totalAdvertisers: number }> {
+    const screenStats = await db.execute(drizzleSql`
+      SELECT
+        SUM(CASE WHEN is_multi_screen = true AND number_of_screens IS NOT NULL
+                 THEN number_of_screens ELSE 1 END)::int AS total_physical,
+        COUNT(DISTINCT city)::int AS total_cities
+      FROM screens WHERE status = 'active'
+    `);
+    const advStats = await db.execute(drizzleSql`
+      SELECT COUNT(*)::int AS cnt FROM users WHERE role = 'advertiser'
+    `);
+    const row = screenStats.rows[0] as any;
+    const advRow = advStats.rows[0] as any;
+    return {
+      totalPhysicalScreens: Number(row?.total_physical || 0),
+      totalCities: Number(row?.total_cities || 0),
+      totalAdvertisers: Number(advRow?.cnt || 0),
+    };
   }
 
   async createScreen(insertScreen: InsertScreen): Promise<Screen> {

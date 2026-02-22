@@ -9,6 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Eye, Building2, LayoutDashboard } from 'lucide-react';
 import { Link } from 'wouter';
 import type { Screen, User } from '@shared/schema';
+import { VENUE_CATEGORIES } from '@shared/constants';
 import logo from "@assets/pixelspot-logo.png";
 import railwayImg from "@assets/Gemini_Generated_Image_wfa0lrwfa0lrwfa0_1763277847119.png";
 import airportLargeImg from "@assets/Gemini_Generated_Image_pla8lvpla8lvpla8_1763277847120.png";
@@ -25,6 +26,16 @@ interface PublicScreensResponse {
   count: number;
 }
 
+interface CityStatsResponse {
+  cityStats: { city: string; screenCount: number }[];
+}
+
+interface PublicStatsResponse {
+  totalPhysicalScreens: number;
+  totalCities: number;
+  totalAdvertisers: number;
+}
+
 const getMapContainerStyle = () => ({
   width: '100%',
   height: window.innerWidth < 640 ? '300px' : window.innerWidth < 1024 ? '400px' : '500px',
@@ -35,19 +46,46 @@ const defaultCenter = {
   lng: 78.9629,
 };
 
-const VENUE_TYPES = [
-  'All Venues',
-  'Airport',
-  'Mall',
-  'Metro',
-  'Office Building',
-  'Shopping Complex',
-  'Restaurant',
-  'Gym',
-  'Hospital',
-  'Cinema',
-  'College',
-];
+const VENUE_TYPES = ['All Venues', ...VENUE_CATEGORIES];
+
+// Famous landmark / cityscape images for Browse by City cards (Unsplash CDN, 400px width)
+const CITY_LANDMARK_IMAGES: Record<string, string> = {
+  'Mumbai': 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400&h=250&fit=crop',
+  'Delhi': 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&h=250&fit=crop',
+  'Bengaluru': 'https://images.unsplash.com/photo-1596176530529-78163a4f7af2?w=400&h=250&fit=crop',
+  'Hyderabad': 'https://images.unsplash.com/photo-1572638668779-e0e354c04a62?w=400&h=250&fit=crop',
+  'Chennai': 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=400&h=250&fit=crop',
+  'Kolkata': 'https://images.unsplash.com/photo-1558431382-27e303142255?w=400&h=250&fit=crop',
+  'Pune': 'https://images.unsplash.com/photo-1567157577867-05ccb1388e13?w=400&h=250&fit=crop',
+  'Ahmedabad': 'https://images.unsplash.com/photo-1627894483216-2138af692e32?w=400&h=250&fit=crop',
+  'Jaipur': 'https://images.unsplash.com/photo-1477587458883-47145ed94245?w=400&h=250&fit=crop',
+  'Lucknow': 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=250&fit=crop',
+  'Chandigarh': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
+  'Kochi': 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&h=250&fit=crop',
+  'Goa': 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=400&h=250&fit=crop',
+  'Indore': 'https://images.unsplash.com/photo-1609766857041-ed402ea8069a?w=400&h=250&fit=crop',
+  'Vadodara': 'https://images.unsplash.com/photo-1609948543911-e36aea54885c?w=400&h=250&fit=crop',
+  'Nagpur': 'https://images.unsplash.com/photo-1625731226721-b4d51ae70e20?w=400&h=250&fit=crop',
+  'Surat': 'https://images.unsplash.com/photo-1609948543911-e36aea54885c?w=400&h=250&fit=crop',
+  'Bhopal': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
+  'Coimbatore': 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=400&h=250&fit=crop',
+  'Visakhapatnam': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
+  'Mysuru': 'https://images.unsplash.com/photo-1600112356915-089ee07e1062?w=400&h=250&fit=crop',
+  'Gurugram': 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&h=250&fit=crop',
+  'Noida': 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&h=250&fit=crop',
+  'Udaipur': 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&h=250&fit=crop',
+  'Amritsar': 'https://images.unsplash.com/photo-1514222134-b57cbb8ce073?w=400&h=250&fit=crop',
+  'Varanasi': 'https://images.unsplash.com/photo-1561361513-2d000a50f0dc?w=400&h=250&fit=crop',
+  'Thiruvananthapuram': 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&h=250&fit=crop',
+  'Puducherry': 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=400&h=250&fit=crop',
+  'Agra': 'https://images.unsplash.com/photo-1564507592333-c60657eea523?w=400&h=250&fit=crop',
+  'Dehradun': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
+  'Ranchi': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
+  'Patna': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
+  'New Delhi': 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&h=250&fit=crop',
+  'Thane': 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400&h=250&fit=crop',
+  'Navi Mumbai': 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400&h=250&fit=crop',
+};
 
 // Generate consistent pastel gradient colors for cities based on city name
 const getCityGradient = (cityName: string): string => {
@@ -92,8 +130,24 @@ export default function PublicHome() {
     queryKey: ['/api/public/cities'],
   });
 
+  // Fetch city stats (with physical screen counts)
+  const { data: cityStatsData } = useQuery<CityStatsResponse>({
+    queryKey: ['/api/public/city-stats'],
+  });
+
+  // Fetch platform-wide stats
+  const { data: platformStats } = useQuery<PublicStatsResponse>({
+    queryKey: ['/api/public/stats'],
+  });
+
   const cities = citiesData?.cities || [];
-  const cityCount = citiesData?.count || 0;
+  const cityCount = platformStats?.totalCities || citiesData?.count || 0;
+
+  // Build city counts map from server-sourced city stats (physical screens, not DB rows)
+  const cityCounts = (cityStatsData?.cityStats || []).reduce((acc, cs) => {
+    acc[cs.city] = cs.screenCount;
+    return acc;
+  }, {} as Record<string, number>);
 
   // Get unique states from screens
   const states = Array.from(new Set(screens.map(s => s.state).filter((state): state is string => Boolean(state))));
@@ -110,15 +164,6 @@ export default function PublicHome() {
     if (screen.pricePerDay < budgetRange[0] || screen.pricePerDay > budgetRange[1]) return false;
     return true;
   });
-
-  // Get city counts
-  const cityCounts = screens.reduce((acc, screen) => {
-    const city = screen.city;
-    if (city) {
-      acc[city] = (acc[city] || 0) + 1;
-    }
-    return acc;
-  }, {} as Record<string, number>);
 
   const handleMarkerClick = (screenId: string) => {
     const element = document.getElementById(`screen-${screenId}`);
@@ -242,7 +287,7 @@ export default function PublicHome() {
                       <Monitor className="w-5 h-5 text-primary" />
                     </div>
                   </div>
-                  <p className="text-4xl font-bold text-foreground mb-1">{screens.length}</p>
+                  <p className="text-4xl font-bold text-foreground mb-1">{platformStats?.totalPhysicalScreens?.toLocaleString() || screens.length}</p>
                   <p className="text-sm text-muted-foreground font-medium">Live Screens</p>
                 </CardContent>
               </Card>
@@ -296,6 +341,7 @@ export default function PublicHome() {
             {cities.map((city) => {
               const count = cityCounts[city] || 0;
               const gradient = getCityGradient(city);
+              const landmarkImg = CITY_LANDMARK_IMAGES[city];
               
               return (
                 <Card
@@ -304,10 +350,20 @@ export default function PublicHome() {
                   onClick={() => handleCityClick(city)}
                   data-testid={`card-city-${city}`}
                 >
-                  <div 
-                    className="relative h-20 sm:h-24 overflow-hidden transition-transform group-hover:scale-105"
-                    style={{ background: gradient }}
-                  >
+                  <div className="relative h-20 sm:h-24 overflow-hidden">
+                    {landmarkImg ? (
+                      <img
+                        src={landmarkImg}
+                        alt={`${city} landmark`}
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div
+                        className="absolute inset-0 transition-transform duration-300 group-hover:scale-110"
+                        style={{ background: gradient }}
+                      />
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3">
                       <h3 className="font-bold text-white text-sm sm:text-base mb-0.5 drop-shadow-lg">{city}</h3>

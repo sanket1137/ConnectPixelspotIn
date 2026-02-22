@@ -3,6 +3,7 @@ import { pgTable, text, varchar, integer, decimal, timestamp, boolean, jsonb } f
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { normalizeCityName, normalizeVenueCategory } from "./constants";
 
 // Users table with role-based access
 export const users = pgTable("users", {
@@ -312,7 +313,11 @@ export const insertScreenSchema = createInsertSchema(screens).omit({
   id: true,
   createdAt: true,
   status: true,
-});
+}).transform((data) => ({
+  ...data,
+  city: normalizeCityName(data.city),
+  venueCategory: normalizeVenueCategory(data.venueCategory),
+}));
 
 export const insertCampaignSchema = createInsertSchema(campaigns).omit({
   id: true,

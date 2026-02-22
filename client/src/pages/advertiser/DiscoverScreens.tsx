@@ -11,6 +11,7 @@ import { MapPin, Search, Plus, Check, ShoppingCart, Trash2, List, Map as MapIcon
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { Screen } from "@shared/schema";
+import { VENUE_CATEGORIES } from "@shared/constants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Sheet,
@@ -103,31 +104,8 @@ export default function DiscoverScreens() {
     queryKey: ["/api/screens/locations"],
   });
 
-  // All possible venue categories from schema (always available)
-  const venueCategoryOptions = [
-    'Airport',
-    'Apartment',
-    'Bus Stop',
-    'Café',
-    'Cinema',
-    'Co-working',
-    'College',
-    'Corporate Park',
-    'Flyover',
-    'Gym',
-    'Highway',
-    'Hospital',
-    'Mall',
-    'Metro',
-    'Office Building',
-    'Restaurant',
-    'Retail Store',
-    'Road Junction',
-    'Road Side',
-    'Salon',
-    'Shopping Complex',
-    'Stadium'
-  ];
+  // All possible venue categories from shared constants (single source of truth)
+  const venueCategoryOptions = [...VENUE_CATEGORIES];
   
   // Extract unique values from screens for other dropdowns
   const screenCategoryOptions = Array.from(new Set(screens.map(s => s.category).filter(Boolean))).sort();

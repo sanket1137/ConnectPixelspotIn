@@ -1,3 +1,102 @@
+// ========== VENUE CATEGORIES ==========
+// Canonical list of all valid venue categories for screens.
+// This is the single source of truth — used in UI dropdowns, DB validation, and normalization.
+export const VENUE_CATEGORIES = [
+  'Airport',
+  'Apartment',
+  'Bus Stop',
+  'Café',
+  'Cinema',
+  'Co-working',
+  'College',
+  'Corporate Park',
+  'Flyover',
+  'Gym',
+  'Highway',
+  'Hospital',
+  'Hotel',
+  'Mall',
+  'Metro',
+  'Office Building',
+  'Petrol Bunk',
+  'Restaurant',
+  'Retail Store',
+  'Road Junction',
+  'Road Side',
+  'Salon',
+  'Shopping Complex',
+  'Stadium',
+  'Transit Hub',
+] as const;
+
+export type VenueCategory = typeof VENUE_CATEGORIES[number];
+
+/**
+ * Maps non-standard venue category values found in DB to canonical ones.
+ * Key = lowercase non-standard value, Value = canonical value from VENUE_CATEGORIES.
+ */
+export const VENUE_CATEGORY_ALIASES: Record<string, string> = {
+  'cafe': 'Café',
+  'cinema lobby': 'Cinema',
+  'food court': 'Restaurant',
+  'healthcare': 'Hospital',
+  'hotel/restaurant': 'Hotel',
+  'metro station': 'Metro',
+  'office complex': 'Office Building',
+  'shopping mall': 'Mall',
+};
+
+/**
+ * Normalize a venue category string to its canonical form.
+ * Returns the canonical value if found in aliases, or the original value if already canonical.
+ */
+export function normalizeVenueCategory(raw: string): string {
+  if (!raw) return raw;
+  const alias = VENUE_CATEGORY_ALIASES[raw.toLowerCase()];
+  if (alias) return alias;
+  // Check if it's already a canonical value (case-insensitive)
+  const match = VENUE_CATEGORIES.find(v => v.toLowerCase() === raw.toLowerCase());
+  return match || raw;
+}
+
+// ========== CITY NAME NORMALIZATION ==========
+/**
+ * Maps common alternate city spellings to preferred canonical form.
+ * Key = lowercase alternate, Value = canonical spelling.
+ */
+export const CITY_ALIASES: Record<string, string> = {
+  'bangalore': 'Bengaluru',
+  'banglore': 'Bengaluru',
+  'bengalooru': 'Bengaluru',
+  'bombay': 'Mumbai',
+  'madras': 'Chennai',
+  'calcutta': 'Kolkata',
+  'poona': 'Pune',
+  'trivandrum': 'Thiruvananthapuram',
+  'cochin': 'Kochi',
+  'mysore': 'Mysuru',
+  'baroda': 'Vadodara',
+  'pondicherry': 'Puducherry',
+  'mangalore': 'Mangaluru',
+  'vizag': 'Visakhapatnam',
+  'visakapatnam': 'Visakhapatnam',
+  'ahmedbad': 'Ahmedabad',
+  'ahmadabad': 'Ahmedabad',
+  'gurgaon': 'Gurugram',
+};
+
+/**
+ * Normalize a city name to its canonical spelling.
+ * Also title-cases the result.
+ */
+export function normalizeCityName(raw: string): string {
+  if (!raw) return raw;
+  const trimmed = raw.trim();
+  const alias = CITY_ALIASES[trimmed.toLowerCase()];
+  return alias || trimmed;
+}
+
+// ========== TIER 1 & TIER 2 CITIES ==========
 // Tier 1 and Tier 2 Indian Cities
 export const TIER_1_CITIES = [
   "Mumbai",
