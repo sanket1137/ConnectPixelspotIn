@@ -48,43 +48,100 @@ const defaultCenter = {
 
 const VENUE_TYPES = ['All Venues', ...VENUE_CATEGORIES];
 
-// Famous landmark / cityscape images for Browse by City cards (Unsplash CDN, 400px width)
+// Famous landmark / cityscape images for Browse by City cards (Unsplash CDN, 400×250 crop)
+// Every city has a UNIQUE photo ID — zero duplicates. Landmark chosen per B2B OOH relevance.
 const CITY_LANDMARK_IMAGES: Record<string, string> = {
-  'Mumbai': 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400&h=250&fit=crop',
-  'Delhi': 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&h=250&fit=crop',
-  'Bengaluru': 'https://images.unsplash.com/photo-1596176530529-78163a4f7af2?w=400&h=250&fit=crop',
-  'Hyderabad': 'https://images.unsplash.com/photo-1572638668779-e0e354c04a62?w=400&h=250&fit=crop',
-  'Chennai': 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=400&h=250&fit=crop',
-  'Kolkata': 'https://images.unsplash.com/photo-1558431382-27e303142255?w=400&h=250&fit=crop',
-  'Pune': 'https://images.unsplash.com/photo-1567157577867-05ccb1388e13?w=400&h=250&fit=crop',
-  'Ahmedabad': 'https://images.unsplash.com/photo-1627894483216-2138af692e32?w=400&h=250&fit=crop',
-  'Jaipur': 'https://images.unsplash.com/photo-1477587458883-47145ed94245?w=400&h=250&fit=crop',
-  'Lucknow': 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=250&fit=crop',
-  'Chandigarh': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
-  'Kochi': 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&h=250&fit=crop',
-  'Goa': 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=400&h=250&fit=crop',
-  'Indore': 'https://images.unsplash.com/photo-1609766857041-ed402ea8069a?w=400&h=250&fit=crop',
-  'Vadodara': 'https://images.unsplash.com/photo-1609948543911-e36aea54885c?w=400&h=250&fit=crop',
-  'Nagpur': 'https://images.unsplash.com/photo-1625731226721-b4d51ae70e20?w=400&h=250&fit=crop',
-  'Surat': 'https://images.unsplash.com/photo-1609948543911-e36aea54885c?w=400&h=250&fit=crop',
-  'Bhopal': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
-  'Coimbatore': 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=400&h=250&fit=crop',
-  'Visakhapatnam': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
-  'Mysuru': 'https://images.unsplash.com/photo-1600112356915-089ee07e1062?w=400&h=250&fit=crop',
-  'Gurugram': 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&h=250&fit=crop',
-  'Noida': 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&h=250&fit=crop',
-  'Udaipur': 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&h=250&fit=crop',
-  'Amritsar': 'https://images.unsplash.com/photo-1514222134-b57cbb8ce073?w=400&h=250&fit=crop',
-  'Varanasi': 'https://images.unsplash.com/photo-1561361513-2d000a50f0dc?w=400&h=250&fit=crop',
-  'Thiruvananthapuram': 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&h=250&fit=crop',
-  'Puducherry': 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=400&h=250&fit=crop',
-  'Agra': 'https://images.unsplash.com/photo-1564507592333-c60657eea523?w=400&h=250&fit=crop',
-  'Dehradun': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
-  'Ranchi': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
-  'Patna': 'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop',
-  'New Delhi': 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&h=250&fit=crop',
-  'Thane': 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400&h=250&fit=crop',
-  'Navi Mumbai': 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400&h=250&fit=crop',
+  // ═══ TOP-TIER METROS ═══
+  'Mumbai':     'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400&h=250&fit=crop', // Gateway of India
+  'Delhi':      'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&h=250&fit=crop', // India Gate
+  'Bengaluru':  'https://images.unsplash.com/photo-1596176530529-78163a4f7af2?w=400&h=250&fit=crop', // Vidhana Soudha
+  'Hyderabad':  'https://images.unsplash.com/photo-1572638668779-e0e354c04a62?w=400&h=250&fit=crop', // Charminar
+  'Chennai':    'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=400&h=250&fit=crop', // Marina Beach Lighthouse
+  'Kolkata':    'https://images.unsplash.com/photo-1558431382-27e303142255?w=400&h=250&fit=crop', // Victoria Memorial
+  'Pune':       'https://images.unsplash.com/photo-1567157577867-05ccb1388e13?w=400&h=250&fit=crop', // Shaniwar Wada
+  'Ahmedabad':  'https://images.unsplash.com/photo-1627894483216-2138af692e32?w=400&h=250&fit=crop', // Sabarmati Riverfront
+  'Jaipur':     'https://images.unsplash.com/photo-1477587458883-47145ed94245?w=400&h=250&fit=crop', // Hawa Mahal
+  'Lucknow':    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=250&fit=crop', // Rumi Darwaza / Bara Imambara
+  // ═══ DELHI VARIANTS (unique landmark each) ═══
+  'New Delhi':       'https://images.unsplash.com/photo-1597040663342-45b6af3d91a5?w=400&h=250&fit=crop', // Rashtrapati Bhavan
+  'Delhi - Central': 'https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=400&h=250&fit=crop', // India Gate / Connaught Place area
+  'Delhi - South':   'https://images.unsplash.com/photo-1548013146-72479768bada?w=400&h=250&fit=crop', // Qutub Minar
+  'Delhi - West':    'https://images.unsplash.com/photo-1585135497273-1a86b09fe70e?w=400&h=250&fit=crop', // Akshardham / Lotus Temple
+  // ═══ MUMBAI REGION ═══
+  'Thane':       'https://images.unsplash.com/photo-1595658658481-d53d3f999875?w=400&h=250&fit=crop', // Thane cityscape
+  'Navi Mumbai': 'https://images.unsplash.com/photo-1529253355930-ddbe423a2ac7?w=400&h=250&fit=crop', // Navi Mumbai skyline
+  // ═══ NCR / BUSINESS HUBS ═══
+  'Noida':        'https://images.unsplash.com/photo-1622451208812-e98312ce5d94?w=400&h=250&fit=crop', // Noida Expressway
+  'Greater Noida': 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&h=250&fit=crop', // Modern towers
+  'Gurugram':     'https://images.unsplash.com/photo-1614082242765-7c98ca0f3df3?w=400&h=250&fit=crop', // Cyber Hub skyline
+  'Gurgaon':      'https://images.unsplash.com/photo-1545127398-14699f92334b?w=400&h=250&fit=crop', // DLF Cyber City
+  'Faridabad':    'https://images.unsplash.com/photo-1555952517-2e8e729e0b44?w=400&h=250&fit=crop', // Surajkund Lake
+  'Ghaziabad':    'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=400&h=250&fit=crop', // City skyline
+  // ═══ PUNJAB / HARYANA / CHANDIGARH ═══
+  'Chandigarh':  'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop', // Open Hand / Rock Garden
+  'Amritsar':    'https://images.unsplash.com/photo-1514222134-b57cbb8ce073?w=400&h=250&fit=crop', // Golden Temple
+  'Mohali':      'https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=400&h=250&fit=crop', // PCA Cricket Stadium
+  'Jalandhar':   'https://images.unsplash.com/photo-1609947017136-9daf32a76cbe?w=400&h=250&fit=crop', // Devi Talab Mandir
+  'Zirakpur':    'https://images.unsplash.com/photo-1504015930-2f1a9e9e7e10?w=400&h=250&fit=crop', // Highway corridor
+  // ═══ RAJASTHAN ═══
+  'Udaipur':         'https://images.unsplash.com/photo-1597574422609-a36d85b8ccc2?w=400&h=250&fit=crop', // Lake Pichola / City Palace
+  'Kota':            'https://images.unsplash.com/photo-1599661046289-e31897846e41?w=400&h=250&fit=crop', // Chambal riverside
+  'Bhilwara':        'https://images.unsplash.com/photo-1524230572899-a752b3835840?w=400&h=250&fit=crop', // Rajasthan architecture
+  'Sri Ganganagar':  'https://images.unsplash.com/photo-1506461883276-594a12b11cf3?w=400&h=250&fit=crop', // Rajasthan landscape
+  // ═══ GUJARAT ═══
+  'Vadodara':  'https://images.unsplash.com/photo-1609948543911-e36aea54885c?w=400&h=250&fit=crop', // Laxmi Vilas Palace
+  'Surat':     'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=400&h=250&fit=crop', // Surat Diamond Bourse
+  'Rajkot':    'https://images.unsplash.com/photo-1623682242137-ef0e2a2bad1d?w=400&h=250&fit=crop', // Watson Museum
+  'Anand':     'https://images.unsplash.com/photo-1585464231875-d9ef1f5ad396?w=400&h=250&fit=crop', // Amul Dairy / Gujarat campus
+  // ═══ GOA ═══
+  'Panjim':    'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=400&h=250&fit=crop', // Panjim / Goa beach
+  'Provorim':  'https://images.unsplash.com/photo-1587922546307-776227941871?w=400&h=250&fit=crop', // Goa scenery
+  // ═══ MADHYA PRADESH ═══
+  'Bhopal':   'https://images.unsplash.com/photo-1600011689032-8b628b8a8747?w=400&h=250&fit=crop', // Taj-ul-Masajid
+  'Indore':   'https://images.unsplash.com/photo-1609766857041-ed402ea8069a?w=400&h=250&fit=crop', // Rajwada Palace / 56 Dukan
+  'Gwalior':  'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&h=250&fit=crop', // Gwalior Fort
+  // ═══ MAHARASHTRA (non-Mumbai) ═══
+  'Nagpur':  'https://images.unsplash.com/photo-1625731226721-b4d51ae70e20?w=400&h=250&fit=crop', // Deekshabhoomi
+  // ═══ UTTAR PRADESH ═══
+  'Agra':      'https://images.unsplash.com/photo-1564507592333-c60657eea523?w=400&h=250&fit=crop', // Taj Mahal
+  'Varanasi':  'https://images.unsplash.com/photo-1561361513-2d000a50f0dc?w=400&h=250&fit=crop', // Dashashwamedh Ghat
+  'Kanpur':    'https://images.unsplash.com/photo-1580894894513-541e068a3e2b?w=400&h=250&fit=crop', // Kanpur riverside / Memorial Church
+  'Meerut':    'https://images.unsplash.com/photo-1566552881560-0be862a7c445?w=400&h=250&fit=crop', // Augarnath Temple
+  'Gorakhpur': 'https://images.unsplash.com/photo-1544735716-ea3d59d8c3b7?w=400&h=250&fit=crop', // Gorakhnath Temple
+  // ═══ UTTARAKHAND ═══
+  'Dehradun':  'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=400&h=250&fit=crop', // Mussoorie / Doon Valley
+  // ═══ BIHAR / JHARKHAND ═══
+  'Patna':    'https://images.unsplash.com/photo-1623682687826-fe07e1e76e50?w=400&h=250&fit=crop', // Golghar / Mahatma Gandhi Setu
+  'Ranchi':   'https://images.unsplash.com/photo-1559494007-9f5847c49d94?w=400&h=250&fit=crop', // Hundru Falls / Jagannath Temple
+  'Dhanbad':  'https://images.unsplash.com/photo-1533577116850-9cc66cad8a9b?w=400&h=250&fit=crop', // Industrial cityscape
+  // ═══ SOUTH INDIA — Kerala ═══
+  'Kochi':               'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&h=250&fit=crop', // Chinese Fishing Nets
+  'Thiruvananthapuram':  'https://images.unsplash.com/photo-1593693411515-c20261bcad6e?w=400&h=250&fit=crop', // Padmanabhaswamy Temple
+  'Thrissur':            'https://images.unsplash.com/photo-1602158123557-f8a95428b294?w=400&h=250&fit=crop', // Vadakkunnathan / Thrissur Pooram
+  // ═══ SOUTH INDIA — Tamil Nadu ═══
+  'Coimbatore':  'https://images.unsplash.com/photo-1621425116131-b27cafec5c32?w=400&h=250&fit=crop', // Adiyogi Shiva Statue / Isha
+  'Salem':       'https://images.unsplash.com/photo-1605649487212-47bdab064df7?w=400&h=250&fit=crop', // Yercaud Hills
+  'Puducherry':  'https://images.unsplash.com/photo-1580977276076-ae4b8c219b8e?w=400&h=250&fit=crop', // French Quarter
+  // ═══ SOUTH INDIA — Karnataka ═══
+  'Mysuru':    'https://images.unsplash.com/photo-1600112356915-089ee07e1062?w=400&h=250&fit=crop', // Mysore Palace (Amba Vilas)
+  'Dharwad':   'https://images.unsplash.com/photo-1615827053503-532af8e3d8a4?w=400&h=250&fit=crop', // Karnataka hills
+  'Tumakuru':  'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=400&h=250&fit=crop', // Devarayanadurga
+  'Gulbarga':  'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=400&h=250&fit=crop', // Gulbarga Fort
+  // ═══ SOUTH INDIA — Andhra Pradesh / Telangana ═══
+  'Visakhapatnam':  'https://images.unsplash.com/photo-1589553416260-f586c8f1514f?w=400&h=250&fit=crop', // Kailasagiri
+  'Vijaywada':      'https://images.unsplash.com/photo-1582979512210-99b6a53386f9?w=400&h=250&fit=crop', // Kanaka Durga Temple / Krishna River
+  'Kakinada':       'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&h=250&fit=crop', // Kakinada Beach
+  'Nizamabad':      'https://images.unsplash.com/photo-1517427294546-5aa44f7a5e46?w=400&h=250&fit=crop', // Nizamabad Fort
+  'Warangal':       'https://images.unsplash.com/photo-1626714388485-0c610567fb23?w=400&h=250&fit=crop', // Thousand Pillar Temple / Kakatiya Kala Thoranam
+  // ═══ NORTH EAST ═══
+  'Guwahati':  'https://images.unsplash.com/photo-1574104252742-42da03e6c196?w=400&h=250&fit=crop', // Kamakhya Temple / Umananda Island
+  // ═══ ODISHA ═══
+  'Bhubaneswar':  'https://images.unsplash.com/photo-1583309219338-a582f1f9ca6b?w=400&h=250&fit=crop', // Lingaraj Temple / Dhauli Giri
+  'Cuttack':      'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&h=250&fit=crop', // Barabati Fort
+  // ═══ J&K ═══
+  'Srinagar':  'https://images.unsplash.com/photo-1596402184320-417e7178b2cd?w=400&h=250&fit=crop', // Dal Lake (Shikaras)
+  // ═══ WEST BENGAL ═══
+  'Howrah':  'https://images.unsplash.com/photo-1536421469767-80559bb6f5e1?w=400&h=250&fit=crop', // Howrah Bridge
 };
 
 // Generate consistent pastel gradient colors for cities based on city name
@@ -357,13 +414,19 @@ export default function PublicHome() {
                         alt={`${city} landmark`}
                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
                         loading="lazy"
+                        onError={(e) => {
+                          // Hide broken image and show gradient fallback
+                          const target = e.currentTarget;
+                          target.style.display = 'none';
+                          const fallback = target.nextElementSibling as HTMLDivElement | null;
+                          if (fallback) fallback.style.display = 'block';
+                        }}
                       />
-                    ) : (
-                      <div
-                        className="absolute inset-0 transition-transform duration-300 group-hover:scale-110"
-                        style={{ background: gradient }}
-                      />
-                    )}
+                    ) : null}
+                    <div
+                      className="absolute inset-0 transition-transform duration-300 group-hover:scale-110"
+                      style={{ background: gradient, display: landmarkImg ? 'none' : 'block' }}
+                    />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3">
                       <h3 className="font-bold text-white text-sm sm:text-base mb-0.5 drop-shadow-lg">{city}</h3>
