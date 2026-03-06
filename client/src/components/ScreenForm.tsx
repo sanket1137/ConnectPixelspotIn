@@ -20,8 +20,6 @@ import {
   DETAILED_AGE_GROUPS,
   GENDER_ORIENTATIONS,
   INCOME_LEVELS,
-  LIFESTYLE_TAGS,
-  LOCATION_TAGS
 } from "@shared/constants";
 
 const screenFormSchema = z.object({
@@ -62,18 +60,13 @@ const screenFormSchema = z.object({
   customOperatingHoursStart: z.string().optional(),
   customOperatingHoursEnd: z.string().optional(),
   customOperatingDays: z.array(z.string()).optional(),
-  locationTags: z.array(z.string()).optional(),
-  customLocationTags: z.string().optional(),
   
   // Section 3 - Audience Demographics
   detailedAgeGroups: z.array(z.string()).optional(),
   genderOrientation: z.string().optional(),
   incomeLevel: z.string().optional(),
   occupationMix: z.array(z.string()).min(1, "Select at least one occupation"),
-  lifestyleTags: z.array(z.string()).optional(),
   avgDwellTime: z.coerce.number().min(1, "Average dwell time is required"),
-  interestSegments: z.string().optional(),
-  customAudienceTags: z.string().optional(),
   userIntent: z.array(z.string()).min(1, "Select at least one user intent"),
   userMood: z.array(z.string()).min(1, "Select at least one user mood"),
   
@@ -835,66 +828,6 @@ export function ScreenForm({
                   </FormItem>
                 )}
               />
-
-              <FormField
-                control={form.control}
-                name="locationTags"
-                render={() => (
-                  <FormItem className="mt-4">
-                    <FormLabel>Nearby Facilities & Points of Interest</FormLabel>
-                    <div className="space-y-3">
-                      {Object.entries(LOCATION_TAGS).map(([category, tags]) => (
-                        <div key={category} className="space-y-2">
-                          <p className="text-sm font-medium text-muted-foreground">{category}</p>
-                          <div className="flex flex-wrap gap-3">
-                            {(tags as readonly string[]).map((tag: string) => (
-                              <FormField
-                                key={tag}
-                                control={form.control}
-                                name="locationTags"
-                                render={({ field }) => (
-                                  <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={field.value?.includes(tag)}
-                                        onCheckedChange={(checked) => {
-                                          return checked
-                                            ? field.onChange([...(field.value || []), tag])
-                                            : field.onChange(
-                                                field.value?.filter((value) => value !== tag)
-                                              );
-                                        }}
-                                        data-testid={`checkbox-location-${tag.toLowerCase().replace(/[\/\s]/g, '-')}`}
-                                      />
-                                    </FormControl>
-                                    <FormLabel className="text-sm font-normal cursor-pointer">{tag}</FormLabel>
-                                  </FormItem>
-                                )}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="customLocationTags"
-                render={({ field }) => (
-                  <FormItem className="mt-4">
-                    <FormLabel>Custom Location Tags (comma-separated)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Tech Park, Beach View, Heritage Site" {...field} data-testid="input-custom-location-tags" />
-                    </FormControl>
-                    <FormDescription>Add custom tags to increase targeting accuracy</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
           </CardContent>
         </Card>
@@ -956,21 +889,6 @@ export function ScreenForm({
                       />
                     ))}
                   </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="interestSegments"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Audience Interest Segments (comma-separated)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Fitness, Coffee, Tech, Luxury Cars" {...field} data-testid="input-interests" />
-                  </FormControl>
-                  <FormDescription>Tags for targeting specific audience interests</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -1066,60 +984,6 @@ export function ScreenForm({
                   )}
                 />
               </div>
-
-              <FormField
-                control={form.control}
-                name="lifestyleTags"
-                render={() => (
-                  <FormItem className="mt-4">
-                    <FormLabel>Lifestyle Tags</FormLabel>
-                    <FormDescription>Describe the lifestyle characteristics of your audience</FormDescription>
-                    <div className="flex flex-wrap gap-4 mt-2">
-                      {LIFESTYLE_TAGS.map((tag) => (
-                        <FormField
-                          key={tag}
-                          control={form.control}
-                          name="lifestyleTags"
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2 space-y-0">
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(tag)}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([...(field.value || []), tag])
-                                      : field.onChange(
-                                          field.value?.filter((value) => value !== tag)
-                                        );
-                                  }}
-                                  data-testid={`checkbox-lifestyle-${tag.toLowerCase().replace(/\s/g, '-')}`}
-                                />
-                              </FormControl>
-                              <FormLabel className="text-sm font-normal cursor-pointer">{tag}</FormLabel>
-                            </FormItem>
-                          )}
-                        />
-                      ))}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="customAudienceTags"
-                render={({ field }) => (
-                  <FormItem className="mt-4">
-                    <FormLabel>Custom Audience Tags (comma-separated)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Young Entrepreneurs, Digital Nomads, Pet Owners" {...field} data-testid="input-custom-audience-tags" />
-                    </FormControl>
-                    <FormDescription>Add custom tags to increase targeting accuracy</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
 
             <FormField

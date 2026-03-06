@@ -54,7 +54,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInEmailMutation = useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      const result = await signInWithEmailAndPassword(auth, email, password);
+      const trimmedEmail = email.trim().toLowerCase();
+      
+      let result;
+      try {
+        result = await signInWithEmailAndPassword(auth, trimmedEmail, password);
+      } catch (firebaseError: any) {
+        // Parse Firebase error codes into user-friendly messages
+        const code = firebaseError?.code || '';
+        switch (code) {
+          case 'auth/too-many-requests':
+            throw new Error('Too many failed login attempts. Your account is temporarily locked. Please wait a few minutes or reset your password.');
+          case 'auth/wrong-password':
+          case 'auth/invalid-credential':
+          case 'auth/invalid-login-credentials':
+            throw new Error('Incorrect email or password. Please check and try again.');
+          case 'auth/user-not-found':
+            throw new Error('No account found with this email address.');
+          case 'auth/user-disabled':
+            throw new Error('This account has been disabled. Please contact support.');
+          case 'auth/network-request-failed':
+            throw new Error('Network error. Please check your internet connection.');
+          case 'auth/invalid-email':
+            throw new Error('Please enter a valid email address.');
+          default:
+            console.error('Firebase auth error:', code, firebaseError.message);
+            throw new Error('Login failed. Please try again.');
+        }
+      }
+      
       const token = await result.user.getIdToken();
       
       // Send token to backend to fetch user

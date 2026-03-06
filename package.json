@@ -11,7 +11,8 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "deploy": "powershell -ExecutionPolicy Bypass -File deploy.ps1",
-    "create-admins": "tsx create-admin-users.ts"
+    "create-admins": "tsx create-admin-users.ts",
+    "seed:tags": "tsx server/seed-screen-tags.ts"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.922.0",

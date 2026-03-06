@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { ScreenTagsPanel } from "@/components/ScreenTagsPanel";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import type { Screen } from "@shared/schema";
@@ -333,7 +334,7 @@ export default function ManageScreens() {
                   </div>
                   {selectedScreen.locationTags && selectedScreen.locationTags.length > 0 && (
                     <div className="col-span-2">
-                      <span className="text-muted-foreground">Location Tags:</span>
+                      <span className="text-muted-foreground">Legacy Location Tags:</span>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {selectedScreen.locationTags.map((tag: string) => (
                           <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
@@ -341,6 +342,10 @@ export default function ManageScreens() {
                       </div>
                     </div>
                   )}
+                </div>
+                {/* Auto-generated Tags Panel */}
+                <div className="mt-4">
+                  <ScreenTagsPanel screenId={selectedScreen.id} editable={true} />
                 </div>
               </div>
 
@@ -378,7 +383,7 @@ export default function ManageScreens() {
                   </div>
                   {selectedScreen.interestSegments && selectedScreen.interestSegments.length > 0 && (
                     <div className="col-span-2">
-                      <span className="text-muted-foreground">Interest Segments:</span>
+                      <span className="text-muted-foreground">Legacy Interest Segments:</span>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {selectedScreen.interestSegments.map((interest) => (
                           <Badge key={interest} variant="outline" className="text-xs">{interest}</Badge>

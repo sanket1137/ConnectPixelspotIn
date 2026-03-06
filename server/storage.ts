@@ -2,6 +2,7 @@
 import { 
   users, screens, campaigns, bookings, payments,
   aiConversations, aiMessages, aiRateLimits,
+  screenTags, screenTagAssignments,
   type User, type InsertUser, 
   type Screen, type InsertScreen,
   type Campaign, type InsertCampaign,
@@ -9,7 +10,8 @@ import {
   type Payment, type InsertPayment,
   type AiConversation, type InsertAiConversation,
   type AiMessage, type InsertAiMessage,
-  type AiRateLimit, type InsertAiRateLimit
+  type AiRateLimit, type InsertAiRateLimit,
+  type ScreenTag, type ScreenTagAssignment
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, or, desc, sql as drizzleSql } from "drizzle-orm";
@@ -91,6 +93,13 @@ export interface IStorage {
   checkRateLimit(userId: string, actionType: "message" | "new_conversation", maxCount: number, windowMinutes: number): Promise<boolean>;
   incrementRateLimit(userId: string, actionType: "message" | "new_conversation", windowMinutes: number): Promise<void>;
   cleanupExpiredRateLimits(): Promise<void>;
+
+  // Screen Tag methods
+  getAllMasterTags(): Promise<ScreenTag[]>;
+  getActiveMasterTags(): Promise<ScreenTag[]>;
+  getScreenTagAssignments(screenId: string): Promise<(ScreenTagAssignment & { tag: ScreenTag })[]>;
+  addManualTagAssignment(screenId: string, tagId: string): Promise<ScreenTagAssignment>;
+  removeTagAssignment(assignmentId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -701,6 +710,106 @@ export class DatabaseStorage implements IStorage {
   async cleanupExpiredRateLimits(): Promise<void> {
     const now = new Date();
     await db.delete(aiRateLimits).where(lte(aiRateLimits.expiresAt, now));
+  }
+
+  // ── Screen Tag methods ──────────────────
+
+  async getAllMasterTags(): Promise<ScreenTag[]> {
+    return await db.select().from(screenTags).orderBy(screenTags.priority);
+  }
+
+  async getActiveMasterTags(): Promise<ScreenTag[]> {
+    return await db
+      .select()
+      .from(screenTags)
+      .where(eq(screenTags.isActive, true))
+      .orderBy(screenTags.priority);
+  }
+
+  async getScreenTagAssignments(screenId: string): Promise<(ScreenTagAssignment & { tag: ScreenTag })[]> {
+    const rows = await db
+      .select({
+        id: screenTagAssignments.id,
+        screenId: screenTagAssignments.screenId,
+        tagId: screenTagAssignments.tagId,
+        source: screenTagAssignments.source,
+        score: screenTagAssignments.score,
+        isPrimary: screenTagAssignments.isPrimary,
+        distanceMeters: screenTagAssignments.distanceMeters,
+        poiCount: screenTagAssignments.poiCount,
+        assignedAt: screenTagAssignments.assignedAt,
+        tag: {
+          id: screenTags.id,
+          slug: screenTags.slug,
+          displayName: screenTags.displayName,
+          category: screenTags.category,
+          description: screenTags.description,
+          googlePlaceTypes: screenTags.googlePlaceTypes,
+          maxDistanceMeters: screenTags.maxDistanceMeters,
+          minPoiCount: screenTags.minPoiCount,
+          baseScore: screenTags.baseScore,
+          priority: screenTags.priority,
+          iconName: screenTags.iconName,
+          colorCode: screenTags.colorCode,
+          isActive: screenTags.isActive,
+          createdAt: screenTags.createdAt,
+        },
+      })
+      .from(screenTagAssignments)
+      .innerJoin(screenTags, eq(screenTagAssignments.tagId, screenTags.id))
+      .where(eq(screenTagAssignments.screenId, screenId))
+      .orderBy(desc(screenTagAssignments.score));
+
+    return rows as (ScreenTagAssignment & { tag: ScreenTag })[];
+  }
+
+  async addManualTagAssignment(screenId: string, tagId: string): Promise<ScreenTagAssignment> {
+    // Check if already assigned
+    const [existing] = await db
+      .select()
+      .from(screenTagAssignments)
+      .where(
+        and(
+          eq(screenTagAssignments.screenId, screenId),
+          eq(screenTagAssignments.tagId, tagId),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      // If it was auto, change to manual to preserve it
+      if (existing.source === "auto") {
+        const [updated] = await db
+          .update(screenTagAssignments)
+          .set({ source: "manual" })
+          .where(eq(screenTagAssignments.id, existing.id))
+          .returning();
+        return updated;
+      }
+      return existing;
+    }
+
+    // Find the tag's baseScore for the manual assignment score
+    const [tag] = await db.select().from(screenTags).where(eq(screenTags.id, tagId)).limit(1);
+    const score = tag?.baseScore ?? 800;
+
+    const [assignment] = await db
+      .insert(screenTagAssignments)
+      .values({
+        screenId,
+        tagId,
+        source: "manual",
+        score,
+        isPrimary: false,
+      })
+      .returning();
+
+    return assignment;
+  }
+
+  async removeTagAssignment(assignmentId: string): Promise<boolean> {
+    await db.delete(screenTagAssignments).where(eq(screenTagAssignments.id, assignmentId));
+    return true;
   }
 }
 

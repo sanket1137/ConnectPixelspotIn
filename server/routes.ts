@@ -15,6 +15,7 @@ import { broadcastCampaignUpdate, broadcastBookingUpdate, broadcastScreenUpdate 
 import { getAuthorizationUrl, getTokensFromCode, revokeToken } from "./googleOAuth";
 import { randomBytes } from "crypto";
 import { emailService } from "./email";
+import { generateTagsForScreen, generateTagsForAllScreens } from "./services/screen-tagging";
 
 // Extend Express Request to include user
 declare global {
@@ -1454,10 +1455,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ownedByAdmin: true,
         status: "active", // Admin-created screens are automatically active
       });
+
+      // Async: trigger auto-tag generation (non-blocking)
+      const lat = parseFloat(String(screen.latitude));
+      const lng = parseFloat(String(screen.longitude));
+      if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
+        generateTagsForScreen(screen.id, lat, lng).catch((err) =>
+          console.error(`[AutoTag] Admin create trigger failed for ${screen.id}:`, err),
+        );
+      }
       
       res.status(201).json(screen);
     } catch (error) {
       console.error("Admin create screen error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ========== SCREEN TAG ROUTES ==========
+
+  // Get all master tags
+  app.get("/api/screen-tags", authenticate, async (req, res) => {
+    try {
+      const tags = await storage.getActiveMasterTags();
+      res.json(tags);
+    } catch (error) {
+      console.error("Get master tags error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get tag assignments for a screen
+  app.get("/api/screens/:id/tags", authenticate, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const assignments = await storage.getScreenTagAssignments(id);
+      res.json(assignments);
+    } catch (error) {
+      console.error("Get screen tags error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Trigger tag generation for a screen (manual)
+  app.post("/api/screens/:id/generate-tags", authenticate, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const screen = await storage.getScreen(id);
+      if (!screen) {
+        return res.status(404).json({ error: "Screen not found" });
+      }
+
+      // Only owner or admin can trigger
+      const isOwner = screen.ownerId === req.user!.id;
+      const isAdmin = req.user!.role === "admin";
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const lat = parseFloat(String(screen.latitude));
+      const lng = parseFloat(String(screen.longitude));
+      if (isNaN(lat) || isNaN(lng)) {
+        return res.status(400).json({ error: "Screen has invalid coordinates" });
+      }
+
+      const forceRefresh = req.body.forceRefresh === true;
+      const result = await generateTagsForScreen(id, lat, lng, forceRefresh);
+      res.json(result);
+    } catch (error) {
+      console.error("Generate tags error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Add manual tag to a screen
+  app.post("/api/screens/:id/tags", authenticate, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tagId } = req.body;
+      if (!tagId) {
+        return res.status(400).json({ error: "tagId is required" });
+      }
+
+      const screen = await storage.getScreen(id);
+      if (!screen) {
+        return res.status(404).json({ error: "Screen not found" });
+      }
+
+      const isOwner = screen.ownerId === req.user!.id;
+      const isAdmin = req.user!.role === "admin";
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const assignment = await storage.addManualTagAssignment(id, tagId);
+      res.status(201).json(assignment);
+    } catch (error) {
+      console.error("Add manual tag error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Remove tag assignment
+  app.delete("/api/screens/:screenId/tags/:assignmentId", authenticate, async (req, res) => {
+    try {
+      const { screenId, assignmentId } = req.params;
+      const screen = await storage.getScreen(screenId);
+      if (!screen) {
+        return res.status(404).json({ error: "Screen not found" });
+      }
+
+      const isOwner = screen.ownerId === req.user!.id;
+      const isAdmin = req.user!.role === "admin";
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      await storage.removeTagAssignment(assignmentId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Remove tag error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Admin: generate tags for ALL screens
+  app.post("/api/admin/screens/generate-all-tags", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const forceRefresh = req.body.forceRefresh === true;
+      // Run async — respond immediately
+      res.json({ message: "Tag generation started for all screens" });
+      generateTagsForAllScreens(forceRefresh).then((result) => {
+        console.log(`[AutoTag] Batch complete: ${result.success}/${result.total} succeeded, ${result.errors} errors`);
+      });
+    } catch (error) {
+      console.error("Generate all tags error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1538,6 +1670,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const screen = await storage.createScreen(screenData);
+
+      // Async: trigger auto-tag generation (non-blocking)
+      const lat = parseFloat(String(screen.latitude));
+      const lng = parseFloat(String(screen.longitude));
+      if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
+        generateTagsForScreen(screen.id, lat, lng).catch((err) =>
+          console.error(`[AutoTag] Owner create trigger failed for ${screen.id}:`, err),
+        );
+      }
+
       res.status(201).json(screen);
     } catch (error) {
       console.error("Create screen error:", error);
@@ -1556,6 +1698,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const screen = await storage.updateScreen(id, req.body);
+
+      // Async: re-generate tags if coordinates changed OR no tags exist yet
+      if (screen) {
+        const lat = parseFloat(String(screen.latitude));
+        const lng = parseFloat(String(screen.longitude));
+        const oldLat = parseFloat(String(existingScreen.latitude));
+        const oldLng = parseFloat(String(existingScreen.longitude));
+        const coordsChanged = lat !== oldLat || lng !== oldLng;
+        const hasNoTags = !screen.lastTaggedAt;
+        if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0) && (coordsChanged || hasNoTags)) {
+          generateTagsForScreen(screen.id, lat, lng, true).catch((err) =>
+            console.error(`[AutoTag] Owner update trigger failed for ${screen.id}:`, err),
+          );
+        }
+      }
+
       res.json(screen);
     } catch (error) {
       console.error("Update screen error:", error);

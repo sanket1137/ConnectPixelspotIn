@@ -111,6 +111,42 @@ export const screens = pgTable("screens", {
   rejectionReason: text("rejection_reason"), // Admin's reason for rejecting the screen
   ownedByAdmin: boolean("owned_by_admin").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // Auto-tagging metadata
+  lastTaggedAt: timestamp("last_tagged_at"),
+  lastTaggedLatitude: decimal("last_tagged_latitude", { precision: 9, scale: 6 }),
+  lastTaggedLongitude: decimal("last_tagged_longitude", { precision: 9, scale: 6 }),
+});
+
+// Screen Tags — master tag definitions (seeded once, reused across all screens)
+export const screenTags = pgTable("screen_tags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  category: text("category").notNull(), // Transportation, Retail, Food, Education, Healthcare, Entertainment, Business, Lifestyle, Audience, Time, Economic
+  description: text("description"),
+  googlePlaceTypes: text("google_place_types"), // JSON array string e.g. '["subway_station","transit_station"]'
+  maxDistanceMeters: integer("max_distance_meters"), // proximity threshold (null = composite only)
+  minPoiCount: integer("min_poi_count"), // density threshold (null = proximity only)
+  baseScore: integer("base_score").notNull().default(800),
+  priority: integer("priority").notNull().default(0),
+  iconName: text("icon_name"), // MUI/Lucide icon name for frontend
+  colorCode: text("color_code"), // hex color for chips
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Screen Tag Assignments — per-screen tag join table with scoring
+export const screenTagAssignments = pgTable("screen_tag_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  screenId: varchar("screen_id").notNull(),
+  tagId: varchar("tag_id").notNull(),
+  source: text("source").notNull().default("auto"), // "auto" or "manual"
+  score: integer("score").notNull().default(0), // 0-1200
+  isPrimary: boolean("is_primary").notNull().default(false), // top 5 = true
+  distanceMeters: integer("distance_meters"), // closest POI distance (proximity tags)
+  poiCount: integer("poi_count"), // matching POI count (density tags)
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
 });
 
 // Campaigns table - advertiser campaigns
@@ -203,6 +239,23 @@ export const screensRelations = relations(screens, ({ one, many }) => ({
     references: [users.id],
   }),
   bookings: many(bookings),
+  tagAssignments: many(screenTagAssignments),
+}));
+
+// Screen Tags relations
+export const screenTagsRelations = relations(screenTags, ({ many }) => ({
+  assignments: many(screenTagAssignments),
+}));
+
+export const screenTagAssignmentsRelations = relations(screenTagAssignments, ({ one }) => ({
+  screen: one(screens, {
+    fields: [screenTagAssignments.screenId],
+    references: [screens.id],
+  }),
+  tag: one(screenTags, {
+    fields: [screenTagAssignments.tagId],
+    references: [screenTags.id],
+  }),
 }));
 
 export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
@@ -338,6 +391,16 @@ export const insertPaymentSchema = createInsertSchema(payments).omit({
   createdAt: true,
 });
 
+export const insertScreenTagSchema = createInsertSchema(screenTags).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertScreenTagAssignmentSchema = createInsertSchema(screenTagAssignments).omit({
+  id: true,
+  assignedAt: true,
+});
+
 export const insertAiConversationSchema = createInsertSchema(aiConversations).omit({
   id: true,
   createdAt: true,
@@ -398,3 +461,9 @@ export type InsertAiRateLimit = z.infer<typeof insertAiRateLimitSchema>;
 
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+
+export type ScreenTag = typeof screenTags.$inferSelect;
+export type InsertScreenTag = z.infer<typeof insertScreenTagSchema>;
+
+export type ScreenTagAssignment = typeof screenTagAssignments.$inferSelect;
+export type InsertScreenTagAssignment = z.infer<typeof insertScreenTagAssignmentSchema>;

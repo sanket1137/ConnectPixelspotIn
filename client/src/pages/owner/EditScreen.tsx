@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { ScreenForm } from "@/components/ScreenForm";
+import { ScreenTagsPanel } from "@/components/ScreenTagsPanel";
 
 export default function EditScreen() {
   const [, params] = useRoute("/owner/screens/edit/:id");
@@ -121,10 +122,7 @@ export default function EditScreen() {
     genderOrientation: screen.genderOrientation || "",
     incomeLevel: screen.incomeLevel || "",
     occupationMix: screen.occupationMix || [],
-    lifestyleTags: screen.lifestyleTags || [],
     avgDwellTime: screen.avgDwellTime,
-    interestSegments: screen.interestSegments?.join(", ") || "",
-    customAudienceTags: screen.customAudienceTags?.join(", ") || "",
     userIntent: screen.userIntent || [],
     userMood: screen.userMood || [],
     isMultiScreen: screen.isMultiScreen,
@@ -163,6 +161,13 @@ export default function EditScreen() {
         submitButtonText="Update Screen"
         isLoading={updateMutation.isPending}
       />
+
+      {/* Auto-generated Screen Tags */}
+      {screenId && (
+        <div className="mt-6">
+          <ScreenTagsPanel screenId={screenId} editable={true} />
+        </div>
+      )}
     </div>
   );
 }

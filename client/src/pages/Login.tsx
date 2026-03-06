@@ -109,12 +109,27 @@ export default function Login() {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      await signInWithEmail(loginEmail, loginPassword);
-    } catch (error: any) {
+    
+    const email = loginEmail.trim();
+    const password = loginPassword;
+    
+    if (!email || !password) {
       toast({
-        title: "Login failed",
-        description: error.message || "Invalid email or password",
+        title: "Missing fields",
+        description: "Please enter both email and password.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      await signInWithEmail(email, password);
+    } catch (error: any) {
+      const message = error.message || "Invalid email or password";
+      const isRateLimited = message.toLowerCase().includes('too many');
+      toast({
+        title: isRateLimited ? "Account temporarily locked" : "Login failed",
+        description: message,
         variant: "destructive",
       });
     }
