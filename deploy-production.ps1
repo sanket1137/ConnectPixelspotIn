@@ -17,7 +17,7 @@ Write-Host "====================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Configuration
-$SERVER = "root@188.245.231.251"
+$SERVER = "root@5.223.70.55"
 $SSH_KEY = "pixelssh"
 $REMOTE_PATH = "/var/www/pixelspot"
 $TIMESTAMP = Get-Date -Format "yyyyMMdd_HHmmss"
@@ -73,7 +73,7 @@ Write-Host ""
 
 # Step 4: Fix permissions
 Write-Host "🔒 Fixing file permissions..." -ForegroundColor Yellow
-ssh -i $SSH_KEY $SERVER "chown -R www-data:www-data $REMOTE_PATH/dist/public && chmod -R 755 $REMOTE_PATH/dist/public"
+ssh -i $SSH_KEY $SERVER "chown -R www-data:www-data $REMOTE_PATH/dist/public; chmod -R 755 $REMOTE_PATH/dist/public"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Failed to set permissions!" -ForegroundColor Red
     exit 1
@@ -89,7 +89,7 @@ Write-Host ""
 
 # Step 6: Restart PM2
 Write-Host "🔄 Restarting application..." -ForegroundColor Yellow
-ssh -i $SSH_KEY $SERVER "cd $REMOTE_PATH && pm2 restart pixelspot"
+ssh -i $SSH_KEY $SERVER "cd $REMOTE_PATH; pm2 restart pixelspot"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Failed to restart PM2!" -ForegroundColor Red
     exit 1

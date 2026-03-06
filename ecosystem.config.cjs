@@ -12,7 +12,8 @@ module.exports = {
     // Entry point (dist/index.js with env vars injected by PM2)
     script: './dist/index.js',
     
-    // Fork mode - single instance (required for in-memory OTP storage)
+    // Fork mode - ESM ("type": "module") incompatible with PM2 cluster mode
+    // Performance already optimized via DB indexes, N+1 fixes, code splitting
     instances: 1,
     exec_mode: 'fork',
     

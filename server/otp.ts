@@ -1,86 +1,64 @@
-// Simple in-memory OTP storage
-// In production, use Redis or database with TTL
-
-interface OTPData {
-  code: string;
-  expiresAt: number;
-  type: 'email' | 'mobile';
-  target: string; // email address or mobile number
-  used?: boolean; // Track if OTP has been used
-}
-
-const otpStore = new Map<string, OTPData>();
-
-// Clean up expired OTPs every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  const entries = Array.from(otpStore.entries());
-  for (const [key, data] of entries) {
-    if (data.expiresAt < now) {
-      otpStore.delete(key);
-    }
-  }
-}, 5 * 60 * 1000);
+// Database-backed OTP storage (supports PM2 cluster mode)
+import { db } from "./db";
+import { otps } from "@shared/schema";
+import { eq, and, gt, sql as drizzleSql } from "drizzle-orm";
 
 export function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-export function storeOTP(identifier: string, type: 'email' | 'mobile', target: string): string {
+// Clean up expired OTPs every 5 minutes
+setInterval(async () => {
+  try {
+    await db.delete(otps).where(gt(drizzleSql`now()`, otps.expiresAt));
+  } catch (e) {
+    console.error("OTP cleanup error:", e);
+  }
+}, 5 * 60 * 1000);
+
+export async function storeOTP(identifier: string, type: 'email' | 'mobile', target: string): Promise<string> {
   const code = generateOTP();
-  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-  
-  otpStore.set(identifier, {
-    code,
-    expiresAt,
-    type,
-    target,
-  });
-  
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  // Upsert: delete existing OTPs for this identifier, then insert new one
+  await db.delete(otps).where(eq(otps.identifier, identifier));
+  await db.insert(otps).values({ identifier, code, type, target, expiresAt });
+
   return code;
 }
 
-export function verifyOTP(identifier: string, code: string): boolean {
-  const otpData = otpStore.get(identifier);
-  
+export async function verifyOTP(identifier: string, code: string): Promise<boolean> {
+  const rows = await db.select().from(otps)
+    .where(and(eq(otps.identifier, identifier), gt(otps.expiresAt, drizzleSql`now()`)))
+    .limit(1);
+
+  const otpData = rows[0];
+
   if (!otpData) {
-    console.log(`❌ OTP not found for identifier: ${identifier}`);
-    return false;
-  }
-  
-  if (otpData.expiresAt < Date.now()) {
-    console.log(`❌ OTP expired for identifier: ${identifier}`);
-    otpStore.delete(identifier);
+    console.log(`❌ OTP not found or expired for identifier: ${identifier}`);
     return false;
   }
 
-  // Check if OTP was already used (within last 30 seconds)
+  // Allow recently-used OTPs (30s grace window for duplicate requests)
   if (otpData.used) {
-    const timeSinceUse = Date.now() - (otpData.expiresAt - 10 * 60 * 1000);
-    if (timeSinceUse < 30000) { // 30 seconds grace period for duplicate requests
+    const createdMs = new Date(otpData.createdAt).getTime();
+    if (Date.now() - createdMs < 30000) {
       console.log(`✅ OTP already used recently for ${identifier}, allowing duplicate verification`);
       return true;
-    } else {
-      console.log(`❌ OTP already used for identifier: ${identifier}`);
-      return false;
     }
+    console.log(`❌ OTP already used for identifier: ${identifier}`);
+    return false;
   }
-  
+
   if (otpData.code !== code) {
     console.log(`❌ OTP code mismatch for identifier: ${identifier}`);
     return false;
   }
-  
-  // Mark OTP as used instead of deleting it immediately
-  otpData.used = true;
+
+  // Mark as used (keep for 30s grace period, cleanup job removes expired)
+  await db.update(otps).set({ used: true }).where(eq(otps.id, otpData.id));
   console.log(`✅ OTP verified and marked as used for identifier: ${identifier}`);
-  
-  // Schedule deletion after 30 seconds (grace period for retries)
-  setTimeout(() => {
-    otpStore.delete(identifier);
-    console.log(`🗑️ OTP deleted for identifier: ${identifier}`);
-  }, 30000);
-  
+
   return true;
 }
 

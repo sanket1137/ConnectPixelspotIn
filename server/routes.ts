@@ -122,6 +122,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DEV ONLY endpoints — disabled in production
+  if (process.env.NODE_ENV !== 'production') {
+
   // DEV ONLY: Test mobile OTP sending (no auth required)
   app.post("/api/test/send-mobile-otp", async (req, res) => {
     try {
@@ -131,7 +134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Mobile number is required" });
       }
 
-      const code = storeOTP(mobile, 'mobile', mobile);
+      const code = await storeOTP(mobile, 'mobile', mobile);
       await sendMobileOTP(mobile, code);
 
       res.json({ 
@@ -155,7 +158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Email is required" });
       }
 
-      const code = storeOTP(email, 'email', email);
+      const code = await storeOTP(email, 'email', email);
       await sendEmailOTP(email, code);
 
       res.json({ 
@@ -393,7 +396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Email already verified" });
       }
 
-      const code = storeOTP(email, 'email', user.id);
+      const code = await storeOTP(email, 'email', user.id);
       await sendEmailOTP(email, code);
 
       res.json({ success: true, message: "OTP sent to email" });
@@ -418,7 +421,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
 
-      const isValid = verifyOTP(email, code);
+      const isValid = await verifyOTP(email, code);
       
       if (!isValid) {
         return res.status(400).json({ error: "Invalid or expired OTP" });
@@ -545,7 +548,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Email is required" });
       }
 
-      const code = storeOTP(email, 'email', email);
+      const code = await storeOTP(email, 'email', email);
       await sendEmailOTP(email, code);
 
       res.json({ success: true, message: "OTP sent to email" });
@@ -564,7 +567,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Email and code are required" });
       }
 
-      const isValid = verifyOTP(email, code);
+      const isValid = await verifyOTP(email, code);
       
       if (!isValid) {
         return res.status(400).json({ error: "Invalid or expired OTP" });
@@ -597,7 +600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const code = storeOTP(mobile, 'mobile', mobile);
+      const code = await storeOTP(mobile, 'mobile', mobile);
       await sendMobileOTP(mobile, code);
 
       res.json({ success: true, message: "OTP sent to mobile" });
@@ -624,7 +627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ success: true, message: "Mobile verified successfully" });
       }
 
-      const isValid = verifyOTP(mobile, code);
+      const isValid = await verifyOTP(mobile, code);
       
       if (!isValid) {
         console.log(`❌ Invalid OTP for mobile: ${mobile}`);
@@ -770,7 +773,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid mobile number format" });
       }
 
-      const code = storeOTP(mobileNumber, 'mobile', req.user!.id);
+      const code = await storeOTP(mobileNumber, 'mobile', req.user!.id);
       await sendMobileOTP(mobileNumber, code);
 
       res.json({ success: true, message: "OTP sent to mobile" });
@@ -789,7 +792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Mobile number and OTP are required" });
       }
 
-      const isValid = verifyOTP(mobileNumber, otp);
+      const isValid = await verifyOTP(mobileNumber, otp);
       
       if (!isValid) {
         return res.status(400).json({ error: "Invalid or expired OTP" });
@@ -924,6 +927,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message || "Internal server error" });
     }
   });
+
+  } // end DEV ONLY block
 
   // ========== OBJECT STORAGE ROUTES ==========
   
@@ -1081,38 +1086,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========== ADMIN ROUTES ==========
   
-  // Admin dashboard stats
+  // Admin dashboard stats (optimized: single SQL query instead of 4x full table scans)
   app.get("/api/admin/stats", authenticate, requireRole("admin"), async (req, res) => {
     try {
-      const allUsers = await storage.getAllUsers();
-      const allScreens = await storage.getAllScreens();
-      const allCampaigns = await storage.getAllCampaigns();
-      const allBookings = await storage.getAllBookings();
-
-      const totalRevenue = allBookings
-        .filter(b => b.status === "completed")
-        .reduce((sum, b) => sum + b.price, 0);
-
-      const pendingScreens = allScreens.filter(s => s.status === "pending").length;
-      const pendingBookings = allBookings.filter(b => b.status === "owner_approved").length;
-      const activeUsers = allUsers.filter(u => u.status === "active").length;
-
-      const now = new Date();
-      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      const lastMonthUsers = allUsers.filter(u => new Date(u.createdAt) < thisMonth).length;
-      const thisMonthUsers = allUsers.filter(u => new Date(u.createdAt) >= thisMonth).length;
-      const lastMonthScreens = allScreens.filter(s => new Date(s.createdAt) < thisMonth).length;
-      const thisMonthScreens = allScreens.filter(s => new Date(s.createdAt) >= thisMonth).length;
-      const lastMonthCampaigns = allCampaigns.filter(c => new Date(c.createdAt) < thisMonth).length;
-      const thisMonthCampaigns = allCampaigns.filter(c => new Date(c.createdAt) >= thisMonth).length;
-      const lastMonthRevenue = allBookings
-        .filter(b => b.status === "completed" && new Date(b.createdAt) < thisMonth)
-        .reduce((sum, b) => sum + b.price, 0);
-      const thisMonthRevenue = allBookings
-        .filter(b => b.status === "completed" && new Date(b.createdAt) >= thisMonth)
-        .reduce((sum, b) => sum + b.price, 0);
+      const stats = await storage.getAdminDashboardStats();
 
       const calculateGrowth = (current: number, previous: number) => {
         if (previous === 0) return current > 0 ? 100 : 0;
@@ -1120,17 +1097,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       res.json({
-        totalUsers: allUsers.length,
-        totalScreens: allScreens.length,
-        totalCampaigns: allCampaigns.length,
-        totalRevenue,
-        pendingScreens,
-        pendingBookings,
-        activeUsers,
-        userGrowth: calculateGrowth(thisMonthUsers, lastMonthUsers),
-        screenGrowth: calculateGrowth(thisMonthScreens, lastMonthScreens),
-        campaignGrowth: calculateGrowth(thisMonthCampaigns, lastMonthCampaigns),
-        revenueGrowth: calculateGrowth(thisMonthRevenue, lastMonthRevenue),
+        totalUsers: stats.totalUsers,
+        totalScreens: stats.totalScreens,
+        totalCampaigns: stats.totalCampaigns,
+        totalRevenue: stats.totalRevenue,
+        pendingScreens: stats.pendingScreens,
+        pendingBookings: stats.pendingBookings,
+        activeUsers: stats.activeUsers,
+        userGrowth: calculateGrowth(stats.thisMonthUsers, stats.lastMonthUsers),
+        screenGrowth: calculateGrowth(stats.thisMonthScreens, stats.lastMonthScreens),
+        campaignGrowth: calculateGrowth(stats.thisMonthCampaigns, stats.lastMonthCampaigns),
+        revenueGrowth: calculateGrowth(stats.thisMonthRevenue, stats.lastMonthRevenue),
       });
     } catch (error) {
       console.error("Admin stats error:", error);
@@ -1138,64 +1115,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin chart data for active users and screen onboarding
+  // Admin chart data for active users and screen onboarding (optimized: SQL aggregation)
   app.get("/api/admin/chart-data", authenticate, requireRole("admin"), async (req, res) => {
     try {
-      const allUsers = await storage.getAllUsers();
-      const allScreens = await storage.getAllScreens();
-      const allCampaigns = await storage.getAllCampaigns();
-
-      // Last 7 days of active users
-      const last7Days = Array.from({length: 7}, (_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (6 - i));
-        date.setHours(0, 0, 0, 0);
-        return date;
-      });
-
-      const activeUsersData = last7Days.map(date => {
-        const nextDay = new Date(date);
-        nextDay.setDate(nextDay.getDate() + 1);
-        const activeCount = allUsers.filter(u => {
-          const createdAt = new Date(u.createdAt);
-          return createdAt < nextDay && u.status === "active";
-        }).length;
-        return {
-          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          users: activeCount,
-        };
-      });
-
-      // Screen onboarding progress
-      const activeScreens = allScreens.filter(s => s.status === "active").length;
-      const pendingScreens = allScreens.filter(s => s.status === "pending").length;
-      const inactiveScreens = allScreens.filter(s => s.status === "inactive").length;
-      
-      const screenProgressData = [
-        { status: "Active", count: activeScreens },
-        { status: "Pending", count: pendingScreens },
-        { status: "Inactive", count: inactiveScreens },
-      ];
-
-      // Advertiser portal visits (campaigns created as proxy metric)
-      const advertiserVisitsData = last7Days.map(date => {
-        const nextDay = new Date(date);
-        nextDay.setDate(nextDay.getDate() + 1);
-        const campaignsCreated = allCampaigns.filter(c => {
-          const createdAt = new Date(c.createdAt);
-          return createdAt >= date && createdAt < nextDay;
-        }).length;
-        return {
-          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          visits: campaignsCreated,
-        };
-      });
-
-      res.json({
-        activeUsersData,
-        screenProgressData,
-        advertiserVisitsData,
-      });
+      const chartData = await storage.getAdminChartData();
+      res.json(chartData);
     } catch (error) {
       console.error("Admin chart data error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -1301,51 +1225,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all bookings with details (admin)
+  // Get all bookings with details (admin) — optimized: single JOIN query
   app.get("/api/admin/bookings", authenticate, requireRole("admin"), async (req, res) => {
     try {
-      const bookings = await storage.getAllBookings();
-      
-      // Enrich with screen, campaign, advertiser, and owner details
-      const enrichedBookings = await Promise.all(
-        bookings.map(async (booking) => {
-          const screen = await storage.getScreen(booking.screenId);
-          const campaign = await storage.getCampaign(booking.campaignId);
-          
-          // Get advertiser and screen owner details
-          let advertiser = null;
-          let owner = null;
-          
-          if (campaign) {
-            advertiser = await storage.getUser(campaign.advertiserId);
-          }
-          
-          if (screen) {
-            owner = await storage.getUser(screen.ownerId);
-          }
-          
-          return {
-            ...booking,
-            screen,
-            campaign,
-            advertiser: advertiser ? {
-              id: advertiser.id,
-              name: advertiser.name,
-              email: advertiser.email,
-              mobileNumber: advertiser.mobileNumber,
-              companyName: advertiser.companyName,
-            } : null,
-            owner: owner ? {
-              id: owner.id,
-              name: owner.name,
-              email: owner.email,
-              mobileNumber: owner.mobileNumber,
-              companyName: owner.companyName,
-            } : null,
-          };
-        })
-      );
-
+      const enrichedBookings = await storage.getEnrichedBookings();
       res.json(enrichedBookings);
     } catch (error) {
       console.error("Get all bookings error:", error);
@@ -1596,35 +1479,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========== SCREEN OWNER ROUTES ==========
   
-  // Owner dashboard stats
+  // Owner dashboard stats (optimized: single SQL aggregation query)
   app.get("/api/owner/stats", authenticate, requireRole("screen_owner"), async (req, res) => {
     try {
-      const screens = await storage.getScreensByOwner(req.user!.id);
-      const pendingBookings = await storage.getPendingBookingsForOwner(req.user!.id);
-      
-      const activeScreens = screens.filter(s => s.status === "active").length;
-      const allBookings = (await Promise.all(
-        screens.map(s => storage.getBookingsByScreen(s.id))
-      )).flat();
-      
-      const totalEarnings = allBookings
-        .filter(b => b.status === "completed")
-        .reduce((sum, b) => sum + b.price, 0);
-      
-      const thisMonth = new Date();
-      thisMonth.setDate(1);
-      const thisMonthEarnings = allBookings
-        .filter(b => b.status === "completed" && new Date(b.createdAt) >= thisMonth)
-        .reduce((sum, b) => sum + b.price, 0);
-
-      res.json({
-        totalScreens: screens.length,
-        activeScreens,
-        pendingRequests: pendingBookings.length,
-        totalEarnings,
-        thisMonthEarnings,
-        totalBookings: allBookings.length,
-      });
+      const stats = await storage.getOwnerDashboardStats(req.user!.id);
+      res.json(stats);
     } catch (error) {
       console.error("Owner stats error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -1868,63 +1727,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========== ADVERTISER ROUTES ==========
   
-  // Advertiser dashboard stats
+  // Advertiser dashboard stats (optimized: single SQL aggregation query)
   app.get("/api/advertiser/stats", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
-      const campaigns = await storage.getCampaignsByAdvertiser(req.user!.id);
-      const activeCampaigns = campaigns.filter(c => c.status === "live").length;
-      const completedCampaigns = campaigns.filter(c => c.status === "completed").length;
-      
-      const allBookings = (await Promise.all(
-        campaigns.map(c => storage.getBookingsByCampaign(c.id))
-      )).flat();
-      
-      const totalSpent = allBookings
-        .filter(b => b.status === "completed")
-        .reduce((sum, b) => sum + b.price, 0);
-      
-      const pendingBookings = allBookings.filter(b => b.status === "pending").length;
-
-      res.json({
-        totalCampaigns: campaigns.length,
-        activeCampaigns,
-        completedCampaigns,
-        totalSpent,
-        pendingBookings,
-      });
+      const stats = await storage.getAdvertiserDashboardStats(req.user!.id);
+      res.json(stats);
     } catch (error) {
       console.error("Advertiser stats error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  // Get recent campaigns for advertiser dashboard
+  // Get recent campaigns for advertiser dashboard (optimized: single JOIN query)
   app.get("/api/advertiser/recent-campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
-      const campaigns = await storage.getCampaignsByAdvertiser(req.user!.id);
-      
-      const recentCampaigns = await Promise.all(
-        campaigns
-          .filter(c => c.status === "live" || c.status === "approved")
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 5)
-          .map(async (campaign) => {
-            const bookings = await storage.getBookingsByCampaign(campaign.id);
-            const screenIds = Array.from(new Set(bookings.map(b => b.screenId)));
-            const screens = await Promise.all(screenIds.map(id => storage.getScreen(id)));
-            const cities = Array.from(new Set(screens.filter(s => s).map(s => s!.city)));
-            
-            return {
-              id: campaign.id,
-              name: campaign.name,
-              status: campaign.status,
-              budget: campaign.budget,
-              screenCount: screenIds.length,
-              cities: cities.join(", "),
-            };
-          })
-      );
-
+      const recentCampaigns = await storage.getRecentCampaignsEnriched(req.user!.id);
       res.json(recentCampaigns);
     } catch (error) {
       console.error("Recent campaigns error:", error);
@@ -1932,37 +1749,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all approved screens (for discovery) with filtering
+  // Get all approved screens (for discovery) with SQL-level filtering & pagination
   app.get("/api/screens", authenticate, async (req, res) => {
     try {
-      const { city, type, minPrice, maxPrice, pincode } = req.query;
+      const { city, type, minPrice, maxPrice, pincode, limit, offset } = req.query;
       
-      let screens = await storage.getApprovedScreens();
-      
-      // Apply filters
-      if (city) {
-        screens = screens.filter(s => 
-          s.city.toLowerCase().includes((city as string).toLowerCase())
-        );
-      }
-      
-      if (type) {
-        screens = screens.filter(s => s.type === type);
-      }
-      
-      if (minPrice) {
-        const min = parseInt(minPrice as string);
-        screens = screens.filter(s => s.pricePerDay >= min);
-      }
-      
-      if (maxPrice) {
-        const max = parseInt(maxPrice as string);
-        screens = screens.filter(s => s.pricePerDay <= max);
-      }
-      
-      if (pincode) {
-        screens = screens.filter(s => s.pincode === pincode);
-      }
+      const screens = await storage.getFilteredScreens({
+        city: city as string | undefined,
+        type: type as string | undefined,
+        minPrice: minPrice ? parseInt(minPrice as string) : undefined,
+        maxPrice: maxPrice ? parseInt(maxPrice as string) : undefined,
+        pincode: pincode as string | undefined,
+        limit: limit ? parseInt(limit as string) : undefined,
+        offset: offset ? parseInt(offset as string) : undefined,
+      });
       
       res.json(screens);
     } catch (error) {
@@ -1971,38 +1771,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get available locations (states and cities from approved screens)
+  // Get available locations (optimized: SQL DISTINCT instead of full table scan)
   app.get("/api/screens/locations", authenticate, async (req, res) => {
     try {
-      const screens = await storage.getApprovedScreens();
-      
-      // Extract unique states and cities
-      const statesSet = new Set<string>();
-      const citiesByState: Record<string, Set<string>> = {};
-      const allCitiesSet = new Set<string>();
-      
-      screens.forEach(screen => {
-        if (screen.state) {
-          statesSet.add(screen.state);
-          if (!citiesByState[screen.state]) {
-            citiesByState[screen.state] = new Set();
-          }
-          citiesByState[screen.state].add(screen.city);
-        }
-        allCitiesSet.add(screen.city);
+      const locations = await storage.getScreenLocations();
+      res.json({
+        states: locations.states,
+        cities: locations.citiesByState,
+        allCities: locations.allCities,
       });
-      
-      // Convert sets to sorted arrays
-      const states = Array.from(statesSet).sort();
-      const cities = Object.fromEntries(
-        Object.entries(citiesByState).map(([state, citySet]) => [
-          state,
-          Array.from(citySet).sort()
-        ])
-      );
-      const allCities = Array.from(allCitiesSet).sort();
-      
-      res.json({ states, cities, allCities });
     } catch (error) {
       console.error("Get locations error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -2085,66 +1862,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get screens in area (map + radius OR city search)
+  // Get screens in area (map + radius OR city search) — optimized: SQL filtering
   app.get("/api/screens/in-area", authenticate, async (req, res) => {
     try {
       const { lat, lng, radiusKm, city, budget, duration } = req.query;
-      
-      let screens = await storage.getApprovedScreens();
-      console.log(`🔍 [/api/screens/in-area] Total active screens from DB: ${screens.length}`);
-      console.log(`   Query params: lat=${lat}, lng=${lng}, radius=${radiusKm}, city=${city}, budget=${budget}, duration=${duration}`);
-      
-      // Filter by area (map OR city)
+
+      let screens: any[];
+
       if (lat && lng && radiusKm) {
-        // Map-based filtering using Haversine formula
-        const latitude = parseFloat(lat as string);
-        const longitude = parseFloat(lng as string);
-        const radius = parseFloat(radiusKm as string);
-        
-        screens = screens.filter(screen => {
-          const R = 6371; // Earth's radius in km
-          const screenLat = parseFloat(screen.latitude.toString());
-          const screenLng = parseFloat(screen.longitude.toString());
-          
-          const dLat = (screenLat - latitude) * Math.PI / 180;
-          const dLon = (screenLng - longitude) * Math.PI / 180;
-          const a = 
-            Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(latitude * Math.PI / 180) * Math.cos(screenLat * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          const distance = R * c;
-          
-          return distance <= radius;
+        // Map-based + Haversine filtering done in SQL
+        screens = await storage.getFilteredScreens({
+          lat: parseFloat(lat as string),
+          lng: parseFloat(lng as string),
+          radiusKm: parseFloat(radiusKm as string),
         });
       } else if (city) {
-        // City-based filtering
-        screens = screens.filter(s => 
-          s.city.toLowerCase() === (city as string).toLowerCase()
-        );
-        console.log(`   📍 City filter applied: ${screens.length} screens in ${city}`);
+        screens = await storage.getFilteredScreens({
+          city: city as string,
+        });
+      } else {
+        screens = await storage.getFilteredScreens({});
       }
-      
-      console.log(`   📊 After area filter: ${screens.length} screens`);
-      
+
       // Sort by footfall (descending) for better recommendations
-      screens.sort((a, b) => b.avgDailyFootfall - a.avgDailyFootfall);
-      
+      screens.sort((a: any, b: any) => (b.avgDailyFootfall || b.avg_daily_footfall || 0) - (a.avgDailyFootfall || a.avg_daily_footfall || 0));
+
       // Filter by budget if provided: select screens that fit within budget
       if (budget && duration) {
         const budgetAmount = parseInt(budget as string);
         const durationDays = parseInt(duration as string);
         
-        console.log(`\n🎯 Budget Filter: Budget=₹${budgetAmount}, Duration=${durationDays} days`);
-        console.log(`📊 Total screens in area: ${screens.length}`);
-        
-        // Greedy algorithm: pick screens sorted by footfall until budget is exhausted
         const selectedScreens: typeof screens = [];
         let remainingBudget = budgetAmount;
         
         for (const screen of screens) {
-          const screenCost = screen.pricePerDay * durationDays;
-          console.log(`   ${screen.name}: ₹${screenCost} (₹${screen.pricePerDay}/day × ${durationDays}) - ${screenCost <= remainingBudget ? '✅ SELECTED' : '❌ SKIP'} (remaining: ₹${remainingBudget})`);
+          const pricePerDay = screen.pricePerDay || screen.price_per_day || 0;
+          const screenCost = pricePerDay * durationDays;
           
           if (screenCost <= remainingBudget) {
             selectedScreens.push(screen);
@@ -2152,11 +1905,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
-        console.log(`✅ Selected ${selectedScreens.length} screens, Total cost: ₹${budgetAmount - remainingBudget}, Remaining: ₹${remainingBudget}\n`);
         screens = selectedScreens;
       }
-      
-      console.log(`   ✅ Final result: ${screens.length} screens returned`);
+
       res.json(screens);
     } catch (error) {
       console.error("Get screens in area error:", error);
@@ -2192,31 +1943,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get campaigns (advertiser)
+  // Get campaigns (advertiser) — optimized: single JOIN with booking stats
   app.get("/api/advertiser/campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
-      const campaigns = await storage.getCampaignsByAdvertiser(req.user!.id);
-      
-      // Enhance each campaign with booking statistics
-      const enhancedCampaigns = await Promise.all(
-        campaigns.map(async (campaign) => {
-          const campaignBookings = await storage.getBookingsByCampaign(campaign.id);
-          
-          const bookingStats = {
-            total: campaignBookings.length,
-            approved: campaignBookings.filter(b => b.status === "approved" || b.status === "active").length,
-            rejected: campaignBookings.filter(b => b.status === "owner_rejected" || b.status === "rejected").length,
-            pending: campaignBookings.filter(b => b.status === "pending_owner" || b.status === "owner_approved").length,
-          };
-          
-          return {
-            ...campaign,
-            bookingStats,
-          };
-        })
-      );
-      
-      res.json(enhancedCampaigns);
+      const campaignsWithStats = await storage.getCampaignsWithBookingStats(req.user!.id);
+      res.json(campaignsWithStats);
     } catch (error) {
       console.error("Get campaigns error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -2309,33 +2040,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all bookings for advertiser (with screen and campaign details)
+  // Get all bookings for advertiser (optimized: single JOIN query)
   app.get("/api/advertiser/bookings", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
-      const campaigns = await storage.getCampaignsByAdvertiser(req.user!.id);
-      const campaignIds = campaigns.map(c => c.id);
-      
-      if (campaignIds.length === 0) {
-        return res.json([]);
-      }
-
-      const allBookings = (await Promise.all(
-        campaignIds.map(id => storage.getBookingsByCampaign(id))
-      )).flat();
-
-      // Enrich with screen and campaign details
-      const enrichedBookings = await Promise.all(
-        allBookings.map(async (booking) => {
-          const screen = await storage.getScreen(booking.screenId);
-          const campaign = await storage.getCampaign(booking.campaignId);
-          return {
-            ...booking,
-            screen,
-            campaign,
-          };
-        })
-      );
-
+      const enrichedBookings = await storage.getAdvertiserBookingsEnriched(req.user!.id);
       res.json(enrichedBookings);
     } catch (error) {
       console.error("Get advertiser bookings error:", error);

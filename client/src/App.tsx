@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, Suspense, lazy } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -12,36 +12,47 @@ import { useWebSocket } from "@/hooks/use-websocket";
 import { Menu, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import NotFound from "@/pages/not-found";
-import Login from "@/pages/Login";
-import AdminDashboard from "@/pages/admin/AdminDashboard";
-import ManageUsers from "@/pages/admin/ManageUsers";
-import ManageScreens from "@/pages/admin/ManageScreens";
-import AddScreenForOwner from "@/pages/admin/AddScreenForOwner";
-import ManageBookings from "@/pages/admin/ManageBookings";
-import Analytics from "@/pages/admin/Analytics";
-import AIConversations from "@/pages/admin/AIConversations";
-import AISecurityDashboard from "@/pages/admin/AISecurityDashboard";
-import Settings from "@/pages/admin/Settings";
-import OwnerDashboard from "@/pages/owner/OwnerDashboard";
-import ScreensList from "@/pages/owner/ScreensList";
-import AddScreen from "@/pages/owner/AddScreen";
-import EditScreen from "@/pages/owner/EditScreen";
-import BookingRequests from "@/pages/owner/BookingRequests";
-import AdvertiserDashboard from "@/pages/advertiser/AdvertiserDashboard";
-import DiscoverScreens from "@/pages/advertiser/DiscoverScreens";
-import CampaignsList from "@/pages/advertiser/CampaignsList";
-import CampaignDetails from "@/pages/advertiser/CampaignDetails";
-import CreateCampaign from "@/pages/advertiser/CreateCampaign";
-import QuickCampaignFromCart from "@/pages/advertiser/QuickCampaignFromCart";
-import BookingManagement from "@/pages/advertiser/BookingManagement";
-import AICampaignAdvisor from "@/pages/advertiser/AICampaignAdvisor";
-import ComingSoon from "@/pages/ComingSoon";
-import ProfileCompletion from "@/pages/ProfileCompletion";
-import EmailVerification from "@/pages/EmailVerification";
-import Profile from "@/pages/Profile";
-import PublicHome from "@/pages/PublicHome";
-import PasswordReset from "@/pages/PasswordReset";
+
+// Lazy-loaded page components for code splitting
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Login = lazy(() => import("@/pages/Login"));
+const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
+const ManageUsers = lazy(() => import("@/pages/admin/ManageUsers"));
+const ManageScreens = lazy(() => import("@/pages/admin/ManageScreens"));
+const AddScreenForOwner = lazy(() => import("@/pages/admin/AddScreenForOwner"));
+const ManageBookings = lazy(() => import("@/pages/admin/ManageBookings"));
+const Analytics = lazy(() => import("@/pages/admin/Analytics"));
+const AIConversations = lazy(() => import("@/pages/admin/AIConversations"));
+const AISecurityDashboard = lazy(() => import("@/pages/admin/AISecurityDashboard"));
+const Settings = lazy(() => import("@/pages/admin/Settings"));
+const OwnerDashboard = lazy(() => import("@/pages/owner/OwnerDashboard"));
+const ScreensList = lazy(() => import("@/pages/owner/ScreensList"));
+const AddScreen = lazy(() => import("@/pages/owner/AddScreen"));
+const EditScreen = lazy(() => import("@/pages/owner/EditScreen"));
+const BookingRequests = lazy(() => import("@/pages/owner/BookingRequests"));
+const AdvertiserDashboard = lazy(() => import("@/pages/advertiser/AdvertiserDashboard"));
+const DiscoverScreens = lazy(() => import("@/pages/advertiser/DiscoverScreens"));
+const CampaignsList = lazy(() => import("@/pages/advertiser/CampaignsList"));
+const CampaignDetails = lazy(() => import("@/pages/advertiser/CampaignDetails"));
+const CreateCampaign = lazy(() => import("@/pages/advertiser/CreateCampaign"));
+const QuickCampaignFromCart = lazy(() => import("@/pages/advertiser/QuickCampaignFromCart"));
+const BookingManagement = lazy(() => import("@/pages/advertiser/BookingManagement"));
+const AICampaignAdvisor = lazy(() => import("@/pages/advertiser/AICampaignAdvisor"));
+const ComingSoon = lazy(() => import("@/pages/ComingSoon"));
+const ProfileCompletion = lazy(() => import("@/pages/ProfileCompletion"));
+const EmailVerification = lazy(() => import("@/pages/EmailVerification"));
+const Profile = lazy(() => import("@/pages/Profile"));
+const PublicHome = lazy(() => import("@/pages/PublicHome"));
+const PasswordReset = lazy(() => import("@/pages/PasswordReset"));
+
+// Loading fallback for code-split pages
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 function Router() {
   return (
@@ -257,7 +268,7 @@ function AuthenticatedLayout() {
 
   // If no user or route doesn't need sidebar, show router without sidebar
   if (!shouldShowSidebar) {
-    return <Router />;
+    return <Suspense fallback={<PageLoader />}><Router /></Suspense>;
   }
 
   // Show router with sidebar for dashboard routes
@@ -286,7 +297,9 @@ function AuthenticatedLayout() {
           
           {/* Main content area */}
           <main className="flex-1 bg-background">
-            <Router />
+            <Suspense fallback={<PageLoader />}>
+              <Router />
+            </Suspense>
           </main>
         </div>
       </div>

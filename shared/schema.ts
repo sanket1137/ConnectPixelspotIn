@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -40,7 +40,11 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("advertiser"), // admin, screen_owner, advertiser
   status: text("status").notNull().default("active"), // active, inactive, pending
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_users_role").on(table.role),
+  index("idx_users_status").on(table.status),
+  index("idx_users_created_at").on(table.createdAt),
+]);
 
 // Screens table - digital advertising screens
 export const screens = pgTable("screens", {
@@ -116,7 +120,14 @@ export const screens = pgTable("screens", {
   lastTaggedAt: timestamp("last_tagged_at"),
   lastTaggedLatitude: decimal("last_tagged_latitude", { precision: 9, scale: 6 }),
   lastTaggedLongitude: decimal("last_tagged_longitude", { precision: 9, scale: 6 }),
-});
+}, (table) => [
+  index("idx_screens_status").on(table.status),
+  index("idx_screens_owner_id").on(table.ownerId),
+  index("idx_screens_city").on(table.city),
+  index("idx_screens_status_city").on(table.status, table.city),
+  index("idx_screens_price_per_day").on(table.pricePerDay),
+  index("idx_screens_created_at").on(table.createdAt),
+]);
 
 // Screen Tags — master tag definitions (seeded once, reused across all screens)
 export const screenTags = pgTable("screen_tags", {
@@ -147,7 +158,10 @@ export const screenTagAssignments = pgTable("screen_tag_assignments", {
   distanceMeters: integer("distance_meters"), // closest POI distance (proximity tags)
   poiCount: integer("poi_count"), // matching POI count (density tags)
   assignedAt: timestamp("assigned_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_screen_tag_assignments_screen_id").on(table.screenId),
+  index("idx_screen_tag_assignments_tag_id").on(table.tagId),
+]);
 
 // Campaigns table - advertiser campaigns
 export const campaigns = pgTable("campaigns", {
@@ -195,7 +209,11 @@ export const campaigns = pgTable("campaigns", {
   status: text("status").notNull().default("pending"), // pending, approved, live, completed, rejected
   rejectionReason: text("rejection_reason"), // Admin's reason for rejecting the campaign
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_campaigns_advertiser_id").on(table.advertiserId),
+  index("idx_campaigns_status").on(table.status),
+  index("idx_campaigns_created_at").on(table.createdAt),
+]);
 
 // Bookings table - links screens to campaigns
 export const bookings = pgTable("bookings", {
@@ -214,7 +232,13 @@ export const bookings = pgTable("bookings", {
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_bookings_screen_id").on(table.screenId),
+  index("idx_bookings_campaign_id").on(table.campaignId),
+  index("idx_bookings_status").on(table.status),
+  index("idx_bookings_screen_status").on(table.screenId, table.status),
+  index("idx_bookings_created_at").on(table.createdAt),
+]);
 
 // Payments table - transaction records
 export const payments = pgTable("payments", {
@@ -225,7 +249,10 @@ export const payments = pgTable("payments", {
   method: text("method").notNull().default("stripe"), // stripe, razorpay, etc.
   stripePaymentIntentId: text("stripe_payment_intent_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_payments_booking_id").on(table.bookingId),
+  index("idx_payments_status").on(table.status),
+]);
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
@@ -302,7 +329,10 @@ export const aiConversations = pgTable("ai_conversations", {
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_ai_conversations_user_id").on(table.userId),
+  index("idx_ai_conversations_last_message").on(table.lastMessageAt),
+]);
 
 // AI Messages table - individual messages in conversations
 export const aiMessages = pgTable("ai_messages", {
@@ -321,7 +351,9 @@ export const aiMessages = pgTable("ai_messages", {
   }[]>(), // Only for assistant messages with recommendations
   tokensUsed: integer("tokens_used"), // Estimated tokens for this message
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_ai_messages_conversation_id").on(table.conversationId),
+]);
 
 // AI Rate Limiting table - prevent abuse
 export const aiRateLimits = pgTable("ai_rate_limits", {
@@ -331,7 +363,10 @@ export const aiRateLimits = pgTable("ai_rate_limits", {
   count: integer("count").notNull().default(1),
   windowStart: timestamp("window_start").defaultNow().notNull(),
   expiresAt: timestamp("expires_at").notNull(),
-});
+}, (table) => [
+  index("idx_ai_rate_limits_user_action").on(table.userId, table.actionType),
+  index("idx_ai_rate_limits_expires").on(table.expiresAt),
+]);
 
 // AI Conversations Relations
 export const aiConversationsRelations = relations(aiConversations, ({ one, many }) => ({
@@ -433,6 +468,21 @@ export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTo
   id: true,
   createdAt: true,
 });
+
+// OTP Storage table (DB-backed for PM2 cluster mode support)
+export const otps = pgTable("otps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  identifier: text("identifier").notNull(),     // email or mobile
+  code: varchar("code", { length: 6 }).notNull(),
+  type: text("type").notNull(),                  // 'email' or 'mobile'
+  target: text("target").notNull(),              // email address, mobile number, or userId
+  used: boolean("used").notNull().default(false),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  idx_otps_identifier: index("idx_otps_identifier").on(table.identifier),
+  idx_otps_expires: index("idx_otps_expires").on(table.expiresAt),
+}));
 
 // Types
 export type User = typeof users.$inferSelect;

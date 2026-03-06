@@ -100,6 +100,62 @@ export interface IStorage {
   getScreenTagAssignments(screenId: string): Promise<(ScreenTagAssignment & { tag: ScreenTag })[]>;
   addManualTagAssignment(screenId: string, tagId: string): Promise<ScreenTagAssignment>;
   removeTagAssignment(assignmentId: string): Promise<boolean>;
+
+  // === Optimized aggregate / JOIN methods (replaces N+1 patterns) ===
+
+  // Admin: aggregate counts for dashboard stats (replaces 4x getAll*)
+  getAdminDashboardStats(): Promise<{
+    totalUsers: number; totalScreens: number; totalCampaigns: number;
+    totalRevenue: number; pendingScreens: number; pendingBookings: number;
+    activeUsers: number; thisMonthUsers: number; lastMonthUsers: number;
+    thisMonthScreens: number; lastMonthScreens: number;
+    thisMonthCampaigns: number; lastMonthCampaigns: number;
+    thisMonthRevenue: number; lastMonthRevenue: number;
+  }>;
+
+  // Admin: chart data via SQL aggregation (replaces 3x getAll*)
+  getAdminChartData(): Promise<{
+    activeUsersData: { date: string; users: number }[];
+    screenProgressData: { status: string; count: number }[];
+    advertiserVisitsData: { date: string; visits: number }[];
+  }>;
+
+  // Admin: bookings with screen/campaign/user details via JOINs (replaces N+1)
+  getEnrichedBookings(): Promise<any[]>;
+
+  // Owner: bookings for owner's screens via JOIN (replaces N+1)
+  getOwnerBookingsEnriched(ownerId: string): Promise<any[]>;
+
+  // Owner: aggregate stats via SQL (replaces N screen queries)
+  getOwnerDashboardStats(ownerId: string): Promise<{
+    totalScreens: number; activeScreens: number; pendingRequests: number;
+    totalEarnings: number; thisMonthEarnings: number; totalBookings: number;
+  }>;
+
+  // Advertiser: aggregate stats via SQL (replaces N campaign queries)
+  getAdvertiserDashboardStats(advertiserId: string): Promise<{
+    totalCampaigns: number; activeCampaigns: number; completedCampaigns: number;
+    totalSpent: number; pendingBookings: number;
+  }>;
+
+  // Advertiser: campaigns with booking stats via JOIN (replaces N+1)
+  getCampaignsWithBookingStats(advertiserId: string): Promise<any[]>;
+
+  // Advertiser: bookings with screen/campaign details via JOIN (replaces N+1)
+  getAdvertiserBookingsEnriched(advertiserId: string): Promise<any[]>;
+
+  // Advertiser: recent campaigns with screen cities (replaces deeply nested N+1)
+  getRecentCampaignsEnriched(advertiserId: string): Promise<any[]>;
+
+  // Screens: filtered at SQL level with optional pagination
+  getFilteredScreens(filters: {
+    city?: string; type?: string; minPrice?: number; maxPrice?: number;
+    pincode?: string; lat?: number; lng?: number; radiusKm?: number;
+    limit?: number; offset?: number;
+  }): Promise<Screen[]>;
+
+  // Screens: get unique locations from SQL (replaces full table scan)
+  getScreenLocations(): Promise<{ states: string[]; citiesByState: Record<string, string[]>; allCities: string[] }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -810,6 +866,319 @@ export class DatabaseStorage implements IStorage {
   async removeTagAssignment(assignmentId: string): Promise<boolean> {
     await db.delete(screenTagAssignments).where(eq(screenTagAssignments.id, assignmentId));
     return true;
+  }
+
+  // === Optimized aggregate / JOIN methods ===
+
+  async getAdminDashboardStats() {
+    const now = new Date();
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    const result = await db.execute(drizzleSql`
+      SELECT
+        (SELECT COUNT(*)::int FROM users) AS total_users,
+        (SELECT COUNT(*)::int FROM users WHERE status = 'active') AS active_users,
+        (SELECT COUNT(*)::int FROM users WHERE created_at >= ${thisMonth} AND created_at < ${now}) AS this_month_users,
+        (SELECT COUNT(*)::int FROM users WHERE created_at >= ${lastMonth} AND created_at < ${thisMonth}) AS last_month_users,
+        (SELECT COUNT(*)::int FROM screens) AS total_screens,
+        (SELECT COUNT(*)::int FROM screens WHERE status = 'pending') AS pending_screens,
+        (SELECT COUNT(*)::int FROM screens WHERE created_at >= ${thisMonth} AND created_at < ${now}) AS this_month_screens,
+        (SELECT COUNT(*)::int FROM screens WHERE created_at >= ${lastMonth} AND created_at < ${thisMonth}) AS last_month_screens,
+        (SELECT COUNT(*)::int FROM campaigns) AS total_campaigns,
+        (SELECT COUNT(*)::int FROM campaigns WHERE created_at >= ${thisMonth} AND created_at < ${now}) AS this_month_campaigns,
+        (SELECT COUNT(*)::int FROM campaigns WHERE created_at >= ${lastMonth} AND created_at < ${thisMonth}) AS last_month_campaigns,
+        (SELECT COALESCE(SUM(price), 0)::int FROM bookings WHERE status = 'completed') AS total_revenue,
+        (SELECT COUNT(*)::int FROM bookings WHERE status = 'owner_approved') AS pending_bookings,
+        (SELECT COALESCE(SUM(price), 0)::int FROM bookings WHERE status = 'completed' AND created_at >= ${thisMonth}) AS this_month_revenue,
+        (SELECT COALESCE(SUM(price), 0)::int FROM bookings WHERE status = 'completed' AND created_at >= ${lastMonth} AND created_at < ${thisMonth}) AS last_month_revenue
+    `);
+    const r = result.rows[0] as any;
+    return {
+      totalUsers: Number(r.total_users), totalScreens: Number(r.total_screens),
+      totalCampaigns: Number(r.total_campaigns), totalRevenue: Number(r.total_revenue),
+      pendingScreens: Number(r.pending_screens), pendingBookings: Number(r.pending_bookings),
+      activeUsers: Number(r.active_users),
+      thisMonthUsers: Number(r.this_month_users), lastMonthUsers: Number(r.last_month_users),
+      thisMonthScreens: Number(r.this_month_screens), lastMonthScreens: Number(r.last_month_screens),
+      thisMonthCampaigns: Number(r.this_month_campaigns), lastMonthCampaigns: Number(r.last_month_campaigns),
+      thisMonthRevenue: Number(r.this_month_revenue), lastMonthRevenue: Number(r.last_month_revenue),
+    };
+  }
+
+  async getAdminChartData() {
+    // Active users over last 7 days
+    const activeUsersResult = await db.execute(drizzleSql`
+      SELECT d::date AS date, COUNT(u.id)::int AS users
+      FROM generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, '1 day') d
+      LEFT JOIN users u ON u.created_at <= d + INTERVAL '1 day' AND u.status = 'active'
+      GROUP BY d::date ORDER BY d::date
+    `);
+    const activeUsersData = (activeUsersResult.rows as any[]).map(r => ({
+      date: new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      users: Number(r.users),
+    }));
+
+    // Screen status breakdown
+    const screenResult = await db.execute(drizzleSql`
+      SELECT status, COUNT(*)::int AS count FROM screens GROUP BY status
+    `);
+    const statusMap: Record<string, number> = {};
+    (screenResult.rows as any[]).forEach(r => { statusMap[r.status] = Number(r.count); });
+    const screenProgressData = [
+      { status: "Active", count: statusMap["active"] || 0 },
+      { status: "Pending", count: statusMap["pending"] || 0 },
+      { status: "Inactive", count: statusMap["inactive"] || 0 },
+    ];
+
+    // Campaigns created per day (last 7 days)
+    const campaignResult = await db.execute(drizzleSql`
+      SELECT d::date AS date, COUNT(c.id)::int AS visits
+      FROM generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, '1 day') d
+      LEFT JOIN campaigns c ON c.created_at::date = d::date
+      GROUP BY d::date ORDER BY d::date
+    `);
+    const advertiserVisitsData = (campaignResult.rows as any[]).map(r => ({
+      date: new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      visits: Number(r.visits),
+    }));
+
+    return { activeUsersData, screenProgressData, advertiserVisitsData };
+  }
+
+  async getEnrichedBookings() {
+    const result = await db.execute(drizzleSql`
+      SELECT
+        b.*,
+        row_to_json(s.*) AS screen,
+        row_to_json(c.*) AS campaign,
+        json_build_object(
+          'id', adv.id, 'name', adv.name, 'email', adv.email,
+          'mobileNumber', adv.mobile_number, 'companyName', adv.company_name
+        ) AS advertiser,
+        json_build_object(
+          'id', own.id, 'name', own.name, 'email', own.email,
+          'mobileNumber', own.mobile_number, 'companyName', own.company_name
+        ) AS owner
+      FROM bookings b
+      LEFT JOIN screens s ON s.id = b.screen_id
+      LEFT JOIN campaigns c ON c.id = b.campaign_id
+      LEFT JOIN users adv ON adv.id = c.advertiser_id
+      LEFT JOIN users own ON own.id = s.owner_id
+      ORDER BY b.created_at DESC
+    `);
+    return result.rows;
+  }
+
+  async getOwnerBookingsEnriched(ownerId: string) {
+    const result = await db.execute(drizzleSql`
+      SELECT
+        b.*,
+        row_to_json(s.*) AS screen,
+        row_to_json(c.*) AS campaign
+      FROM bookings b
+      INNER JOIN screens s ON s.id = b.screen_id AND s.owner_id = ${ownerId}
+      LEFT JOIN campaigns c ON c.id = b.campaign_id
+      ORDER BY b.created_at DESC
+    `);
+    return result.rows;
+  }
+
+  async getOwnerDashboardStats(ownerId: string) {
+    const thisMonth = new Date();
+    thisMonth.setDate(1);
+    thisMonth.setHours(0, 0, 0, 0);
+
+    const result = await db.execute(drizzleSql`
+      SELECT
+        (SELECT COUNT(*)::int FROM screens WHERE owner_id = ${ownerId}) AS total_screens,
+        (SELECT COUNT(*)::int FROM screens WHERE owner_id = ${ownerId} AND status = 'active') AS active_screens,
+        (SELECT COUNT(*)::int FROM bookings b
+         INNER JOIN screens s ON s.id = b.screen_id
+         WHERE s.owner_id = ${ownerId} AND b.status = 'pending_owner') AS pending_requests,
+        (SELECT COALESCE(SUM(b.price), 0)::int FROM bookings b
+         INNER JOIN screens s ON s.id = b.screen_id
+         WHERE s.owner_id = ${ownerId} AND b.status = 'completed') AS total_earnings,
+        (SELECT COALESCE(SUM(b.price), 0)::int FROM bookings b
+         INNER JOIN screens s ON s.id = b.screen_id
+         WHERE s.owner_id = ${ownerId} AND b.status = 'completed' AND b.created_at >= ${thisMonth}) AS this_month_earnings,
+        (SELECT COUNT(*)::int FROM bookings b
+         INNER JOIN screens s ON s.id = b.screen_id
+         WHERE s.owner_id = ${ownerId}) AS total_bookings
+    `);
+    const r = result.rows[0] as any;
+    return {
+      totalScreens: Number(r.total_screens), activeScreens: Number(r.active_screens),
+      pendingRequests: Number(r.pending_requests), totalEarnings: Number(r.total_earnings),
+      thisMonthEarnings: Number(r.this_month_earnings), totalBookings: Number(r.total_bookings),
+    };
+  }
+
+  async getAdvertiserDashboardStats(advertiserId: string) {
+    const result = await db.execute(drizzleSql`
+      SELECT
+        (SELECT COUNT(*)::int FROM campaigns WHERE advertiser_id = ${advertiserId}) AS total_campaigns,
+        (SELECT COUNT(*)::int FROM campaigns WHERE advertiser_id = ${advertiserId} AND status = 'live') AS active_campaigns,
+        (SELECT COUNT(*)::int FROM campaigns WHERE advertiser_id = ${advertiserId} AND status = 'completed') AS completed_campaigns,
+        (SELECT COALESCE(SUM(b.price), 0)::int FROM bookings b
+         INNER JOIN campaigns c ON c.id = b.campaign_id
+         WHERE c.advertiser_id = ${advertiserId} AND b.status = 'completed') AS total_spent,
+        (SELECT COUNT(*)::int FROM bookings b
+         INNER JOIN campaigns c ON c.id = b.campaign_id
+         WHERE c.advertiser_id = ${advertiserId} AND b.status = 'pending') AS pending_bookings
+    `);
+    const r = result.rows[0] as any;
+    return {
+      totalCampaigns: Number(r.total_campaigns), activeCampaigns: Number(r.active_campaigns),
+      completedCampaigns: Number(r.completed_campaigns), totalSpent: Number(r.total_spent),
+      pendingBookings: Number(r.pending_bookings),
+    };
+  }
+
+  async getCampaignsWithBookingStats(advertiserId: string) {
+    const result = await db.execute(drizzleSql`
+      SELECT c.*,
+        COALESCE(bs.total, 0)::int AS booking_total,
+        COALESCE(bs.approved, 0)::int AS booking_approved,
+        COALESCE(bs.rejected, 0)::int AS booking_rejected,
+        COALESCE(bs.pending, 0)::int AS booking_pending
+      FROM campaigns c
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE b.status IN ('approved', 'active'))::int AS approved,
+          COUNT(*) FILTER (WHERE b.status IN ('owner_rejected', 'rejected'))::int AS rejected,
+          COUNT(*) FILTER (WHERE b.status IN ('pending_owner', 'owner_approved'))::int AS pending
+        FROM bookings b WHERE b.campaign_id = c.id
+      ) bs ON true
+      WHERE c.advertiser_id = ${advertiserId}
+      ORDER BY c.created_at DESC
+    `);
+    return (result.rows as any[]).map(r => ({
+      ...r,
+      bookingStats: {
+        total: Number(r.booking_total),
+        approved: Number(r.booking_approved),
+        rejected: Number(r.booking_rejected),
+        pending: Number(r.booking_pending),
+      },
+    }));
+  }
+
+  async getAdvertiserBookingsEnriched(advertiserId: string) {
+    const result = await db.execute(drizzleSql`
+      SELECT
+        b.*,
+        row_to_json(s.*) AS screen,
+        row_to_json(c.*) AS campaign
+      FROM bookings b
+      INNER JOIN campaigns c ON c.id = b.campaign_id AND c.advertiser_id = ${advertiserId}
+      LEFT JOIN screens s ON s.id = b.screen_id
+      ORDER BY b.created_at DESC
+    `);
+    return result.rows;
+  }
+
+  async getRecentCampaignsEnriched(advertiserId: string) {
+    const result = await db.execute(drizzleSql`
+      SELECT
+        c.id, c.name, c.status, c.budget,
+        COALESCE(agg.screen_count, 0)::int AS screen_count,
+        COALESCE(agg.cities, '') AS cities
+      FROM campaigns c
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(DISTINCT b.screen_id)::int AS screen_count,
+          STRING_AGG(DISTINCT s.city, ', ') AS cities
+        FROM bookings b
+        LEFT JOIN screens s ON s.id = b.screen_id
+        WHERE b.campaign_id = c.id
+      ) agg ON true
+      WHERE c.advertiser_id = ${advertiserId}
+        AND c.status IN ('live', 'approved')
+      ORDER BY c.created_at DESC
+      LIMIT 5
+    `);
+    return (result.rows as any[]).map(r => ({
+      id: r.id, name: r.name, status: r.status, budget: Number(r.budget),
+      screenCount: Number(r.screen_count), cities: r.cities || '',
+    }));
+  }
+
+  async getFilteredScreens(filters: {
+    city?: string; type?: string; minPrice?: number; maxPrice?: number;
+    pincode?: string; lat?: number; lng?: number; radiusKm?: number;
+    limit?: number; offset?: number;
+  }) {
+    // Build dynamic conditions using drizzle sql template fragments
+    const conditions: ReturnType<typeof drizzleSql>[] = [drizzleSql`status = 'active'`];
+
+    if (filters.city) {
+      conditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${filters.city}%`})`);
+    }
+    if (filters.type) {
+      conditions.push(drizzleSql`type = ${filters.type}`);
+    }
+    if (filters.minPrice !== undefined) {
+      conditions.push(drizzleSql`price_per_day >= ${filters.minPrice}`);
+    }
+    if (filters.maxPrice !== undefined) {
+      conditions.push(drizzleSql`price_per_day <= ${filters.maxPrice}`);
+    }
+    if (filters.pincode) {
+      conditions.push(drizzleSql`pincode = ${filters.pincode}`);
+    }
+    if (filters.lat !== undefined && filters.lng !== undefined && filters.radiusKm !== undefined) {
+      // Bounding box pre-filter for index usage
+      const latRad = filters.radiusKm / 111.0;
+      const lngRad = filters.radiusKm / (111.0 * Math.cos(filters.lat * Math.PI / 180));
+      conditions.push(drizzleSql`latitude::float BETWEEN ${filters.lat - latRad} AND ${filters.lat + latRad}`);
+      conditions.push(drizzleSql`longitude::float BETWEEN ${filters.lng - lngRad} AND ${filters.lng + lngRad}`);
+      // Precise Haversine distance
+      conditions.push(drizzleSql`(
+        6371 * acos(
+          cos(radians(${filters.lat})) * cos(radians(latitude::float)) *
+          cos(radians(longitude::float) - radians(${filters.lng})) +
+          sin(radians(${filters.lat})) * sin(radians(latitude::float))
+        )
+      ) <= ${filters.radiusKm}`);
+    }
+
+    const whereClause = drizzleSql.join(conditions, drizzleSql` AND `);
+    let query = drizzleSql`SELECT * FROM screens WHERE ${whereClause} ORDER BY avg_daily_footfall DESC`;
+    if (filters.limit) {
+      query = drizzleSql`${query} LIMIT ${filters.limit}`;
+    }
+    if (filters.offset) {
+      query = drizzleSql`${query} OFFSET ${filters.offset}`;
+    }
+
+    const result = await db.execute(query);
+    return result.rows as Screen[];
+  }
+
+  async getScreenLocations() {
+    const result = await db.execute(drizzleSql`
+      SELECT DISTINCT state, city FROM screens WHERE status = 'active' ORDER BY state, city
+    `);
+    const states = new Set<string>();
+    const citiesByState: Record<string, string[]> = {};
+    const allCities = new Set<string>();
+
+    (result.rows as any[]).forEach(r => {
+      if (r.state) {
+        states.add(r.state);
+        if (!citiesByState[r.state]) citiesByState[r.state] = [];
+        citiesByState[r.state].push(r.city);
+      }
+      allCities.add(r.city);
+    });
+
+    return {
+      states: Array.from(states).sort(),
+      citiesByState,
+      allCities: Array.from(allCities).sort(),
+    };
   }
 }
 
