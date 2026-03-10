@@ -262,11 +262,18 @@ export default function ManageBookings() {
           </div>
 
           {/* Show warning when admin is bypassing owner approval */}
-          {booking.status === "pending_owner" && showApprovalActions && (
+          {booking.status === "pending_owner" && showApprovalActions && new Date(booking.endDate) >= new Date() && (
             <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md p-2 text-xs text-yellow-700 dark:text-yellow-500">
               <AlertCircle className="h-3 w-3 inline mr-1" />
               <strong>Bypassing Owner Approval:</strong> Approving this will automatically approve on behalf of the screen owner.
             </div>
+          )}
+
+          {/* Show expired badge when booking's end date has passed */}
+          {showApprovalActions && new Date(booking.endDate) < new Date() && (
+            <Badge variant="destructive" className="text-xs">
+              Expired — End date has passed
+            </Badge>
           )}
 
           <div className="flex gap-2 pt-3">
@@ -292,7 +299,7 @@ export default function ManageBookings() {
               <Edit className="mr-2 h-4 w-4" />
               Edit Dates
             </Button>
-            {showApprovalActions && (
+            {showApprovalActions && new Date(booking.endDate) >= new Date() && (
               <>
                 <Button
                   variant="outline"

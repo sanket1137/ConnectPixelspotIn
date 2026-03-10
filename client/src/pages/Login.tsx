@@ -1,5 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -421,7 +421,12 @@ export default function Login() {
             </Tabs>
 
             <div className="text-center text-sm text-muted-foreground mt-6">
-              By continuing, you agree to PixelSpot's Terms of Service and Privacy Policy
+              <p className="text-xs text-muted-foreground text-center">
+                By continuing, you agree to Pixelspot's{' '}
+                <Link href="/terms"><span className="text-primary hover:underline cursor-pointer">Terms of Service</span></Link>{' '}
+                and{' '}
+                <Link href="/privacy"><span className="text-primary hover:underline cursor-pointer">Privacy Policy</span></Link>
+              </p>
             </div>
           </Card>
         </div>

@@ -1,5 +1,5 @@
 import { emailService } from './email';
-import type { Booking, Screen, Campaign, User } from '@shared/schema';
+import type { Booking, Screen, Campaign, User, ProofOfPlay, OwnerPayout } from '@shared/schema';
 
 interface NotificationContext {
   booking?: Booking;
@@ -62,7 +62,7 @@ class NotificationService {
         { label: 'Campaign', value: campaign.name },
         { label: 'Screen', value: screen.name },
         { label: 'Duration', value: `${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}` },
-        { label: 'Amount', value: `₹${booking.totalAmount}` },
+        { label: 'Amount', value: `₹${booking.price}` },
       ],
       actionText: 'Please review and respond to this booking request. Contact details will be shared after admin approval.',
       ctaText: 'Review Booking Request',
@@ -73,7 +73,7 @@ class NotificationService {
       title: 'New Booking Request',
       greeting: `Hi ${owner.name},`,
       mainMessage: `New booking request for ${screen.name}`,
-      details: `Campaign: ${campaign.name}\nDuration: ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}\nAmount: ₹${booking.totalAmount}`,
+      details: `Campaign: ${campaign.name}\nDuration: ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}\nAmount: ₹${booking.price}`,
     });
 
     // Email to Admin
@@ -88,7 +88,7 @@ class NotificationService {
         { label: 'Campaign', value: campaign.name },
         { label: 'Screen', value: `${screen.name} - ${screen.city}` },
         { label: 'Duration', value: `${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}` },
-        { label: 'Amount', value: `₹${booking.totalAmount}` },
+        { label: 'Amount', value: `₹${booking.price}` },
       ],
       actionText: 'This booking is awaiting screen owner approval before final admin review.',
       ctaText: 'View Booking',
@@ -99,7 +99,7 @@ class NotificationService {
       title: 'New Booking Request',
       greeting: `Hi Admin,`,
       mainMessage: `New booking from ${advertiser.name} for ${screen.name}`,
-      details: `Campaign: ${campaign.name}\nDuration: ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}\nAmount: ₹${booking.totalAmount}`,
+      details: `Campaign: ${campaign.name}\nDuration: ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}\nAmount: ₹${booking.price}`,
     });
 
     await Promise.all([
@@ -127,7 +127,7 @@ class NotificationService {
         { label: 'Campaign', value: campaign.name },
         { label: 'Screen', value: `${screen.name} - ${screen.city}` },
         { label: 'Duration', value: `${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}` },
-        { label: 'Amount', value: `₹${booking.totalAmount}` },
+        { label: 'Amount', value: `₹${booking.price}` },
         { label: 'Status', value: 'Pending Admin Approval' },
       ],
       actionText: 'Your booking is now awaiting final approval from our admin team.',
@@ -154,7 +154,7 @@ class NotificationService {
         { label: 'Campaign', value: campaign.name },
         { label: 'Screen', value: `${screen.name} - ${screen.city}` },
         { label: 'Duration', value: `${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}` },
-        { label: 'Amount', value: `₹${booking.totalAmount}` },
+        { label: 'Amount', value: `₹${booking.price}` },
       ],
       actionText: 'Please review and approve this booking to make the campaign go live.',
       ctaText: 'Review Booking',
@@ -165,7 +165,7 @@ class NotificationService {
       title: 'Booking Awaiting Admin Approval',
       greeting: `Hi Admin,`,
       mainMessage: `Booking for ${screen.name} has been approved by owner and needs your review.`,
-      details: `Advertiser: ${advertiser.name}\nAmount: ₹${booking.totalAmount}`,
+      details: `Advertiser: ${advertiser.name}\nAmount: ₹${booking.price}`,
     });
 
     await Promise.all([
@@ -322,7 +322,7 @@ class NotificationService {
         { label: 'Campaign', value: campaign.name },
         { label: 'Screen', value: `${screen.name} - ${screen.city}` },
         { label: 'Live Period', value: `${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}` },
-        { label: 'Amount Paid', value: `₹${booking.totalAmount}` },
+        { label: 'Amount Paid', value: `₹${booking.price}` },
         { label: 'Status', value: '✅ Active' },
       ],
       actionText: 'Your ad is now being displayed to thousands of viewers!',
@@ -347,7 +347,7 @@ class NotificationService {
         { label: 'Campaign', value: campaign.name },
         { label: 'Screen', value: screen.name },
         { label: 'Duration', value: `${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}` },
-        { label: 'Earnings', value: `₹${booking.totalAmount}` },
+        { label: 'Earnings', value: `₹${booking.price}` },
       ],
       actionText: 'Thank you for partnering with us to deliver impactful advertising!',
       ctaText: 'View Booking Details',
@@ -358,13 +358,184 @@ class NotificationService {
       title: 'Campaign Going Live',
       greeting: `Hi ${owner.name},`,
       mainMessage: `New campaign live on ${screen.name}`,
-      details: `Earnings: ₹${booking.totalAmount}`,
+      details: `Earnings: ₹${booking.price}`,
     });
 
     await Promise.all([
       emailService.sendEmail({ to: advertiser.email, subject: advertiserSubject, html: advertiserHtml, text: advertiserText }),
       emailService.sendEmail({ to: owner.email, subject: ownerSubject, html: ownerHtml, text: ownerText }),
     ]);
+  }
+
+  // 5. Payment Required Email (System → Advertiser after owner approval)
+  async sendPaymentRequiredEmail(
+    advertiser: User,
+    booking: Booking,
+    campaign: Campaign,
+    screen: Screen,
+    paymentDeadline: Date
+  ): Promise<void> {
+    const deadlineStr = paymentDeadline.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    const subject = '⏰ Payment Required — Complete Your Booking - Pixelspot';
+    const html = this.generateHTML({
+      title: 'Payment Required',
+      greeting: `Hi ${advertiser.name},`,
+      mainMessage: `Your booking for screen <strong>${screen.name}</strong> has been approved by the screen owner! Please complete your payment to confirm the booking.`,
+      details: [
+        { label: 'Campaign', value: campaign.name },
+        { label: 'Screen', value: `${screen.name} - ${screen.city}` },
+        { label: 'Duration', value: `${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}` },
+        { label: 'Amount', value: `₹${booking.price}` },
+        { label: 'Payment Deadline', value: deadlineStr },
+      ],
+      actionText: `Please complete your payment before ${deadlineStr}. If payment is not received by the deadline, the booking will be automatically cancelled.`,
+      ctaText: 'Pay Now',
+      ctaLink: `https://connect.pixelspot.in/advertiser/campaigns/${campaign.id}`,
+    });
+
+    const text = this.generateText({
+      title: 'Payment Required',
+      greeting: `Hi ${advertiser.name},`,
+      mainMessage: `Your booking for ${screen.name} has been approved. Complete payment by ${deadlineStr}.`,
+      details: `Amount: ₹${booking.price}\nDeadline: ${deadlineStr}`,
+    });
+
+    await emailService.sendEmail({ to: advertiser.email, subject, html, text });
+  }
+
+  // 6. Proof of Play Verified Email (Admin → Advertiser)
+  async sendProofVerifiedEmail(
+    advertiser: User,
+    campaign: Campaign,
+    screen: Screen,
+    proof: ProofOfPlay
+  ): Promise<void> {
+    const subject = '✅ Proof of Play Verified — Please Confirm - Pixelspot';
+    const html = this.generateHTML({
+      title: 'Proof of Play Verified',
+      greeting: `Hi ${advertiser.name},`,
+      mainMessage: `The admin team has verified the proof of play for your campaign <strong>${campaign.name}</strong> on screen <strong>${screen.name}</strong>. Please review the proof and confirm.`,
+      details: [
+        { label: 'Campaign', value: campaign.name },
+        { label: 'Screen', value: `${screen.name} - ${screen.city}` },
+        { label: 'Proof Files', value: `${proof.fileUrls.length} file(s) uploaded` },
+        { label: 'Status', value: 'Verified — Awaiting Your Confirmation' },
+      ],
+      actionText: 'Please review the proof materials and confirm that your campaign was displayed correctly. Your confirmation will trigger the final payout to the screen owner.',
+      ctaText: 'Review Proof',
+      ctaLink: `https://connect.pixelspot.in/advertiser/campaigns/${campaign.id}`,
+    });
+
+    const text = this.generateText({
+      title: 'Proof of Play Verified',
+      greeting: `Hi ${advertiser.name},`,
+      mainMessage: `Proof of play for ${campaign.name} on ${screen.name} has been verified. Please confirm.`,
+      details: `Files: ${proof.fileUrls.length} uploaded\nStatus: Awaiting your confirmation`,
+    });
+
+    await emailService.sendEmail({ to: advertiser.email, subject, html, text });
+  }
+
+  // 7. Payout Incoming Email (System → Owner)
+  async sendPayoutIncomingEmail(
+    owner: User,
+    payout: OwnerPayout,
+    screen: Screen,
+    payoutType: string,
+    expiresAt: Date
+  ): Promise<void> {
+    const expiresStr = expiresAt.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    const typeLabel = payoutType === 'advance' ? 'Advance' : 'Final';
+    const subject = `💰 ${typeLabel} Payment Ready — Action Required - Pixelspot`;
+    const html = this.generateHTML({
+      title: `${typeLabel} Payout Ready`,
+      greeting: `Hi ${owner.name},`,
+      mainMessage: `An ${typeLabel.toLowerCase()} payout of <strong>₹${(payout.payoutAmount / 100).toLocaleString("en-IN")}</strong> is ready for your screen <strong>${screen.name}</strong>.`,
+      details: [
+        { label: 'Screen', value: screen.name },
+        { label: 'Payout Type', value: typeLabel },
+        { label: 'Amount', value: `₹${(payout.payoutAmount / 100).toLocaleString("en-IN")}` },
+        { label: 'Acceptance Deadline', value: expiresStr },
+      ],
+      actionText: 'You must accept this payout within 5 minutes. After that, the payout expires and admin will need to regenerate it.',
+      ctaText: 'Accept Payout',
+      ctaLink: 'https://connect.pixelspot.in/owner/payouts',
+    });
+
+    const text = this.generateText({
+      title: `${typeLabel} Payout Ready`,
+      greeting: `Hi ${owner.name},`,
+      mainMessage: `An ${typeLabel.toLowerCase()} payout of ₹${(payout.payoutAmount / 100).toLocaleString("en-IN")} is ready. Accept within 5 minutes.`,
+      details: `Screen: ${screen.name}\nAmount: ₹${(payout.payoutAmount / 100).toLocaleString("en-IN")}\nDeadline: ${expiresStr}`,
+    });
+
+    await emailService.sendEmail({ to: owner.email, subject, html, text });
+  }
+
+  // 8. Payout Processed Email (System → Owner)
+  async sendPayoutProcessedEmail(
+    owner: User,
+    payout: OwnerPayout,
+    screen: Screen,
+    transactionRef?: string
+  ): Promise<void> {
+    const subject = '✅ Payout Processed — Money on the Way! - Pixelspot';
+    const html = this.generateHTML({
+      title: 'Payout Processed',
+      greeting: `Hi ${owner.name},`,
+      mainMessage: `Your payout of <strong>₹${(payout.payoutAmount / 100).toLocaleString("en-IN")}</strong> for screen <strong>${screen.name}</strong> has been processed and sent to your bank account.`,
+      details: [
+        { label: 'Screen', value: screen.name },
+        { label: 'Amount', value: `₹${(payout.payoutAmount / 100).toLocaleString("en-IN")}` },
+        { label: 'Type', value: payout.payoutType === 'advance' ? 'Advance' : 'Final' },
+        ...(transactionRef ? [{ label: 'Transaction Ref', value: transactionRef }] : []),
+        { label: 'Status', value: 'Processed' },
+      ],
+      actionText: 'The money should arrive in your bank account within 1-3 business days.',
+      ctaText: 'View Earnings',
+      ctaLink: 'https://connect.pixelspot.in/owner/earnings',
+    });
+
+    const text = this.generateText({
+      title: 'Payout Processed',
+      greeting: `Hi ${owner.name},`,
+      mainMessage: `Payout of ₹${(payout.payoutAmount / 100).toLocaleString("en-IN")} for ${screen.name} has been processed.`,
+      details: `Amount: ₹${(payout.payoutAmount / 100).toLocaleString("en-IN")}${transactionRef ? `\nRef: ${transactionRef}` : ''}`,
+    });
+
+    await emailService.sendEmail({ to: owner.email, subject, html, text });
+  }
+
+  // 9. Booking Expired Email (System → Advertiser)
+  async sendBookingExpiredEmail(
+    advertiser: User,
+    booking: Booking,
+    campaign: Campaign,
+    screen: Screen
+  ): Promise<void> {
+    const subject = '⚠️ Booking Expired — Payment Not Received - Pixelspot';
+    const html = this.generateHTML({
+      title: 'Booking Expired',
+      greeting: `Hi ${advertiser.name},`,
+      mainMessage: `Your booking for screen <strong>${screen.name}</strong> has expired because payment was not completed before the deadline.`,
+      details: [
+        { label: 'Campaign', value: campaign.name },
+        { label: 'Screen', value: `${screen.name} - ${screen.city}` },
+        { label: 'Status', value: 'Expired' },
+      ],
+      actionText: 'The screen slot is now available again. You can create a new booking if you would still like to advertise on this screen.',
+      ctaText: 'Browse Screens',
+      ctaLink: 'https://connect.pixelspot.in/advertiser/discover',
+    });
+
+    const text = this.generateText({
+      title: 'Booking Expired',
+      greeting: `Hi ${advertiser.name},`,
+      mainMessage: `Your booking for ${screen.name} has expired — payment was not received in time.`,
+      details: `Campaign: ${campaign.name}\nScreen: ${screen.name}`,
+    });
+
+    await emailService.sendEmail({ to: advertiser.email, subject, html, text });
   }
 
   // HTML Email Template Generator

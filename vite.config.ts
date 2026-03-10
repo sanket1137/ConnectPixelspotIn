@@ -40,7 +40,7 @@ export default defineConfig({
           'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-tooltip', '@radix-ui/react-select', '@radix-ui/react-tabs'],
           'vendor-query': ['@tanstack/react-query'],
           'vendor-charts': ['recharts'],
-          'vendor-maps': ['@react-google-maps/api'],
+          'vendor-maps': ['@vis.gl/react-google-maps'],
         },
       },
     },

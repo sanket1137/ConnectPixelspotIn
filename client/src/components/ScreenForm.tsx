@@ -76,6 +76,7 @@ const screenFormSchema = z.object({
   pricePerDay: z.string().min(1, "Price per day is required"),
   minBookingDays: z.string().min(1, "Minimum booking days required"),
   playbackSlotsPerHour: z.string().min(1, "Playback slots per hour is required"),
+  loopDuration: z.string().optional(), // Loop duration in seconds
   contentTypesSupported: z.array(z.string()).min(1, "Select at least one content type"),
   
   // Legacy fields (auto-populated from other fields)
@@ -155,6 +156,7 @@ export function ScreenForm({
       pricePerDay: initialData?.pricePerDay || "",
       minBookingDays: initialData?.minBookingDays || "1",
       playbackSlotsPerHour: initialData?.playbackSlotsPerHour || "",
+      loopDuration: initialData?.loopDuration || "",
       contentTypesSupported: initialData?.contentTypesSupported || [],
       type: initialData?.type || "",
       size: initialData?.size || "",
@@ -1156,6 +1158,31 @@ export function ScreenForm({
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+
+              <FormField
+                control={form.control}
+                name="loopDuration"
+                render={({ field }) => {
+                  const durationPerSlot = parseInt(form.watch("durationPerSlot") || "0");
+                  const loopDur = parseInt(field.value || "0");
+                  const maxBrands = durationPerSlot > 0 && loopDur > 0 ? Math.floor(loopDur / durationPerSlot) : 0;
+                  return (
+                    <FormItem>
+                      <FormLabel>Loop Duration (seconds)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 120" {...field} data-testid="input-loop-duration" />
+                      </FormControl>
+                      {maxBrands > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Max brands per loop: <span className="font-semibold text-foreground">{maxBrands}</span>
+                          {" "}({loopDur}s ÷ {durationPerSlot}s per slot)
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
             </div>
 

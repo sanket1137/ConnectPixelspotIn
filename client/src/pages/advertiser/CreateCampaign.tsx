@@ -25,14 +25,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { GoogleMap, useLoadScript, Marker, InfoWindow, Circle } from "@react-google-maps/api";
+import { Map, AdvancedMarker, InfoWindow, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
 const mapContainerStyle = {
   width: '100%',
@@ -80,6 +78,9 @@ const createCampaignSchema = z.object({
   
   // Creative URL
   creativeUrl: z.string().url("Please enter a valid URL").min(1, "Creative link is required"),
+  
+  // Campaign summary
+  summary: z.string().max(500, "Summary must be under 500 characters").optional(),
 });
 
 type CreateCampaignForm = z.infer<typeof createCampaignSchema>;
@@ -146,10 +147,50 @@ const calculateTotalSlots = (screen: Screen, campaignDays: number): number => {
   return Math.round(totalSlots);
 };
 
+/**
+ * Circle overlay component using the imperative Google Maps API.
+ * Needed because @vis.gl/react-google-maps doesn't include a Circle component.
+ */
+function CircleOverlay({
+  center,
+  radius,
+  fillColor = "#3b82f6",
+  fillOpacity = 0.1,
+  strokeColor = "#3b82f6",
+  strokeOpacity = 0.8,
+  strokeWeight = 2,
+}: {
+  center: { lat: number; lng: number };
+  radius: number;
+  fillColor?: string;
+  fillOpacity?: number;
+  strokeColor?: string;
+  strokeOpacity?: number;
+  strokeWeight?: number;
+}) {
+  const map = useMap();
+  const mapsLib = useMapsLibrary("maps");
+
+  useEffect(() => {
+    if (!map || !mapsLib) return;
+    const circle = new mapsLib.Circle({
+      map,
+      center,
+      radius,
+      fillColor,
+      fillOpacity,
+      strokeColor,
+      strokeOpacity,
+      strokeWeight,
+    });
+    return () => circle.setMap(null);
+  }, [map, mapsLib, center.lat, center.lng, radius, fillColor, fillOpacity, strokeColor, strokeOpacity, strokeWeight]);
+
+  return null;
+}
+
 export default function CreateCampaign() {
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-  });
+
 
   const [currentStep, setCurrentStep] = useState(1);
   const [, setLocation] = useLocation();
@@ -550,6 +591,7 @@ export default function CreateCampaign() {
         budget: data.budget,
         estimatedBudget: data.budget,
         creativeUrl: data.creativeUrl || null,
+        summary: data.summary || null,
       });
       
       const campaign = await campaignResponse.json();
@@ -962,23 +1004,23 @@ export default function CreateCampaign() {
 
                   {watchAreaType === "map" && (
                     <div className="space-y-4">
-                      {isLoaded && (
                         <div className="border rounded-lg overflow-hidden">
-                          <GoogleMap
-                            mapContainerStyle={mapContainerStyle}
-                            center={mapCenter}
-                            zoom={12}
+                          <Map
+                            style={mapContainerStyle}
+                            defaultCenter={mapCenter}
+                            defaultZoom={12}
+                            mapId="campaign-area-map"
+                            gestureHandling="greedy"
                             onClick={(e) => {
-                              if (e.latLng) {
-                                const lat = e.latLng.lat();
-                                const lng = e.latLng.lng();
+                              if (e.detail.latLng) {
+                                const { lat, lng } = e.detail.latLng;
                                 setMarkerPosition({ lat, lng });
                                 form.setValue("latitude", lat);
                                 form.setValue("longitude", lng);
                               }
                             }}
                           >
-                            <Marker
+                            <AdvancedMarker
                               position={markerPosition}
                               draggable={true}
                               onDragEnd={(e) => {
@@ -990,40 +1032,39 @@ export default function CreateCampaign() {
                                   form.setValue("longitude", lng);
                                 }
                               }}
-                            />
+                            >
+                              <div style={{
+                                width: 16, height: 16, borderRadius: '50%',
+                                background: '#ef4444', border: '3px solid #fff',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.3)'
+                              }} />
+                            </AdvancedMarker>
                             {watchRadius && (
-                              <Circle
+                              <CircleOverlay
                                 center={markerPosition}
                                 radius={watchRadius * 1000}
-                                options={{
-                                  fillColor: "#3b82f6",
-                                  fillOpacity: 0.1,
-                                  strokeColor: "#3b82f6",
-                                  strokeOpacity: 0.8,
-                                  strokeWeight: 2,
-                                }}
+                                fillColor="#3b82f6"
+                                fillOpacity={0.1}
+                                strokeColor="#3b82f6"
+                                strokeOpacity={0.8}
+                                strokeWeight={2}
                               />
                             )}
                             
                             {/* Display available screens on map */}
                             {screensInArea.map((screen) => (
-                              <Marker
+                              <AdvancedMarker
                                 key={screen.id}
                                 position={{
                                   lat: parseFloat(screen.latitude.toString()),
                                   lng: parseFloat(screen.longitude.toString()),
                                 }}
                                 onClick={() => setSelectedMapScreen(screen)}
-                                icon={{
-                                  path: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z",
-                                  fillColor: "#8b5cf6",
-                                  fillOpacity: 1,
-                                  strokeColor: "#ffffff",
-                                  strokeWeight: 2,
-                                  scale: 1.5,
-                                  anchor: new google.maps.Point(12, 24),
-                                }}
-                              />
+                              >
+                                <svg width="28" height="36" viewBox="0 0 24 24" fill="#8b5cf6" stroke="#ffffff" strokeWidth="2">
+                                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" />
+                                </svg>
+                              </AdvancedMarker>
                             ))}
                             
                             {/* InfoWindow for selected screen */}
@@ -1034,10 +1075,8 @@ export default function CreateCampaign() {
                                   lng: parseFloat(selectedMapScreen.longitude.toString()),
                                 }}
                                 onCloseClick={() => setSelectedMapScreen(null)}
-                                options={{
-                                  maxWidth: 350,
-                                  pixelOffset: new google.maps.Size(0, -10)
-                                }}
+                                maxWidth={350}
+                                pixelOffset={[0, -10]}
                               >
                                 <div style={{ width: '320px', maxWidth: '320px' }}>
                                   {/* Screen Image */}
@@ -1117,9 +1156,8 @@ export default function CreateCampaign() {
                                 </div>
                               </InfoWindow>
                             )}
-                          </GoogleMap>
+                          </Map>
                         </div>
-                      )}
 
                       <FormField
                         control={form.control}
@@ -1785,56 +1823,49 @@ export default function CreateCampaign() {
                         </Card>
 
                         {/* Map View */}
-                        {isLoaded && (
                           <Card>
                             <CardHeader>
                               <CardTitle className="text-lg">Screen Locations</CardTitle>
                             </CardHeader>
                             <CardContent>
                               <div className="h-[600px] rounded-lg overflow-hidden border">
-                                <GoogleMap
-                                  mapContainerStyle={{ width: '100%', height: '100%' }}
-                                  center={
+                                <Map
+                                  style={{ width: '100%', height: '100%' }}
+                                  defaultCenter={
                                     watchAreaType === "map" 
                                       ? { lat: form.getValues("latitude") || 12.9716, lng: form.getValues("longitude") || 77.5946 }
                                       : filteredScreensInArea.length > 0
                                         ? { lat: parseFloat(filteredScreensInArea[0].latitude.toString()), lng: parseFloat(filteredScreensInArea[0].longitude.toString()) }
                                         : { lat: 12.9716, lng: 77.5946 }
                                   }
-                                  zoom={watchAreaType === "map" ? 12 : 11}
-                                  options={{
-                                    zoomControl: true,
-                                    mapTypeControl: false,
-                                    scaleControl: true,
-                                    streetViewControl: false,
-                                    rotateControl: false,
-                                    fullscreenControl: true,
-                                  }}
+                                  defaultZoom={watchAreaType === "map" ? 12 : 11}
+                                  mapId="campaign-review-map"
+                                  zoomControl={true}
+                                  mapTypeControl={false}
+                                  scaleControl={true}
+                                  streetViewControl={false}
+                                  rotateControl={false}
+                                  fullscreenControl={true}
                                 >
                                   {/* Show selected screens on map */}
                                   {filteredScreensInArea.map((screen) => (
-                                    <Marker
+                                    <AdvancedMarker
                                       key={screen.id}
                                       position={{
                                         lat: parseFloat(screen.latitude.toString()),
                                         lng: parseFloat(screen.longitude.toString()),
                                       }}
                                       onClick={() => setScreenDetailsDialog(screen)}
-                                      icon={{
-                                        path: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
-                                        fillColor: selectedMapScreen?.id === screen.id ? "#22c55e" : "#8b5cf6",
-                                        fillOpacity: 1,
-                                        strokeColor: "#ffffff",
-                                        strokeWeight: selectedMapScreen?.id === screen.id ? 3 : 2,
-                                        scale: selectedMapScreen?.id === screen.id ? 2 : 1.5,
-                                      }}
-                                    />
+                                    >
+                                      <svg width={selectedMapScreen?.id === screen.id ? 32 : 24} height={selectedMapScreen?.id === screen.id ? 42 : 36} viewBox="0 0 24 24" fill={selectedMapScreen?.id === screen.id ? "#22c55e" : "#8b5cf6"} stroke="#ffffff" strokeWidth={selectedMapScreen?.id === screen.id ? 3 : 2}>
+                                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                                      </svg>
+                                    </AdvancedMarker>
                                   ))}
-                                </GoogleMap>
+                                </Map>
                               </div>
                             </CardContent>
                           </Card>
-                        )}
                       </div>
                     </div>
                   )}
@@ -1915,35 +1946,34 @@ export default function CreateCampaign() {
                         </Card>
 
                         {/* Map View */}
-                        {isLoaded && (
                           <Card>
                             <CardHeader>
                               <CardTitle className="text-lg">Screen Locations</CardTitle>
                             </CardHeader>
                             <CardContent>
                               <div className="h-[600px] rounded-lg overflow-hidden border">
-                                <GoogleMap
-                                  mapContainerStyle={{ width: '100%', height: '100%' }}
-                                  center={markerPosition}
-                                  zoom={12}
+                                <Map
+                                  style={{ width: '100%', height: '100%' }}
+                                  defaultCenter={markerPosition}
+                                  defaultZoom={12}
+                                  mapId="campaign-summary-map"
                                 >
                                   {filteredScreensInArea.map((screen) => (
-                                    <Marker
+                                    <AdvancedMarker
                                       key={screen.id}
                                       position={{
                                         lat: parseFloat(screen.latitude.toString()),
                                         lng: parseFloat(screen.longitude.toString()),
                                       }}
                                       onClick={() => setSelectedMapScreen(screen)}
-                                      icon={{
-                                        path: window.google.maps.SymbolPath.CIRCLE,
-                                        scale: 8,
-                                        fillColor: selectedScreenIds.includes(screen.id) ? "#3b82f6" : "#6b7280",
-                                        fillOpacity: 1,
-                                        strokeColor: "#ffffff",
-                                        strokeWeight: 2,
-                                      }}
-                                    />
+                                    >
+                                      <div style={{
+                                        width: 16, height: 16, borderRadius: '50%',
+                                        background: selectedScreenIds.includes(screen.id) ? '#3b82f6' : '#6b7280',
+                                        border: '2px solid #fff',
+                                        boxShadow: '0 1px 4px rgba(0,0,0,0.3)'
+                                      }} />
+                                    </AdvancedMarker>
                                   ))}
                                   
                                   {selectedMapScreen && (
@@ -1953,10 +1983,8 @@ export default function CreateCampaign() {
                                         lng: parseFloat(selectedMapScreen.longitude.toString()),
                                       }}
                                       onCloseClick={() => setSelectedMapScreen(null)}
-                                      options={{
-                                        maxWidth: 350,
-                                        pixelOffset: new google.maps.Size(0, -10)
-                                      }}
+                                      maxWidth={350}
+                                      pixelOffset={[0, -10]}
                                     >
                                       <div style={{ width: '320px', maxWidth: '320px' }}>
                                         {/* Screen Image */}
@@ -2051,11 +2079,10 @@ export default function CreateCampaign() {
                                       </div>
                                     </InfoWindow>
                                   )}
-                                </GoogleMap>
+                                </Map>
                               </div>
                             </CardContent>
                           </Card>
-                        )}
                       </div>
 
                       {/* Reach Stats */}
@@ -2132,6 +2159,39 @@ export default function CreateCampaign() {
                           </AlertDescription>
                         </Alert>
                       )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Campaign Summary / Notes */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Campaign Notes</CardTitle>
+                      <CardDescription>
+                        Optional: Add a brief summary or notes about your campaign for the screen owners
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <FormField
+                        control={form.control}
+                        name="summary"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Summary (optional)</FormLabel>
+                            <FormControl>
+                              <textarea
+                                {...field}
+                                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                placeholder="Brief description of what the creative is about, brand guidelines, etc."
+                                maxLength={500}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              {(field.value?.length || 0)}/500 characters
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </CardContent>
                   </Card>
 

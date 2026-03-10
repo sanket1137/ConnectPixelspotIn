@@ -37,6 +37,16 @@ export const users = pgTable("users", {
   profileCompleted: boolean("profile_completed").notNull().default(false),
   hasSeenOnboarding: boolean("has_seen_onboarding").notNull().default(false),
   
+  // Bank Details (for screen owners - payouts)
+  bankAccountName: text("bank_account_name"),
+  bankAccountNumber: text("bank_account_number"),
+  bankIfscCode: text("bank_ifsc_code"),
+  bankName: text("bank_name"),
+  upiId: text("upi_id"),
+  
+  // Payment deadline configuration (for screen owners)
+  paymentDeadlineHours: integer("payment_deadline_hours").default(24), // how many hours advertiser gets to pay after owner approves
+
   role: text("role").notNull().default("advertiser"), // admin, screen_owner, advertiser
   status: text("status").notNull().default("active"), // active, inactive, pending
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -101,7 +111,9 @@ export const screens = pgTable("screens", {
   numberOfScreens: integer("number_of_screens"), // Required if isMultiScreen is true
   pricePerDay: integer("price_per_day").notNull(),
   minBookingDays: integer("min_booking_days").notNull().default(1),
-  playbackSlotsPerHour: integer("playback_slots_per_hour").notNull(),
+  loopDuration: integer("loop_duration"), // Total loop cycle in seconds (e.g., 120s). brandsPerLoop = loopDuration / durationPerSlot
+  maxBrandsPerLoop: integer("max_brands_per_loop"), // Auto-calculated: loopDuration / durationPerSlot
+  playbackSlotsPerHour: integer("playback_slots_per_hour"), // Auto-calculated: 3600 / durationPerSlot (nullable for migration, auto-set on create/update)
   contentTypesSupported: text("content_types_supported").array(), // Static Image / Video / Interactive / HTML5
   
   // Legacy/Support fields
@@ -205,8 +217,16 @@ export const campaigns = pgTable("campaigns", {
   endDate: timestamp("end_date").notNull(),
   budget: integer("budget").notNull(),
   estimatedBudget: integer("estimated_budget"), // AI-calculated budget based on recommended screens
-  creativeUrl: text("creative_url"), // URL to uploaded creative from object storage
+  summary: text("summary"), // Advertiser's campaign description/summary
+  creativeUrl: text("creative_url"), // Legacy: URL/link to creative
+  creativeFileUrl: text("creative_file_url"), // Uploaded creative file URL from object storage
+  creativeFileType: text("creative_file_type"), // "image" | "video"
+  creativeStatus: text("creative_status").default("pending"), // pending, approved, rejected
+  creativeRejectionReason: text("creative_rejection_reason"), // Owner's reason for rejecting creative
+  creativeReviewedBy: varchar("creative_reviewed_by"), // Owner user ID who reviewed
+  creativeReviewedAt: timestamp("creative_reviewed_at"),
   status: text("status").notNull().default("pending"), // pending, approved, live, completed, rejected
+  paymentStatus: text("payment_status").default("pending"), // pending, advertiser_paid, partially_released, fully_settled
   rejectionReason: text("rejection_reason"), // Admin's reason for rejecting the campaign
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -231,6 +251,11 @@ export const bookings = pgTable("bookings", {
   adminRespondedAt: timestamp("admin_responded_at"),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
+  // Payment deadline: set when owner approves, advertiser must pay before this
+  paymentDeadline: timestamp("payment_deadline"),
+  // Admin-configured payout split amounts (in paise)
+  ownerAdvanceAmount: integer("owner_advance_amount"), // advance payout on campaign start
+  ownerFinalAmount: integer("owner_final_amount"), // final payout after proof-of-play confirmed
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_bookings_screen_id").on(table.screenId),
@@ -240,18 +265,130 @@ export const bookings = pgTable("bookings", {
   index("idx_bookings_created_at").on(table.createdAt),
 ]);
 
-// Payments table - transaction records
+// Payments table - transaction records (Razorpay integration)
 export const payments = pgTable("payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  bookingId: varchar("booking_id").notNull(),
-  amount: integer("amount").notNull(),
+  bookingId: varchar("booking_id"),
+  campaignId: varchar("campaign_id"), // Direct campaign reference for campaign-level payments
+  advertiserId: varchar("advertiser_id"), // Direct advertiser reference
+  amount: integer("amount").notNull(), // Amount in paise (INR minor units)
   status: text("status").notNull().default("pending"), // pending, completed, failed, refunded
-  method: text("method").notNull().default("stripe"), // stripe, razorpay, etc.
-  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  method: text("method").notNull().default("razorpay"), // razorpay
+  gatewayOrderId: text("gateway_order_id"), // Razorpay order_id
+  gatewayPaymentId: text("gateway_payment_id"), // Razorpay payment_id (after verification)
+  gatewaySignature: text("gateway_signature"), // Razorpay signature for verification
+  invoiceId: varchar("invoice_id"), // FK to invoices
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_payments_booking_id").on(table.bookingId),
+  index("idx_payments_campaign_id").on(table.campaignId),
+  index("idx_payments_advertiser_id").on(table.advertiserId),
   index("idx_payments_status").on(table.status),
+  index("idx_payments_gateway_order").on(table.gatewayOrderId),
+]);
+
+// Owner Payouts table - admin-controlled payouts to screen owners
+export const ownerPayouts = pgTable("owner_payouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").notNull(),
+  ownerId: varchar("owner_id").notNull(),
+  campaignId: varchar("campaign_id").notNull(),
+  screenId: varchar("screen_id").notNull(),
+  totalOwnerAmount: integer("total_owner_amount").notNull(), // Full amount owed to owner for this booking
+  payoutAmount: integer("payout_amount").notNull(), // This specific installment amount
+  platformCommission: integer("platform_commission").notNull().default(0), // Amount kept by platform for this installment
+  payoutNumber: integer("payout_number").notNull().default(1), // 1, 2, 3... for multi-installment tracking
+  payoutType: text("payout_type").notNull().default("advance"), // "advance" | "final"
+  proofOfPlayId: varchar("proof_of_play_id"), // FK to proof_of_play (required for final payouts)
+  status: text("status").notNull().default("pending_admin"), // pending_admin, initiated, pending_owner_accept, accepted, processed, expired, failed
+  adminInitiatedBy: varchar("admin_initiated_by"), // Admin user ID
+  adminInitiatedAt: timestamp("admin_initiated_at"),
+  ownerAcceptedAt: timestamp("owner_accepted_at"),
+  processedAt: timestamp("processed_at"),
+  expiresAt: timestamp("expires_at"), // 5-min acceptance window
+  adminNotes: text("admin_notes"),
+  transactionRef: text("transaction_ref"), // Bank transfer UTR / reference number
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_owner_payouts_booking_id").on(table.bookingId),
+  index("idx_owner_payouts_owner_id").on(table.ownerId),
+  index("idx_owner_payouts_campaign_id").on(table.campaignId),
+  index("idx_owner_payouts_status").on(table.status),
+  index("idx_owner_payouts_expires").on(table.expiresAt),
+]);
+
+// Invoices table - GST-compliant invoicing
+export const invoices = pgTable("invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceNumber: text("invoice_number").notNull().unique(), // Sequential: PS-INV-2026-0001
+  type: text("type").notNull(), // "advertiser" (payment receipt) | "owner_payout" (payout receipt)
+  advertiserId: varchar("advertiser_id"), // FK to users (for advertiser invoices)
+  ownerId: varchar("owner_id"), // FK to users (for owner payout invoices)
+  campaignId: varchar("campaign_id"),
+  bookingId: varchar("booking_id"),
+  payoutId: varchar("payout_id"), // FK to owner_payouts (for owner invoices)
+  subtotal: integer("subtotal").notNull(), // Amount before tax
+  gstPercent: integer("gst_percent").notNull().default(18),
+  gstAmount: integer("gst_amount").notNull(), // Computed: subtotal * gstPercent / 100
+  totalAmount: integer("total_amount").notNull(), // subtotal + gstAmount
+  advertiserGst: text("advertiser_gst"), // Advertiser GST number (from profile)
+  platformGst: text("platform_gst"), // Pixelspot GST number
+  status: text("status").notNull().default("draft"), // draft, issued, paid
+  pdfUrl: text("pdf_url"), // Generated PDF storage URL
+  issuedAt: timestamp("issued_at"),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_invoices_advertiser_id").on(table.advertiserId),
+  index("idx_invoices_owner_id").on(table.ownerId),
+  index("idx_invoices_campaign_id").on(table.campaignId),
+  index("idx_invoices_status").on(table.status),
+  index("idx_invoices_number").on(table.invoiceNumber),
+]);
+
+// Proof of Play table - owner uploads proof, admin verifies, advertiser confirms
+export const proofOfPlay = pgTable("proof_of_play", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").notNull(),
+  campaignId: varchar("campaign_id").notNull(),
+  screenId: varchar("screen_id").notNull(),
+  ownerId: varchar("owner_id").notNull(),
+  fileUrls: jsonb("file_urls").$type<Array<{ url: string; type: "photo" | "video" | "log"; caption?: string }>>().notNull(),
+  ownerNotes: text("owner_notes"),
+  // Admin verification
+  adminVerified: boolean("admin_verified").notNull().default(false),
+  adminVerifiedBy: varchar("admin_verified_by"),
+  adminVerifiedAt: timestamp("admin_verified_at"),
+  adminNotes: text("admin_notes"),
+  // Advertiser confirmation
+  advertiserConfirmed: boolean("advertiser_confirmed").notNull().default(false),
+  advertiserConfirmedAt: timestamp("advertiser_confirmed_at"),
+  advertiserNotes: text("advertiser_notes"),
+  // Status: pending → admin_verified → confirmed → disputed
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_proof_of_play_booking_id").on(table.bookingId),
+  index("idx_proof_of_play_campaign_id").on(table.campaignId),
+  index("idx_proof_of_play_owner_id").on(table.ownerId),
+  index("idx_proof_of_play_status").on(table.status),
+]);
+
+// Notifications table - in-app notification center
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // Target recipient
+  type: text("type").notNull(), // payment_required, payment_received, payout_incoming, payout_expired, creative_approved, creative_rejected, booking_approved, booking_rejected, campaign_live, campaign_completed
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  data: jsonb("data").$type<Record<string, any>>(), // Contextual payload: campaignId, bookingId, payoutId, etc.
+  actionUrl: text("action_url"), // Deep link to relevant page
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_notifications_user_id").on(table.userId),
+  index("idx_notifications_user_read").on(table.userId, table.isRead),
+  index("idx_notifications_created_at").on(table.createdAt),
 ]);
 
 // Relations
@@ -312,6 +449,82 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   booking: one(bookings, {
     fields: [payments.bookingId],
     references: [bookings.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [payments.campaignId],
+    references: [campaigns.id],
+  }),
+  advertiser: one(users, {
+    fields: [payments.advertiserId],
+    references: [users.id],
+  }),
+  invoice: one(invoices, {
+    fields: [payments.invoiceId],
+    references: [invoices.id],
+  }),
+}));
+
+// Owner Payouts relations
+export const ownerPayoutsRelations = relations(ownerPayouts, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [ownerPayouts.bookingId],
+    references: [bookings.id],
+  }),
+  owner: one(users, {
+    fields: [ownerPayouts.ownerId],
+    references: [users.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [ownerPayouts.campaignId],
+    references: [campaigns.id],
+  }),
+  screen: one(screens, {
+    fields: [ownerPayouts.screenId],
+    references: [screens.id],
+  }),
+}));
+
+// Invoices relations
+export const invoicesRelations = relations(invoices, ({ one }) => ({
+  advertiser: one(users, {
+    fields: [invoices.advertiserId],
+    references: [users.id],
+  }),
+  owner: one(users, {
+    fields: [invoices.ownerId],
+    references: [users.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [invoices.campaignId],
+    references: [campaigns.id],
+  }),
+}));
+
+// Notifications relations
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
+// Proof of Play relations
+export const proofOfPlayRelations = relations(proofOfPlay, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [proofOfPlay.bookingId],
+    references: [bookings.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [proofOfPlay.campaignId],
+    references: [campaigns.id],
+  }),
+  screen: one(screens, {
+    fields: [proofOfPlay.screenId],
+    references: [screens.id],
+  }),
+  owner: one(users, {
+    fields: [proofOfPlay.ownerId],
+    references: [users.id],
   }),
 }));
 
@@ -426,6 +639,26 @@ export const insertPaymentSchema = createInsertSchema(payments).omit({
   createdAt: true,
 });
 
+export const insertOwnerPayoutSchema = createInsertSchema(ownerPayouts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertProofOfPlaySchema = createInsertSchema(proofOfPlay).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertScreenTagSchema = createInsertSchema(screenTags).omit({
   id: true,
   createdAt: true,
@@ -517,3 +750,15 @@ export type InsertScreenTag = z.infer<typeof insertScreenTagSchema>;
 
 export type ScreenTagAssignment = typeof screenTagAssignments.$inferSelect;
 export type InsertScreenTagAssignment = z.infer<typeof insertScreenTagAssignmentSchema>;
+
+export type OwnerPayout = typeof ownerPayouts.$inferSelect;
+export type InsertOwnerPayout = z.infer<typeof insertOwnerPayoutSchema>;
+
+export type Invoice = typeof invoices.$inferSelect;
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+export type ProofOfPlay = typeof proofOfPlay.$inferSelect;
+export type InsertProofOfPlay = z.infer<typeof insertProofOfPlaySchema>;

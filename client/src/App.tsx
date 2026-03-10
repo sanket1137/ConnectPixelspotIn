@@ -8,10 +8,12 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppSidebar } from "@/components/AppSidebar";
+import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { Menu, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { NotificationBell } from "@/components/NotificationBell";
 
 // Lazy-loaded page components for code splitting
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -39,11 +41,19 @@ const QuickCampaignFromCart = lazy(() => import("@/pages/advertiser/QuickCampaig
 const BookingManagement = lazy(() => import("@/pages/advertiser/BookingManagement"));
 const AICampaignAdvisor = lazy(() => import("@/pages/advertiser/AICampaignAdvisor"));
 const ComingSoon = lazy(() => import("@/pages/ComingSoon"));
+const OwnerEarnings = lazy(() => import("@/pages/owner/OwnerEarnings"));
+const AdvertiserPayments = lazy(() => import("@/pages/advertiser/AdvertiserPayments"));
+const AdminPayments = lazy(() => import("@/pages/admin/AdminPayments"));
 const ProfileCompletion = lazy(() => import("@/pages/ProfileCompletion"));
 const EmailVerification = lazy(() => import("@/pages/EmailVerification"));
 const Profile = lazy(() => import("@/pages/Profile"));
 const PublicHome = lazy(() => import("@/pages/PublicHome"));
 const PasswordReset = lazy(() => import("@/pages/PasswordReset"));
+const PrivacyPolicy = lazy(() => import("@/pages/legal/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("@/pages/legal/TermsOfService"));
+const RefundPolicy = lazy(() => import("@/pages/legal/RefundPolicy"));
+const ContactUs = lazy(() => import("@/pages/legal/ContactUs"));
+const AboutUs = lazy(() => import("@/pages/legal/AboutUs"));
 
 // Loading fallback for code-split pages
 function PageLoader() {
@@ -63,6 +73,14 @@ function Router() {
       {/* Public Routes */}
       <Route path="/login" component={Login} />
       <Route path="/register" component={Login} />
+      
+      {/* Legal / Policy Pages (public) */}
+      <Route path="/privacy" component={PrivacyPolicy} />
+      <Route path="/terms" component={TermsOfService} />
+      <Route path="/refund" component={RefundPolicy} />
+      <Route path="/contact" component={ContactUs} />
+      <Route path="/about" component={AboutUs} />
+      
       <Route path="/auth/action" component={PasswordReset} />
       <Route path="/reset-password" component={PasswordReset} />
       
@@ -113,6 +131,11 @@ function Router() {
           <AISecurityDashboard />
         </AuthGuard>
       </Route>
+      <Route path="/admin/payments">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminPayments />
+        </AuthGuard>
+      </Route>
       <Route path="/admin/settings">
         <AuthGuard allowedRoles={["admin"]}>
           <Settings />
@@ -152,12 +175,7 @@ function Router() {
       </Route>
       <Route path="/owner/earnings">
         <AuthGuard allowedRoles={["screen_owner"]}>
-          <ComingSoon 
-            title="Earnings & Payouts"
-            description="Track your earnings from screen bookings and manage payouts"
-            backLink="/owner"
-            backLabel="Back to Dashboard"
-          />
+          <OwnerEarnings />
         </AuthGuard>
       </Route>
       <Route path="/owner/profile">
@@ -209,12 +227,7 @@ function Router() {
       </Route>
       <Route path="/advertiser/payments">
         <AuthGuard allowedRoles={["advertiser"]}>
-          <ComingSoon 
-            title="Payments & Billing"
-            description="View your payment history and manage billing information"
-            backLink="/advertiser"
-            backLabel="Back to Dashboard"
-          />
+          <AdvertiserPayments />
         </AuthGuard>
       </Route>
       <Route path="/advertiser/profile">
@@ -283,6 +296,7 @@ function AuthenticatedLayout() {
               <Menu className="h-6 w-6" />
             </SidebarTrigger>
             <h1 className="flex-1 text-lg font-semibold">Pixelspot</h1>
+            <NotificationBell />
             <Button
               variant="ghost"
               size="icon"
@@ -292,6 +306,20 @@ function AuthenticatedLayout() {
               className="h-9 w-9"
             >
               <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </Button>
+          </header>
+
+          {/* Desktop top bar with notification bell */}
+          <header className="hidden md:flex sticky top-0 z-50 h-12 items-center justify-end gap-2 border-b bg-background px-6">
+            <NotificationBell />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="h-8 w-8"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
           </header>
           
@@ -311,9 +339,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
-          <AuthenticatedLayout />
-        </AuthProvider>
+        <GoogleMapsProvider>
+          <AuthProvider>
+            <AuthenticatedLayout />
+          </AuthProvider>
+        </GoogleMapsProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

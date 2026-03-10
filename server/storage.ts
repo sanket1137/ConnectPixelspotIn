@@ -1,6 +1,7 @@
 // Reference: blueprint:javascript_database
 import { 
   users, screens, campaigns, bookings, payments,
+  ownerPayouts, invoices, notifications, proofOfPlay,
   aiConversations, aiMessages, aiRateLimits,
   screenTags, screenTagAssignments,
   type User, type InsertUser, 
@@ -8,13 +9,33 @@ import {
   type Campaign, type InsertCampaign,
   type Booking, type InsertBooking,
   type Payment, type InsertPayment,
+  type OwnerPayout, type InsertOwnerPayout,
+  type Invoice, type InsertInvoice,
+  type Notification, type InsertNotification,
+  type ProofOfPlay, type InsertProofOfPlay,
   type AiConversation, type InsertAiConversation,
   type AiMessage, type InsertAiMessage,
   type AiRateLimit, type InsertAiRateLimit,
   type ScreenTag, type ScreenTagAssignment
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, gte, lte, or, desc, sql as drizzleSql } from "drizzle-orm";
+import { eq, and, gte, lte, or, desc, asc, sql as drizzleSql, inArray, isNull, count } from "drizzle-orm";
+
+/** Convert a raw DB row (snake_case keys) to camelCase to match drizzle schema types.
+ *  Recursively converts nested plain objects (e.g. from row_to_json). */
+function mapRowToCamel<T>(row: Record<string, any>): T {
+  const mapped: Record<string, any> = {};
+  for (const key of Object.keys(row)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+    const val = row[key];
+    if (val !== null && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
+      mapped[camelKey] = mapRowToCamel(val);
+    } else {
+      mapped[camelKey] = val;
+    }
+  }
+  return mapped as T;
+}
 
 export interface IStorage {
   // User methods
@@ -101,6 +122,62 @@ export interface IStorage {
   addManualTagAssignment(screenId: string, tagId: string): Promise<ScreenTagAssignment>;
   removeTagAssignment(assignmentId: string): Promise<boolean>;
 
+  // Owner Payout methods
+  createOwnerPayout(payout: InsertOwnerPayout): Promise<OwnerPayout>;
+  getOwnerPayout(id: string): Promise<OwnerPayout | undefined>;
+  getOwnerPayoutsByOwner(ownerId: string): Promise<OwnerPayout[]>;
+  getOwnerPayoutsByBooking(bookingId: string): Promise<OwnerPayout[]>;
+  getOwnerPayoutsByCampaign(campaignId: string): Promise<OwnerPayout[]>;
+  getAllOwnerPayouts(): Promise<OwnerPayout[]>;
+  updateOwnerPayout(id: string, data: Partial<OwnerPayout>): Promise<OwnerPayout | undefined>;
+  getExpiredPendingPayouts(): Promise<OwnerPayout[]>;
+  getOwnerEarningsSummary(ownerId: string): Promise<{
+    totalEarned: number; totalPending: number; totalProcessed: number;
+    payoutsCount: number; pendingPayoutsCount: number;
+  }>;
+
+  // Invoice methods
+  createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  getInvoice(id: string): Promise<Invoice | undefined>;
+  getInvoiceByNumber(invoiceNumber: string): Promise<Invoice | undefined>;
+  getInvoicesByAdvertiser(advertiserId: string): Promise<Invoice[]>;
+  getInvoicesByOwner(ownerId: string): Promise<Invoice[]>;
+  getAllInvoices(): Promise<Invoice[]>;
+  updateInvoice(id: string, data: Partial<Invoice>): Promise<Invoice | undefined>;
+  getNextInvoiceNumber(): Promise<string>;
+
+  // Notification methods
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getUserNotifications(userId: string, limit?: number): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  markNotificationRead(id: string): Promise<Notification | undefined>;
+  markAllNotificationsRead(userId: string): Promise<void>;
+
+  // Proof of Play methods
+  createProofOfPlay(proof: InsertProofOfPlay): Promise<ProofOfPlay>;
+  getProofOfPlay(id: string): Promise<ProofOfPlay | undefined>;
+  getProofOfPlayByBooking(bookingId: string): Promise<ProofOfPlay[]>;
+  getProofOfPlayByOwner(ownerId: string): Promise<ProofOfPlay[]>;
+  getAllProofOfPlay(): Promise<ProofOfPlay[]>;
+  updateProofOfPlay(id: string, data: Partial<ProofOfPlay>): Promise<ProofOfPlay | undefined>;
+
+  // Booking extended methods
+  updateBooking(id: string, data: Partial<Booking>): Promise<Booking | undefined>;
+  getBookingsWithExpiredPaymentDeadline(): Promise<Booking[]>;
+
+  // Payment extended methods
+  getPaymentByCampaign(campaignId: string): Promise<Payment | undefined>;
+  getPaymentByGatewayOrder(gatewayOrderId: string): Promise<Payment | undefined>;
+  getPaymentsByAdvertiser(advertiserId: string): Promise<Payment[]>;
+  getAllPayments(): Promise<Payment[]>;
+  updatePayment(id: string, data: Partial<Payment>): Promise<Payment | undefined>;
+
+  // Screen availability - count active brand slots for a given date range
+  getScreenBrandAvailability(screenId: string, startDate: Date, endDate: Date): Promise<{
+    maxBrands: number; bookedBrands: number; availableBrands: number;
+  }>;
+  checkBookingOverlap(screenId: string, startDate: Date, endDate: Date, excludeBookingId?: string): Promise<number>;
+
   // === Optimized aggregate / JOIN methods (replaces N+1 patterns) ===
 
   // Admin: aggregate counts for dashboard stats (replaces 4x getAll*)
@@ -152,7 +229,19 @@ export interface IStorage {
     city?: string; type?: string; minPrice?: number; maxPrice?: number;
     pincode?: string; lat?: number; lng?: number; radiusKm?: number;
     limit?: number; offset?: number;
-  }): Promise<Screen[]>;
+    search?: string;
+    page?: number; pageSize?: number;
+  }): Promise<Screen[] | { screens: Screen[]; total: number }>;
+
+  // Screens: paginated with filters for admin panel
+  getScreensPaginated(params: {
+    ownerId?: string;
+    status?: string;
+    city?: string;
+    search?: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ screens: Screen[]; total: number }>;
 
   // Screens: get unique locations from SQL (replaces full table scan)
   getScreenLocations(): Promise<{ states: string[]; citiesByState: Record<string, string[]>; allCities: string[] }>;
@@ -868,6 +957,291 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
+  // ── Owner Payout methods ──────────────────
+
+  async createOwnerPayout(insertPayout: InsertOwnerPayout): Promise<OwnerPayout> {
+    const [payout] = await db.insert(ownerPayouts).values(insertPayout).returning();
+    return payout;
+  }
+
+  async getOwnerPayout(id: string): Promise<OwnerPayout | undefined> {
+    const [payout] = await db.select().from(ownerPayouts).where(eq(ownerPayouts.id, id));
+    return payout || undefined;
+  }
+
+  async getOwnerPayoutsByOwner(ownerId: string): Promise<OwnerPayout[]> {
+    return await db.select().from(ownerPayouts)
+      .where(eq(ownerPayouts.ownerId, ownerId))
+      .orderBy(desc(ownerPayouts.createdAt));
+  }
+
+  async getOwnerPayoutsByBooking(bookingId: string): Promise<OwnerPayout[]> {
+    return await db.select().from(ownerPayouts)
+      .where(eq(ownerPayouts.bookingId, bookingId))
+      .orderBy(asc(ownerPayouts.payoutNumber));
+  }
+
+  async getOwnerPayoutsByCampaign(campaignId: string): Promise<OwnerPayout[]> {
+    return await db.select().from(ownerPayouts)
+      .where(eq(ownerPayouts.campaignId, campaignId))
+      .orderBy(desc(ownerPayouts.createdAt));
+  }
+
+  async getAllOwnerPayouts(): Promise<OwnerPayout[]> {
+    return await db.select().from(ownerPayouts).orderBy(desc(ownerPayouts.createdAt));
+  }
+
+  async updateOwnerPayout(id: string, data: Partial<OwnerPayout>): Promise<OwnerPayout | undefined> {
+    const [payout] = await db.update(ownerPayouts).set(data).where(eq(ownerPayouts.id, id)).returning();
+    return payout || undefined;
+  }
+
+  async getExpiredPendingPayouts(): Promise<OwnerPayout[]> {
+    const now = new Date();
+    return await db.select().from(ownerPayouts).where(
+      and(
+        eq(ownerPayouts.status, "pending_owner_accept"),
+        lte(ownerPayouts.expiresAt, now)
+      )
+    );
+  }
+
+  async getOwnerEarningsSummary(ownerId: string): Promise<{
+    totalEarned: number; totalPending: number; totalProcessed: number;
+    payoutsCount: number; pendingPayoutsCount: number;
+  }> {
+    const result = await db.execute(drizzleSql`
+      SELECT
+        COALESCE(SUM(CASE WHEN status = 'processed' THEN payout_amount ELSE 0 END), 0)::int AS total_processed,
+        COALESCE(SUM(CASE WHEN status IN ('pending_admin', 'initiated', 'pending_owner_accept', 'accepted') THEN payout_amount ELSE 0 END), 0)::int AS total_pending,
+        COALESCE(SUM(CASE WHEN status IN ('processed', 'accepted') THEN payout_amount ELSE 0 END), 0)::int AS total_earned,
+        COUNT(*)::int AS payouts_count,
+        COUNT(*) FILTER (WHERE status IN ('pending_admin', 'initiated', 'pending_owner_accept', 'accepted'))::int AS pending_payouts_count
+      FROM owner_payouts WHERE owner_id = ${ownerId}
+    `);
+    const r = result.rows[0] as any;
+    return {
+      totalEarned: Number(r.total_earned),
+      totalPending: Number(r.total_pending),
+      totalProcessed: Number(r.total_processed),
+      payoutsCount: Number(r.payouts_count),
+      pendingPayoutsCount: Number(r.pending_payouts_count),
+    };
+  }
+
+  // ── Invoice methods ──────────────────
+
+  async createInvoice(insertInvoice: InsertInvoice): Promise<Invoice> {
+    const [invoice] = await db.insert(invoices).values(insertInvoice).returning();
+    return invoice;
+  }
+
+  async getInvoice(id: string): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    return invoice || undefined;
+  }
+
+  async getInvoiceByNumber(invoiceNumber: string): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.invoiceNumber, invoiceNumber));
+    return invoice || undefined;
+  }
+
+  async getInvoicesByAdvertiser(advertiserId: string): Promise<Invoice[]> {
+    return await db.select().from(invoices)
+      .where(eq(invoices.advertiserId, advertiserId))
+      .orderBy(desc(invoices.createdAt));
+  }
+
+  async getInvoicesByOwner(ownerId: string): Promise<Invoice[]> {
+    return await db.select().from(invoices)
+      .where(eq(invoices.ownerId, ownerId))
+      .orderBy(desc(invoices.createdAt));
+  }
+
+  async getAllInvoices(): Promise<Invoice[]> {
+    return await db.select().from(invoices).orderBy(desc(invoices.createdAt));
+  }
+
+  async updateInvoice(id: string, data: Partial<Invoice>): Promise<Invoice | undefined> {
+    const [invoice] = await db.update(invoices).set(data).where(eq(invoices.id, id)).returning();
+    return invoice || undefined;
+  }
+
+  async getNextInvoiceNumber(): Promise<string> {
+    const result = await db.execute(drizzleSql`SELECT nextval('invoice_number_seq')::int AS seq`);
+    const seq = Number((result.rows[0] as any).seq);
+    const year = new Date().getFullYear();
+    return `PS-INV-${year}-${String(seq).padStart(4, '0')}`;
+  }
+
+  // ── Notification methods ──────────────────
+
+  async createNotification(insertNotification: InsertNotification): Promise<Notification> {
+    const [notification] = await db.insert(notifications).values(insertNotification).returning();
+    return notification;
+  }
+
+  async getUserNotifications(userId: string, limit: number = 50): Promise<Notification[]> {
+    return await db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit);
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const [result] = await db.select({ count: drizzleSql<number>`COUNT(*)::int` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    return result.count;
+  }
+
+  async markNotificationRead(id: string): Promise<Notification | undefined> {
+    const [notification] = await db.update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, id))
+      .returning();
+    return notification || undefined;
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await db.update(notifications)
+      .set({ isRead: true })
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+  }
+
+  // ── Proof of Play methods ──────────────────
+
+  async createProofOfPlay(insertProof: InsertProofOfPlay): Promise<ProofOfPlay> {
+    const [proof] = await db.insert(proofOfPlay).values(insertProof).returning();
+    return proof;
+  }
+
+  async getProofOfPlay(id: string): Promise<ProofOfPlay | undefined> {
+    const [proof] = await db.select().from(proofOfPlay).where(eq(proofOfPlay.id, id));
+    return proof || undefined;
+  }
+
+  async getProofOfPlayByBooking(bookingId: string): Promise<ProofOfPlay[]> {
+    return await db.select().from(proofOfPlay)
+      .where(eq(proofOfPlay.bookingId, bookingId))
+      .orderBy(desc(proofOfPlay.createdAt));
+  }
+
+  async getProofOfPlayByOwner(ownerId: string): Promise<ProofOfPlay[]> {
+    return await db.select().from(proofOfPlay)
+      .where(eq(proofOfPlay.ownerId, ownerId))
+      .orderBy(desc(proofOfPlay.createdAt));
+  }
+
+  async getAllProofOfPlay(): Promise<ProofOfPlay[]> {
+    return await db.select().from(proofOfPlay).orderBy(desc(proofOfPlay.createdAt));
+  }
+
+  async updateProofOfPlay(id: string, data: Partial<ProofOfPlay>): Promise<ProofOfPlay | undefined> {
+    const [proof] = await db.update(proofOfPlay).set(data).where(eq(proofOfPlay.id, id)).returning();
+    return proof || undefined;
+  }
+
+  // ── Booking extended methods ──────────────────
+
+  async updateBooking(id: string, data: Partial<Booking>): Promise<Booking | undefined> {
+    const [booking] = await db.update(bookings).set(data as any).where(eq(bookings.id, id)).returning();
+    return booking || undefined;
+  }
+
+  async getBookingsWithExpiredPaymentDeadline(): Promise<Booking[]> {
+    const now = new Date();
+    return await db.select().from(bookings).where(
+      and(
+        eq(bookings.status, "owner_approved"),
+        lte(bookings.paymentDeadline, now)
+      )
+    );
+  }
+
+  // ── Payment extended methods ──────────────────
+
+  async getPaymentByCampaign(campaignId: string): Promise<Payment | undefined> {
+    const [payment] = await db.select().from(payments)
+      .where(eq(payments.campaignId, campaignId))
+      .orderBy(desc(payments.createdAt));
+    return payment || undefined;
+  }
+
+  async getPaymentByGatewayOrder(gatewayOrderId: string): Promise<Payment | undefined> {
+    const [payment] = await db.select().from(payments)
+      .where(eq(payments.gatewayOrderId, gatewayOrderId));
+    return payment || undefined;
+  }
+
+  async getPaymentsByAdvertiser(advertiserId: string): Promise<Payment[]> {
+    return await db.select().from(payments)
+      .where(eq(payments.advertiserId, advertiserId))
+      .orderBy(desc(payments.createdAt));
+  }
+
+  async getAllPayments(): Promise<Payment[]> {
+    return await db.select().from(payments).orderBy(desc(payments.createdAt));
+  }
+
+  async updatePayment(id: string, data: Partial<Payment>): Promise<Payment | undefined> {
+    const [payment] = await db.update(payments).set(data).where(eq(payments.id, id)).returning();
+    return payment || undefined;
+  }
+
+  // ── Screen availability / overlap checks ──────────────────
+
+  async getScreenBrandAvailability(screenId: string, startDate: Date, endDate: Date): Promise<{
+    maxBrands: number; bookedBrands: number; availableBrands: number;
+  }> {
+    // Get screen's max brands per loop
+    const screen = await this.getScreen(screenId);
+    if (!screen) {
+      return { maxBrands: 0, bookedBrands: 0, availableBrands: 0 };
+    }
+    const maxBrands = screen.maxBrandsPerLoop || 1;
+
+    // Count active/approved bookings that overlap with the requested date range
+    const result = await db.execute(drizzleSql`
+      SELECT COUNT(*)::int AS booked
+      FROM bookings
+      WHERE screen_id = ${screenId}
+        AND status IN ('approved', 'active', 'owner_approved', 'pending_owner')
+        AND start_date < ${endDate}
+        AND end_date > ${startDate}
+    `);
+    const bookedBrands = Number((result.rows[0] as any).booked);
+    return {
+      maxBrands,
+      bookedBrands,
+      availableBrands: Math.max(0, maxBrands - bookedBrands),
+    };
+  }
+
+  async checkBookingOverlap(screenId: string, startDate: Date, endDate: Date, excludeBookingId?: string): Promise<number> {
+    let query = drizzleSql`
+      SELECT COUNT(*)::int AS overlap_count
+      FROM bookings
+      WHERE screen_id = ${screenId}
+        AND status IN ('approved', 'active', 'owner_approved', 'pending_owner')
+        AND start_date < ${endDate}
+        AND end_date > ${startDate}
+    `;
+    if (excludeBookingId) {
+      query = drizzleSql`
+        SELECT COUNT(*)::int AS overlap_count
+        FROM bookings
+        WHERE screen_id = ${screenId}
+          AND id != ${excludeBookingId}
+          AND status IN ('approved', 'active', 'owner_approved', 'pending_owner')
+          AND start_date < ${endDate}
+          AND end_date > ${startDate}
+      `;
+    }
+    const result = await db.execute(query);
+    return Number((result.rows[0] as any).overlap_count);
+  }
+
   // === Optimized aggregate / JOIN methods ===
 
   async getAdminDashboardStats() {
@@ -967,7 +1341,7 @@ export class DatabaseStorage implements IStorage {
       LEFT JOIN users own ON own.id = s.owner_id
       ORDER BY b.created_at DESC
     `);
-    return result.rows;
+    return (result.rows as any[]).map(r => mapRowToCamel(r));
   }
 
   async getOwnerBookingsEnriched(ownerId: string) {
@@ -981,7 +1355,7 @@ export class DatabaseStorage implements IStorage {
       LEFT JOIN campaigns c ON c.id = b.campaign_id
       ORDER BY b.created_at DESC
     `);
-    return result.rows;
+    return (result.rows as any[]).map(r => mapRowToCamel(r));
   }
 
   async getOwnerDashboardStats(ownerId: string) {
@@ -1054,15 +1428,18 @@ export class DatabaseStorage implements IStorage {
       WHERE c.advertiser_id = ${advertiserId}
       ORDER BY c.created_at DESC
     `);
-    return (result.rows as any[]).map(r => ({
-      ...r,
-      bookingStats: {
-        total: Number(r.booking_total),
-        approved: Number(r.booking_approved),
-        rejected: Number(r.booking_rejected),
-        pending: Number(r.booking_pending),
-      },
-    }));
+    return (result.rows as any[]).map(r => {
+      const mapped = mapRowToCamel<any>(r);
+      return {
+        ...mapped,
+        bookingStats: {
+          total: Number(r.booking_total),
+          approved: Number(r.booking_approved),
+          rejected: Number(r.booking_rejected),
+          pending: Number(r.booking_pending),
+        },
+      };
+    });
   }
 
   async getAdvertiserBookingsEnriched(advertiserId: string) {
@@ -1076,7 +1453,7 @@ export class DatabaseStorage implements IStorage {
       LEFT JOIN screens s ON s.id = b.screen_id
       ORDER BY b.created_at DESC
     `);
-    return result.rows;
+    return (result.rows as any[]).map(r => mapRowToCamel(r));
   }
 
   async getRecentCampaignsEnriched(advertiserId: string) {
@@ -1109,7 +1486,9 @@ export class DatabaseStorage implements IStorage {
     city?: string; type?: string; minPrice?: number; maxPrice?: number;
     pincode?: string; lat?: number; lng?: number; radiusKm?: number;
     limit?: number; offset?: number;
-  }) {
+    search?: string;
+    page?: number; pageSize?: number;
+  }): Promise<Screen[] | { screens: Screen[]; total: number }> {
     // Build dynamic conditions using drizzle sql template fragments
     const conditions: ReturnType<typeof drizzleSql>[] = [drizzleSql`status = 'active'`];
 
@@ -1128,6 +1507,14 @@ export class DatabaseStorage implements IStorage {
     if (filters.pincode) {
       conditions.push(drizzleSql`pincode = ${filters.pincode}`);
     }
+    if (filters.search) {
+      conditions.push(drizzleSql`(
+        LOWER(name) LIKE LOWER(${`%${filters.search}%`})
+        OR LOWER(location) LIKE LOWER(${`%${filters.search}%`})
+        OR LOWER(city) LIKE LOWER(${`%${filters.search}%`})
+        OR LOWER(venue_name) LIKE LOWER(${`%${filters.search}%`})
+      )`);
+    }
     if (filters.lat !== undefined && filters.lng !== undefined && filters.radiusKm !== undefined) {
       // Bounding box pre-filter for index usage
       const latRad = filters.radiusKm / 111.0;
@@ -1145,6 +1532,22 @@ export class DatabaseStorage implements IStorage {
     }
 
     const whereClause = drizzleSql.join(conditions, drizzleSql` AND `);
+
+    // If page/pageSize provided, return paginated result with total count
+    if (filters.page && filters.pageSize) {
+      const countResult = await db.execute(
+        drizzleSql`SELECT COUNT(*)::int AS total FROM screens WHERE ${whereClause}`
+      );
+      const total = (countResult.rows[0] as any)?.total ?? 0;
+
+      const offset = (filters.page - 1) * filters.pageSize;
+      const dataResult = await db.execute(
+        drizzleSql`SELECT * FROM screens WHERE ${whereClause} ORDER BY avg_daily_footfall DESC LIMIT ${filters.pageSize} OFFSET ${offset}`
+      );
+      return { screens: (dataResult.rows as any[]).map(r => mapRowToCamel<Screen>(r)), total };
+    }
+
+    // Legacy: return array (backward compatibility)
     let query = drizzleSql`SELECT * FROM screens WHERE ${whereClause} ORDER BY avg_daily_footfall DESC`;
     if (filters.limit) {
       query = drizzleSql`${query} LIMIT ${filters.limit}`;
@@ -1154,7 +1557,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await db.execute(query);
-    return result.rows as Screen[];
+    return (result.rows as any[]).map(r => mapRowToCamel<Screen>(r));
   }
 
   async getScreenLocations() {
@@ -1179,6 +1582,110 @@ export class DatabaseStorage implements IStorage {
       citiesByState,
       allCities: Array.from(allCities).sort(),
     };
+  }
+
+  async getScreensPaginated(params: {
+    ownerId?: string;
+    status?: string;
+    city?: string;
+    search?: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ screens: Screen[]; total: number }> {
+    const conditions: ReturnType<typeof drizzleSql>[] = [];
+
+    if (params.ownerId) {
+      conditions.push(drizzleSql`owner_id = ${params.ownerId}`);
+    }
+    if (params.status) {
+      conditions.push(drizzleSql`status = ${params.status}`);
+    }
+    if (params.city) {
+      conditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${params.city}%`})`);
+    }
+    if (params.search) {
+      conditions.push(drizzleSql`(
+        LOWER(name) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(location) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(city) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(venue_name) LIKE LOWER(${`%${params.search}%`})
+      )`);
+    }
+
+    const whereClause = conditions.length > 0
+      ? drizzleSql`WHERE ${drizzleSql.join(conditions, drizzleSql` AND `)}`
+      : drizzleSql``;
+
+    // Get total count
+    const countResult = await db.execute(
+      drizzleSql`SELECT COUNT(*)::int AS total FROM screens ${whereClause}`
+    );
+    const total = (countResult.rows[0] as any)?.total ?? 0;
+
+    // Get paginated results
+    const offset = (params.page - 1) * params.pageSize;
+    const dataResult = await db.execute(
+      drizzleSql`SELECT * FROM screens ${whereClause} ORDER BY created_at DESC LIMIT ${params.pageSize} OFFSET ${offset}`
+    );
+
+    return { screens: (dataResult.rows as any[]).map(r => mapRowToCamel<Screen>(r)), total };
+  }
+
+  /**
+   * Get nearby active screens sorted by distance from a given lat/lng.
+   * Uses Haversine formula for precise distance calculation.
+   * Returns screens with a `distanceKm` field.
+   */
+  async getNearbyScreens(params: {
+    lat: number;
+    lng: number;
+    radiusKm: number;
+    limit: number;
+  }): Promise<{ screens: (Screen & { distanceKm: number })[]; total: number }> {
+    const { lat, lng, radiusKm, limit } = params;
+
+    // Bounding box pre-filter for index usage
+    const latRad = radiusKm / 111.0;
+    const lngRad = radiusKm / (111.0 * Math.cos(lat * Math.PI / 180));
+
+    const haversine = drizzleSql`(
+      6371 * acos(
+        LEAST(1.0, GREATEST(-1.0,
+          cos(radians(${lat})) * cos(radians(latitude::float)) *
+          cos(radians(longitude::float) - radians(${lng})) +
+          sin(radians(${lat})) * sin(radians(latitude::float))
+        ))
+      )
+    )`;
+
+    // Count total within radius
+    const countResult = await db.execute(
+      drizzleSql`SELECT COUNT(*)::int AS total FROM screens
+        WHERE status = 'active'
+          AND latitude::float BETWEEN ${lat - latRad} AND ${lat + latRad}
+          AND longitude::float BETWEEN ${lng - lngRad} AND ${lng + lngRad}
+          AND ${haversine} <= ${radiusKm}`
+    );
+    const total = (countResult.rows[0] as any)?.total ?? 0;
+
+    // Fetch screens ordered by distance, limited
+    const dataResult = await db.execute(
+      drizzleSql`SELECT *, ${haversine} AS distance_km FROM screens
+        WHERE status = 'active'
+          AND latitude::float BETWEEN ${lat - latRad} AND ${lat + latRad}
+          AND longitude::float BETWEEN ${lng - lngRad} AND ${lng + lngRad}
+          AND ${haversine} <= ${radiusKm}
+        ORDER BY distance_km ASC
+        LIMIT ${limit}`
+    );
+
+    const screens = (dataResult.rows as any[]).map(r => {
+      const screen = mapRowToCamel<Screen & { distanceKm: number }>(r);
+      screen.distanceKm = parseFloat(r.distance_km) || 0;
+      return screen;
+    });
+
+    return { screens, total };
   }
 }
 

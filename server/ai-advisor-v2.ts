@@ -824,13 +824,40 @@ export async function sendMessageToAdvisor(
   
   console.log(`[AI Advisor] 🤖 Sending ${conversationMessages.length} messages to OpenAI`);
   
+  // Helper: call OpenAI with automatic model fallback (gpt-4o → gpt-4o-mini)
+  async function callOpenAI(
+    msgs: OpenAI.Chat.ChatCompletionMessageParam[],
+    opts?: { tools?: OpenAI.Chat.ChatCompletionTool[]; tool_choice?: "auto" }
+  ) {
+    const models = ["gpt-4o", "gpt-4o-mini"] as const;
+    for (const model of models) {
+      try {
+        const response = await openai.chat.completions.create({
+          model,
+          messages: msgs,
+          ...(opts?.tools ? { tools: opts.tools, tool_choice: opts.tool_choice } : {}),
+          temperature: 0.7,
+        });
+        if (model !== models[0]) {
+          console.log(`[AI Advisor] ⚠️ Used fallback model: ${model}`);
+        }
+        return response;
+      } catch (err: any) {
+        console.error(`[AI Advisor] ❌ Model ${model} failed:`, err?.message || err);
+        // Only retry with fallback if it's a model-related error, not auth/billing
+        if (model === models[models.length - 1]) throw err;
+        const status = err?.status || err?.response?.status;
+        if (status === 401 || status === 403) throw err; // Auth errors — don't retry
+        console.log(`[AI Advisor] 🔄 Falling back to ${models[models.indexOf(model) + 1]}`);
+      }
+    }
+    throw new Error("All OpenAI models failed");
+  }
+  
   // First OpenAI call: Let AI decide if it needs to search screens
-  const firstResponse = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: conversationMessages,
+  const firstResponse = await callOpenAI(conversationMessages, {
     tools: TOOL_DEFINITIONS,
     tool_choice: "auto",
-    temperature: 0.7,
   });
   
   const firstChoice = firstResponse.choices[0];
@@ -863,11 +890,7 @@ export async function sendMessageToAdvisor(
     
     // Second OpenAI call: Generate explanation with screen results
     console.log(`[AI Advisor] 🤖 Generating explanation with ${screenRecommendations?.length || 0} screens`);
-    const secondResponse = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: conversationMessages,
-      temperature: 0.7,
-    });
+    const secondResponse = await callOpenAI(conversationMessages);
     
     finalMessage = secondResponse.choices[0].message.content || "I found some screens for you.";
     totalTokensUsed += secondResponse.usage?.total_tokens || 0;

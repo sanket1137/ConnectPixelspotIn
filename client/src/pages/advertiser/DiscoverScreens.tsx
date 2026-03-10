@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { GoogleMap, useLoadScript, Marker, InfoWindow } from "@react-google-maps/api";
+import { Map, AdvancedMarker, InfoWindow, useMap } from "@vis.gl/react-google-maps";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,11 +27,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
 const VIEW_PREFERENCE_KEY = "screenViewPreference";
 
-const mapContainerStyle = {
+const mapContainerStyle: React.CSSProperties = {
   width: '100%',
   height: '100%'
 };
@@ -44,9 +43,7 @@ const defaultCenter = {
 type ViewMode = "list" | "map";
 
 export default function DiscoverScreens() {
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-  });
+  const map = useMap("discover-screens-map");
 
   const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
   const [detailDialogScreen, setDetailDialogScreen] = useState<Screen | null>(null);
@@ -55,7 +52,7 @@ export default function DiscoverScreens() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showCart, setShowCart] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const itemsPerPage = 12;
+  const [itemsPerPage, setItemsPerPage] = useState(12);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   
@@ -69,8 +66,6 @@ export default function DiscoverScreens() {
     minPrice: "",
     maxPrice: "",
   });
-
-  const mapRef = useRef<google.maps.Map | null>(null);
 
   // Load selected screens and view preference from localStorage
   useEffect(() => {
@@ -140,7 +135,7 @@ export default function DiscoverScreens() {
 
   // Auto-fit map bounds when filtered screens change
   useEffect(() => {
-    if (!mapRef.current || !isLoaded || viewMode !== "map" || filteredScreens.length === 0) {
+    if (!map || viewMode !== "map" || filteredScreens.length === 0) {
       return;
     }
 
@@ -148,25 +143,23 @@ export default function DiscoverScreens() {
     
     filteredScreens.forEach((screen) => {
       if (screen.latitude && screen.longitude) {
-        bounds.extend(new google.maps.LatLng(
-          parseFloat(String(screen.latitude)), 
-          parseFloat(String(screen.longitude))
-        ));
+        bounds.extend({
+          lat: parseFloat(String(screen.latitude)), 
+          lng: parseFloat(String(screen.longitude))
+        });
       }
     });
 
-    // Fit bounds to show all filtered screens
-    mapRef.current.fitBounds(bounds);
+    map.fitBounds(bounds);
 
-    // If only one screen, set a reasonable zoom level
     if (filteredScreens.length === 1) {
       setTimeout(() => {
-        if (mapRef.current) {
-          mapRef.current.setZoom(13);
+        if (map) {
+          map.setZoom(13);
         }
       }, 100);
     }
-  }, [filteredScreens, isLoaded, viewMode]);
+  }, [filteredScreens, map, viewMode]);
 
   // Pagination for list view
   const totalPages = Math.ceil(filteredScreens.length / itemsPerPage);
@@ -536,10 +529,22 @@ export default function DiscoverScreens() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <Badge variant="outline" className="text-xs">{screen.size}</Badge>
                       <Badge variant="outline" className="text-xs">{screen.venueCategory || 'Standard'}</Badge>
+                      {/* Top tags from locationTags + lifestyleTags */}
+                      {[...(screen.locationTags || []), ...(screen.lifestyleTags || [])].slice(0, 3).map((tag: string) => (
+                        <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                      ))}
                     </div>
+
+                    {/* Brand slot availability */}
+                    {screen.maxBrandsPerLoop && screen.maxBrandsPerLoop > 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        Slots per loop: <span className="font-medium text-foreground">{screen.maxBrandsPerLoop}</span>
+                        {screen.loopDuration && <> • Loop: {screen.loopDuration}s</>}
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between pt-2 border-t">
                       <div>
@@ -622,112 +627,72 @@ export default function DiscoverScreens() {
                 >
                   Next
                 </Button>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  className="ml-4 border rounded px-2 py-1 text-sm bg-background"
+                >
+                  <option value={10}>10 / page</option>
+                  <option value={30}>30 / page</option>
+                  <option value={50}>50 / page</option>
+                </select>
               </div>
             )}
           </div>
         ) : (
           <div className="h-full">
-            {!isLoaded ? (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-muted-foreground">Loading map...</p>
-              </div>
-            ) : (
-              <GoogleMap
-                mapContainerStyle={mapContainerStyle}
-                center={defaultCenter}
-                zoom={11}
-                onLoad={(map) => {
-                  mapRef.current = map;
-                }}
-                onUnmount={() => {
-                  mapRef.current = null;
-                }}
-                options={{
-                  zoomControl: true,
-                  streetViewControl: false,
-                  mapTypeControl: false,
-                  fullscreenControl: true,
-                }}
+              <Map
+                id="discover-screens-map"
+                style={mapContainerStyle}
+                defaultCenter={defaultCenter}
+                defaultZoom={11}
+                gestureHandling="greedy"
+                disableDefaultUI
+                zoomControl={true}
+                fullscreenControl={true}
+                mapId="discover-screens-map"
               >
                 {filteredScreens.map((screen) => {
                   const isSelected = selectedScreenIds.has(screen.id);
                   
-                  // Clean icon SVG for screen markers
-                  const iconSvg = `
-                    <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                      <!-- Drop shadow -->
-                      <defs>
-                        <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
-                          <feGaussianBlur in="SourceAlpha" stdDeviation="1.5"/>
-                          <feOffset dx="0" dy="1" result="offsetblur"/>
-                          <feComponentTransfer>
-                            <feFuncA type="linear" slope="0.4"/>
-                          </feComponentTransfer>
-                          <feMerge>
-                            <feMergeNode/>
-                            <feMergeNode in="SourceGraphic"/>
-                          </feMerge>
-                        </filter>
-                      </defs>
-                      
-                      <!-- Screen background -->
-                      <rect x="8" y="10" width="32" height="22" rx="2" 
-                            fill="${isSelected ? '#10b981' : '#0d9488'}" 
-                            stroke="white" 
-                            stroke-width="2"
-                            filter="url(#shadow)"/>
-                      
-                      <!-- Screen display area -->
-                      <rect x="10" y="12" width="28" height="18" 
-                            fill="${isSelected ? '#059669' : '#0f766e'}"
-                            rx="1"/>
-                      
-                      <!-- Stand -->
-                      <rect x="20" y="32" width="8" height="2" 
-                            fill="${isSelected ? '#10b981' : '#0d9488'}"/>
-                      
-                      <!-- Base -->
-                      <rect x="16" y="34" width="16" height="3" rx="1" 
-                            fill="${isSelected ? '#10b981' : '#0d9488'}"/>
-                      
-                      <!-- Screen count badge if multi-screen -->
-                      ${screen.isMultiScreen && screen.numberOfScreens ? `
-                        <circle cx="38" cy="12" r="7" fill="#7c3aed" stroke="white" stroke-width="1.5"/>
-                        <text x="38" y="15" text-anchor="middle" fill="white" font-size="8" font-weight="bold">${screen.numberOfScreens}</text>
-                      ` : ''}
-                    </svg>
-                  `;
-                  
                   return (
-                    <Marker
+                    <AdvancedMarker
                       key={screen.id}
                       position={{ lat: parseFloat(screen.latitude.toString()), lng: parseFloat(screen.longitude.toString()) }}
                       onClick={() => setSelectedScreen(screen)}
-                      icon={{
-                        url: `data:image/svg+xml;base64,${btoa(iconSvg)}`,
-                        scaledSize: new google.maps.Size(48, 48),
-                        anchor: new google.maps.Point(24, 42),
-                      }}
-                    />
+                    >
+                      <div style={{ position: 'relative', cursor: 'pointer' }}>
+                        {/* Screen marker icon */}
+                        <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                          <rect x="8" y="10" width="32" height="22" rx="2" 
+                                fill={isSelected ? '#10b981' : '#0d9488'} 
+                                stroke="white" 
+                                strokeWidth="2"/>
+                          <rect x="10" y="12" width="28" height="18" 
+                                fill={isSelected ? '#059669' : '#0f766e'}
+                                rx="1"/>
+                          <rect x="20" y="32" width="8" height="2" 
+                                fill={isSelected ? '#10b981' : '#0d9488'}/>
+                          <rect x="16" y="34" width="16" height="3" rx="1" 
+                                fill={isSelected ? '#10b981' : '#0d9488'}/>
+                          {screen.isMultiScreen && screen.numberOfScreens ? (
+                            <>
+                              <circle cx="38" cy="12" r="7" fill="#7c3aed" stroke="white" strokeWidth="1.5"/>
+                              <text x="38" y="15" textAnchor="middle" fill="white" fontSize="8" fontWeight="bold">{screen.numberOfScreens}</text>
+                            </>
+                          ) : null}
+                        </svg>
+                      </div>
+                    </AdvancedMarker>
                   );
                 })}
 
                 {selectedScreen && (
                   <InfoWindow
                     position={{ lat: parseFloat(selectedScreen.latitude.toString()), lng: parseFloat(selectedScreen.longitude.toString()) }}
-                    onCloseClick={() => {
-                      console.log('Closing InfoWindow for:', selectedScreen.name);
-                      console.log('Screen data:', {
-                        images: selectedScreen.images,
-                        screenImages: selectedScreen.screenImages,
-                        screen_images: (selectedScreen as any).screen_images
-                      });
-                      setSelectedScreen(null);
-                    }}
-                    options={{
-                      maxWidth: 350,
-                      pixelOffset: new google.maps.Size(0, -10)
-                    }}
+                    onCloseClick={() => setSelectedScreen(null)}
+                    maxWidth={350}
+                    pixelOffset={[0, -10]}
                   >
                     <div style={{ width: '320px', maxWidth: '320px' }}>
                       {/* Screen Image - LARGE */}
@@ -736,22 +701,12 @@ export default function DiscoverScreens() {
                           const screenImageUrl = (selectedScreen as any).screen_images?.[0] ?? selectedScreen.screenImages?.[0] ?? selectedScreen.images?.[0];
                           const hasImage = Boolean(screenImageUrl);
                           
-                          console.log('🖼️ InfoWindow image check:', {
-                            screenName: selectedScreen.name,
-                            screen_images: (selectedScreen as any).screen_images,
-                            screenImages: selectedScreen.screenImages,
-                            images: selectedScreen.images,
-                            finalUrl: screenImageUrl,
-                            hasImage
-                          });
-                          
                           return hasImage ? (
                             <img
                               src={screenImageUrl}
                               alt={selectedScreen.name}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                               onError={(e) => {
-                                console.error('Image load error for:', screenImageUrl);
                                 e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
                               }}
                             />
@@ -870,8 +825,7 @@ export default function DiscoverScreens() {
                     </div>
                   </InfoWindow>
                 )}
-              </GoogleMap>
-            )}
+              </Map>
           </div>
         )}
       </div>

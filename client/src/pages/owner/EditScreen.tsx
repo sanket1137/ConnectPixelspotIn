@@ -134,6 +134,7 @@ export default function EditScreen() {
     type: screen.type,
     size: screen.size,
     operationalHours: screen.operationalHours || "",
+    contentRestrictions: (screen as any).contentRestrictions || [],
     existingScreenImages: screen.screenImages || [],
     existingSurroundingImages: screen.surroundingImages || [],
   };

@@ -3,7 +3,9 @@ import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Monitor, Plus, Check, X, Eye } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MapPin, Monitor, Plus, Check, X, Eye, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -13,6 +15,11 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import type { Screen } from "@shared/schema";
 
+interface PaginatedScreensResponse {
+  screens: Screen[];
+  total: number;
+}
+
 export default function ManageScreens() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -21,10 +28,47 @@ export default function ManageScreens() {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [screenToReject, setScreenToReject] = useState<Screen | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
-  
-  const { data: screens = [], isLoading } = useQuery<Screen[]>({
-    queryKey: ["/api/admin/screens"],
+
+  // Pagination & filter state
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+
+  const queryKey = ["/api/admin/screens", { page, pageSize, status: statusFilter !== "all" ? statusFilter : undefined, search: searchQuery || undefined }];
+
+  const { data, isLoading } = useQuery<PaginatedScreensResponse>({
+    queryKey,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("page", page.toString());
+      params.set("pageSize", pageSize.toString());
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (searchQuery) params.set("search", searchQuery);
+      const res = await apiRequest("GET", `/api/admin/screens?${params.toString()}`);
+      return res.json();
+    },
   });
+
+  const screens = data?.screens ?? [];
+  const totalScreens = data?.total ?? 0;
+  const totalPages = Math.ceil(totalScreens / pageSize);
+
+  const handleSearch = () => {
+    setSearchQuery(searchInput);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (newSize: string) => {
+    setPageSize(parseInt(newSize));
+    setPage(1);
+  };
+
+  const handleStatusFilterChange = (newStatus: string) => {
+    setStatusFilter(newStatus);
+    setPage(1);
+  };
 
   const approveMutation = useMutation({
     mutationFn: async (screenId: string) => {
@@ -109,7 +153,9 @@ export default function ManageScreens() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground font-serif">Manage Screens</h1>
-          <p className="text-muted-foreground mt-1">View and manage all screens on the platform</p>
+          <p className="text-muted-foreground mt-1">
+            {totalScreens > 0 ? `${totalScreens} screen${totalScreens !== 1 ? 's' : ''} total` : 'View and manage all screens on the platform'}
+          </p>
         </div>
         <Button onClick={() => setLocation("/admin/screens/new")} data-testid="button-add-screen">
           <Plus className="h-4 w-4 mr-2" />
@@ -117,9 +163,51 @@ export default function ManageScreens() {
         </Button>
       </div>
 
+      {/* Filters & Search Bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-md">
+          <Input
+            placeholder="Search screens..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            className="flex-1"
+          />
+          <Button size="sm" variant="outline" onClick={handleSearch}>
+            <Search className="h-4 w-4" />
+          </Button>
+        </div>
+        <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={pageSize.toString()} onValueChange={handlePageSizeChange}>
+          <SelectTrigger className="w-[100px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="10">10 / page</SelectItem>
+            <SelectItem value="30">30 / page</SelectItem>
+            <SelectItem value="50">50 / page</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {isLoading ? (
         <div className="text-center py-12">Loading screens...</div>
+      ) : screens.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          No screens found{searchQuery ? ` matching "${searchQuery}"` : ''}{statusFilter !== "all" ? ` with status "${statusFilter}"` : ''}.
+        </div>
       ) : (
+        <>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {screens.map((screen) => (
             <Card key={screen.id} data-testid={`card-screen-${screen.id}`} className="overflow-hidden">
@@ -207,6 +295,25 @@ export default function ManageScreens() {
             </Card>
           ))}
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4">
+            <p className="text-sm text-muted-foreground">
+              Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalScreens)} of {totalScreens}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm font-medium px-2">Page {page} of {totalPages}</span>
+              <Button size="sm" variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+        </>
       )}
 
       {/* Screen Details Dialog */}

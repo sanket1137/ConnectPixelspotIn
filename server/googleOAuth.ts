@@ -1,13 +1,23 @@
 import { google } from 'googleapis';
 import crypto from 'crypto';
 
-// OAuth2 Client Configuration
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  // Dynamic redirect URI - will be set per request based on current domain
-  undefined
-);
+// Lazy-initialized OAuth2 client — env vars aren't available at module load
+// because dotenv.config() runs after ESM imports are hoisted in the bundle.
+let _oauth2Client: InstanceType<typeof google.auth.OAuth2> | null = null;
+
+function getOAuth2Client() {
+  if (!_oauth2Client) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      throw new Error(
+        'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in environment variables'
+      );
+    }
+    _oauth2Client = new google.auth.OAuth2(clientId, clientSecret, undefined);
+  }
+  return _oauth2Client;
+}
 
 // In-memory storage for state and code verifier (for CSRF and PKCE)
 // In production, use Redis or database
@@ -59,10 +69,11 @@ export function getAuthorizationUrl(
   });
   
   // Set redirect URI for this request
-  oauth2Client.redirectUri = redirectUri;
+  const client = getOAuth2Client();
+  client.redirectUri = redirectUri;
   
   // Build authorization URL
-  const authUrl = oauth2Client.generateAuthUrl({
+  const authUrl = client.generateAuthUrl({
     access_type: 'offline', // Get refresh token
     scope: [
       'https://www.googleapis.com/auth/userinfo.profile',
@@ -107,13 +118,14 @@ export async function getTokensFromCode(
   }
   
   // Set redirect URI for token exchange
-  oauth2Client.redirectUri = redirectUri;
+  const client = getOAuth2Client();
+  client.redirectUri = redirectUri;
   
   try {
     console.log('🔄 Exchanging authorization code for tokens...');
     
     // Exchange code for tokens with PKCE verification
-    const { tokens } = await oauth2Client.getToken({
+    const { tokens } = await client.getToken({
       code: code,
       codeVerifier: stateData.codeVerifier // PKCE verification
     });
@@ -121,10 +133,10 @@ export async function getTokensFromCode(
     console.log('✅ Tokens received from Google');
     
     // Set credentials to fetch user info
-    oauth2Client.setCredentials(tokens);
+    client.setCredentials(tokens);
     
     // Fetch user information
-    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+    const oauth2 = google.oauth2({ version: 'v2', auth: client });
     const { data } = await oauth2.userinfo.get();
     
     console.log('✅ User info fetched:', data.email);
@@ -155,7 +167,7 @@ export async function getTokensFromCode(
  */
 export async function revokeToken(accessToken: string): Promise<void> {
   try {
-    await oauth2Client.revokeToken(accessToken);
+    await getOAuth2Client().revokeToken(accessToken);
     console.log('✅ Google token revoked');
   } catch (error) {
     console.error('❌ Error revoking token:', error);

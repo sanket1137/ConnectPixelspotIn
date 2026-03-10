@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
+import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Eye, Building2, LayoutDashboard } from 'lucide-react';
+import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Building2, LayoutDashboard, Navigation } from 'lucide-react';
 import { Link } from 'wouter';
-import type { Screen, User } from '@shared/schema';
+import { useAuth } from '@/contexts/AuthContext';
+import type { Screen } from '@shared/schema';
+import ScreenCard from '@/components/ScreenCard';
 import { VENUE_CATEGORIES } from '@shared/constants';
 import logo from "@assets/pixelspot-logo.png";
 import railwayImg from "@assets/Gemini_Generated_Image_wfa0lrwfa0lrwfa0_1763277847119.png";
@@ -34,6 +36,17 @@ interface PublicStatsResponse {
   totalPhysicalScreens: number;
   totalCities: number;
   totalAdvertisers: number;
+}
+
+interface NearbyScreensResponse {
+  detectedCity: string | null;
+  detectedState: string | null;
+  lat: number | null;
+  lng: number | null;
+  screens: (Screen & { distanceKm?: number })[];
+  totalNearby: number;
+  radiusKm: number;
+  fallback: boolean;
 }
 
 const getMapContainerStyle = () => ({
@@ -172,10 +185,8 @@ export default function PublicHome() {
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [showCities, setShowCities] = useState(true);
 
-  // Fetch current user
-  const { data: currentUser } = useQuery<User>({
-    queryKey: ['/api/auth/me'],
-  });
+  // Get current user from AuthContext (safe for unauthenticated users — returns null)
+  const { user: currentUser } = useAuth();
 
   // Fetch public screens
   const { data: screens = [], isLoading: screensLoading } = useQuery<Screen[]>({
@@ -195,6 +206,13 @@ export default function PublicHome() {
   // Fetch platform-wide stats
   const { data: platformStats } = useQuery<PublicStatsResponse>({
     queryKey: ['/api/public/stats'],
+  });
+
+  // Fetch nearby screens (IP-based geolocation, no user permission needed)
+  const { data: nearbyData, isLoading: nearbyLoading } = useQuery<NearbyScreensResponse>({
+    queryKey: ['/api/public/nearby-screens'],
+    staleTime: 5 * 60 * 1000, // Cache for 5 min — IP/location doesn't change often
+    retry: 1,
   });
 
   const cities = citiesData?.cities || [];
@@ -787,6 +805,140 @@ export default function PublicHome() {
         </div>
       </div>
 
+      {/* ========== SCREENS NEAR YOU (IP Geolocation) ========== */}
+      {(nearbyLoading || (nearbyData && nearbyData.screens.length > 0)) && (
+        <div className="container mx-auto px-4 py-8 sm:py-12 md:py-16" id="nearby-section">
+          <div className="text-center mb-6 sm:mb-8 space-y-2">
+            {nearbyLoading ? (
+              <>
+                <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
+                  <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent animate-gradient bg-300%">
+                    Finding Screens Near You
+                  </span>
+                </h2>
+                <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+                  Detecting your location...
+                </p>
+              </>
+            ) : nearbyData?.detectedCity ? (
+              <>
+                <Badge className="mb-2 text-xs sm:text-sm px-3 py-1.5 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-500/30">
+                  <Navigation className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" />
+                  Screens near {nearbyData.detectedCity}
+                </Badge>
+                <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
+                  Screens Near You
+                </h2>
+                <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+                  {nearbyData.totalNearby > nearbyData.screens.length
+                    ? `Showing top ${nearbyData.screens.length} of ${nearbyData.totalNearby} screens within ${nearbyData.radiusKm}km of ${nearbyData.detectedCity}`
+                    : `${nearbyData.screens.length} screens within ${nearbyData.radiusKm}km of ${nearbyData.detectedCity}`}
+                  {nearbyData.fallback && ' — plus popular screens from across India'}
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
+                  Top Screens for You
+                </h2>
+                <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+                  Our most popular DOOH screens across India
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Nearby Map */}
+          {!nearbyLoading && nearbyData && nearbyData.lat && nearbyData.lng && (
+            <Card className="mb-6">
+              <CardContent className="p-0">
+                <Map
+                  style={getMapContainerStyle()}
+                  defaultCenter={{ lat: nearbyData.lat, lng: nearbyData.lng }}
+                  defaultZoom={11}
+                  gestureHandling="greedy"
+                  disableDefaultUI
+                  zoomControl={true}
+                  fullscreenControl={true}
+                  mapId="nearby-screens-map"
+                >
+                  {nearbyData.screens.map((screen) => (
+                    <AdvancedMarker
+                      key={screen.id}
+                      position={{
+                        lat: parseFloat(screen.latitude as string),
+                        lng: parseFloat(screen.longitude as string),
+                      }}
+                      onClick={() => {
+                        const el = document.getElementById(`screen-${screen.id}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          backgroundColor: '#22c55e',
+                          border: '2px solid white',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                          cursor: 'pointer',
+                        }}
+                      />
+                    </AdvancedMarker>
+                  ))}
+                </Map>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Nearby Screen Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
+            {nearbyLoading ? (
+              // Skeleton cards while loading
+              Array.from({ length: 4 }).map((_, i) => (
+                <Card key={`skel-${i}`} className="overflow-hidden animate-pulse">
+                  <div className="h-40 sm:h-48 bg-muted" />
+                  <CardContent className="p-3 sm:p-4 space-y-2.5">
+                    <div className="h-4 bg-muted rounded w-3/4" />
+                    <div className="h-3 bg-muted rounded w-1/2" />
+                    <div className="h-3 bg-muted rounded w-2/3" />
+                    <div className="flex justify-between pt-2 border-t">
+                      <div className="h-6 bg-muted rounded w-20" />
+                      <div className="h-8 bg-muted rounded w-16" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              nearbyData?.screens.map((screen) => (
+                <ScreenCard
+                  key={screen.id}
+                  screen={screen}
+                  showDistance={!!nearbyData.detectedCity}
+                />
+              ))
+            )}
+          </div>
+
+          {/* "Explore All" CTA */}
+          {!nearbyLoading && nearbyData && screens.length > nearbyData.screens.length && (
+            <div className="text-center mt-6">
+              <Button
+                variant="outline"
+                size="lg"
+                className="group"
+                onClick={scrollToScreens}
+              >
+                <Search className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
+                Explore All {screens.length} Screens
+                <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Main Content - Map & Screens with Horizontal Filters */}
       <div className="container mx-auto px-4 py-8 sm:py-12 md:py-16" id="screens-section">
         <div className="text-center mb-6 sm:mb-8 space-y-2">
@@ -949,43 +1101,45 @@ export default function PublicHome() {
         {viewMode === 'map' && (
           <Card className="mb-6">
             <CardContent className="p-0">
-              <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}>
-                <GoogleMap
-                  mapContainerStyle={getMapContainerStyle()}
-                  center={defaultCenter}
-                  zoom={5}
-                  options={{
-                    zoomControl: true,
-                    streetViewControl: false,
-                    mapTypeControl: false,
-                    fullscreenControl: true,
-                  }}
-                >
-                  {filteredScreens.map((screen) => {
-                    const isHovered = hoveredScreen === screen.id;
-                    return (
-                      <Marker
-                        key={screen.id}
-                        position={{
-                          lat: parseFloat(screen.latitude as string),
-                          lng: parseFloat(screen.longitude as string),
-                        }}
-                        onClick={() => handleMarkerClick(screen.id)}
-                        onMouseOver={() => setHoveredScreen(screen.id)}
-                        onMouseOut={() => setHoveredScreen(null)}
-                        icon={{
-                          path: 'M 0, 0 m -5, 0 a 5,5 0 1,0 10,0 a 5,5 0 1,0 -10,0',
-                          fillColor: isHovered ? '#22c55e' : '#8b5cf6',
-                          fillOpacity: 1,
-                          strokeColor: '#ffffff',
-                          strokeWeight: 2,
-                          scale: isHovered ? 2.4 : 2,
+              <Map
+                style={getMapContainerStyle()}
+                defaultCenter={defaultCenter}
+                defaultZoom={5}
+                gestureHandling="greedy"
+                disableDefaultUI
+                zoomControl={true}
+                fullscreenControl={true}
+                mapId="public-home-map"
+              >
+                {filteredScreens.map((screen) => {
+                  const isHovered = hoveredScreen === screen.id;
+                  return (
+                    <AdvancedMarker
+                      key={screen.id}
+                      position={{
+                        lat: parseFloat(screen.latitude as string),
+                        lng: parseFloat(screen.longitude as string),
+                      }}
+                      onClick={() => handleMarkerClick(screen.id)}
+                      onMouseEnter={() => setHoveredScreen(screen.id)}
+                      onMouseLeave={() => setHoveredScreen(null)}
+                    >
+                      <div
+                        style={{
+                          width: isHovered ? 20 : 16,
+                          height: isHovered ? 20 : 16,
+                          borderRadius: '50%',
+                          backgroundColor: isHovered ? '#22c55e' : '#8b5cf6',
+                          border: '2px solid white',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                          transition: 'all 0.15s ease',
+                          cursor: 'pointer',
                         }}
                       />
-                    );
-                  })}
-                </GoogleMap>
-              </LoadScript>
+                    </AdvancedMarker>
+                  );
+                })}
+              </Map>
             </CardContent>
           </Card>
         )}
@@ -1018,75 +1172,13 @@ export default function PublicHome() {
             </div>
           ) : (
             filteredScreens.map((screen) => (
-              <Card
+              <ScreenCard
                 key={screen.id}
-                id={`screen-${screen.id}`}
-                className={`hover-elevate overflow-hidden transition-all ${
-                  hoveredScreen === screen.id ? 'ring-2 ring-primary shadow-lg' : ''
-                }`}
+                screen={screen}
+                isHovered={hoveredScreen === screen.id}
                 onMouseEnter={() => setHoveredScreen(screen.id)}
                 onMouseLeave={() => setHoveredScreen(null)}
-                data-testid={`card-screen-${screen.id}`}
-              >
-                {/* Screen Image */}
-                <div className="relative h-40 sm:h-48 bg-muted overflow-hidden cursor-pointer group">
-                  {(screen.screenImages && screen.screenImages.length > 0) || (screen.images && screen.images.length > 0) ? (
-                    <img
-                      src={(screen.screenImages?.[0] ?? screen.images?.[0]) || ''}
-                      alt={screen.name}
-                      className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-muted">
-                      <MapPin className="w-12 h-12 text-muted-foreground/50" />
-                    </div>
-                  )}
-                  <Badge className="absolute top-2 right-2 text-xs" variant="secondary">{screen.category}</Badge>
-                  {screen.venueCategory && (
-                    <Badge className="absolute top-2 left-2 text-xs bg-primary/90 backdrop-blur-sm">
-                      {screen.venueCategory}
-                    </Badge>
-                  )}
-                </div>
-
-                <CardContent className="p-3 sm:p-4 space-y-2.5">
-                  <div>
-                    <h3 className="font-bold text-sm sm:text-base leading-tight mb-1 line-clamp-1">{screen.name}</h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1 flex items-center gap-1">
-                      <MapPin className="w-3 h-3 flex-shrink-0" />
-                      {screen.venueName}, {screen.city}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Users className="w-3 h-3" />
-                      <span className="text-xs">{screen.avgDailyFootfall?.toLocaleString()}/day</span>
-                    </div>
-                    <span>•</span>
-                    <div className="flex items-center gap-1">
-                      <Monitor className="w-3 h-3" />
-                      <span className="text-xs">{screen.displayFormat}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Per day</p>
-                      <p className="font-bold text-lg sm:text-xl text-primary">₹{screen.pricePerDay.toLocaleString()}</p>
-                    </div>
-                    <Link href="/register?role=advertiser">
-                      <Button size="sm" data-testid={`button-book-${screen.id}`}>
-                        <Eye className="w-3 h-3 mr-1" />
-                        <span className="text-xs">View</span>
-                      </Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
+              />
             ))
           )}
         </div>
@@ -1136,19 +1228,58 @@ export default function PublicHome() {
 
       {/* Footer */}
       <footer className="border-t bg-muted/30">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <img src={logo} alt="Pixelspot" className="h-8 w-auto" />
-              <p className="text-sm text-muted-foreground">© 2025 Pixelspot. All rights reserved.</p>
+        <div className="container mx-auto px-4 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            {/* Brand */}
+            <div className="md:col-span-1">
+              <div className="flex items-center gap-2 mb-3">
+                <img src={logo} alt="Pixelspot" className="h-8 w-auto" />
+              </div>
+              <p className="text-sm text-muted-foreground">India's digital out-of-home advertising marketplace. Connect brands with screens across the country.</p>
+              <p className="text-sm text-muted-foreground mt-3">PIXELSPOT SOLUTIONS PVT LTD</p>
+              <p className="text-xs text-muted-foreground">CIN: U26103KA2025PTC201293</p>
+              <p className="text-xs text-muted-foreground">GSTIN: 29AAPCP6653G1ZT</p>
             </div>
-            <div className="flex items-center gap-6">
-              <Link href="/register?role=screen_owner">
-                <Button variant="ghost" size="sm">List Your Screen</Button>
-              </Link>
-              <Link href="/login">
-                <Button variant="ghost" size="sm">Advertiser Login</Button>
-              </Link>
+            
+            {/* Quick Links */}
+            <div>
+              <h4 className="font-semibold text-sm mb-4">Quick Links</h4>
+              <div className="flex flex-col gap-2">
+                <Link href="/register?role=screen_owner"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">List Your Screen</span></Link>
+                <Link href="/register?role=advertiser"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Start Advertising</span></Link>
+                <Link href="/login"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Sign In</span></Link>
+                <Link href="/about"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">About Us</span></Link>
+              </div>
+            </div>
+
+            {/* Legal */}
+            <div>
+              <h4 className="font-semibold text-sm mb-4">Legal</h4>
+              <div className="flex flex-col gap-2">
+                <Link href="/privacy"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Privacy Policy</span></Link>
+                <Link href="/terms"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Terms of Service</span></Link>
+                <Link href="/refund"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Refund Policy</span></Link>
+                <Link href="/contact"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Contact Us</span></Link>
+              </div>
+            </div>
+
+            {/* Contact */}
+            <div>
+              <h4 className="font-semibold text-sm mb-4">Contact</h4>
+              <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+                <p>contact@pixelspot.in</p>
+                <p>+91 72048 08334</p>
+                <p>Bangalore, Karnataka, India</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="border-t mt-8 pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-xs text-muted-foreground">© 2025 PIXELSPOT SOLUTIONS PRIVATE LIMITED. All rights reserved.</p>
+            <div className="flex items-center gap-4">
+              <Link href="/privacy"><span className="text-xs text-muted-foreground hover:text-foreground cursor-pointer">Privacy</span></Link>
+              <Link href="/terms"><span className="text-xs text-muted-foreground hover:text-foreground cursor-pointer">Terms</span></Link>
+              <Link href="/refund"><span className="text-xs text-muted-foreground hover:text-foreground cursor-pointer">Refunds</span></Link>
             </div>
           </div>
         </div>

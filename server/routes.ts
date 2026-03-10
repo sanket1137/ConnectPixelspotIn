@@ -16,6 +16,8 @@ import { getAuthorizationUrl, getTokensFromCode, revokeToken } from "./googleOAu
 import { randomBytes } from "crypto";
 import { emailService } from "./email";
 import { generateTagsForScreen, generateTagsForAllScreens } from "./services/screen-tagging";
+import { registerFlowRoutes } from "./routes-flow";
+import { geolocationService } from "./services/geolocation";
 
 // Extend Express Request to include user
 declare global {
@@ -122,6 +124,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get nearby screens based on visitor IP geolocation
+  // No auth required — public endpoint for landing page
+  app.get("/api/public/nearby-screens", async (req, res) => {
+    try {
+      const clientIp = geolocationService.extractClientIp(req);
+      const geo = await geolocationService.detectLocation(clientIp);
+
+      if (!geo) {
+        // Fallback: return top 10 screens nationally by footfall
+        const allScreens = await storage.getPublicScreens();
+        const top10 = allScreens
+          .sort((a, b) => (b.avgDailyFootfall || 0) - (a.avgDailyFootfall || 0))
+          .slice(0, 10)
+          .map(s => ({ ...s, ownerId: undefined }));
+
+        return res.json({
+          detectedCity: null,
+          detectedState: null,
+          lat: null,
+          lng: null,
+          screens: top10,
+          totalNearby: top10.length,
+          radiusKm: 0,
+          fallback: true,
+        });
+      }
+
+      // Progressive radius expansion: 25km → 50km → 100km → 200km
+      const radiusSteps = [25, 50, 100, 200];
+      const TARGET_COUNT = 10;
+      let nearbyScreens: any[] = [];
+      let totalNearby = 0;
+      let usedRadius = 0;
+
+      for (const radius of radiusSteps) {
+        const result = await storage.getNearbyScreens({
+          lat: geo.lat,
+          lng: geo.lng,
+          radiusKm: radius,
+          limit: TARGET_COUNT,
+        });
+        nearbyScreens = result.screens;
+        totalNearby = result.total;
+        usedRadius = radius;
+
+        if (nearbyScreens.length >= TARGET_COUNT) {
+          break;
+        }
+      }
+
+      // If still not enough after max radius, fill with top national screens
+      let fallback = false;
+      if (nearbyScreens.length < TARGET_COUNT) {
+        const existingIds = new Set(nearbyScreens.map((s: any) => s.id));
+        const allScreens = await storage.getPublicScreens();
+        const filler = allScreens
+          .filter(s => !existingIds.has(s.id))
+          .sort((a, b) => (b.avgDailyFootfall || 0) - (a.avgDailyFootfall || 0))
+          .slice(0, TARGET_COUNT - nearbyScreens.length);
+        nearbyScreens = [...nearbyScreens, ...filler];
+        fallback = filler.length > 0;
+      }
+
+      // Strip sensitive fields
+      const publicScreens = nearbyScreens.map((s: any) => ({ ...s, ownerId: undefined }));
+
+      res.json({
+        detectedCity: geo.city,
+        detectedState: geo.state,
+        lat: geo.lat,
+        lng: geo.lng,
+        screens: publicScreens,
+        totalNearby,
+        radiusKm: usedRadius,
+        fallback,
+      });
+    } catch (error) {
+      console.error("Nearby screens error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // DEV ONLY endpoints — disabled in production
   if (process.env.NODE_ENV !== 'production') {
 
@@ -172,6 +256,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Internal server error" });
     }
   });
+
+  } // end DEV ONLY test endpoints block
 
   // ========== AUTHENTICATION ROUTES ==========
   
@@ -825,6 +911,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DEV ONLY endpoints — disabled in production
+  if (process.env.NODE_ENV !== 'production') {
+
   // DEV ONLY: Reset all user passwords (remove in production)
   app.post("/api/dev/reset-passwords", async (req, res) => {
     try {
@@ -1163,6 +1252,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all screens (admin)
   app.get("/api/admin/screens", authenticate, requireRole("admin"), async (req, res) => {
     try {
+      const { page, pageSize, status, city, search } = req.query;
+
+      // If pagination params provided, use paginated query
+      if (page && pageSize) {
+        const result = await storage.getScreensPaginated({
+          status: status as string | undefined,
+          city: city as string | undefined,
+          search: search as string | undefined,
+          page: Math.max(1, parseInt(page as string)),
+          pageSize: Math.min(100, Math.max(1, parseInt(pageSize as string))),
+        });
+        return res.json(result);
+      }
+
+      // Fallback: return all screens (backward compatibility)
       const screens = await storage.getAllScreens();
       res.json(screens);
     } catch (error) {
@@ -1240,6 +1344,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/admin/bookings/:id/approve", authenticate, requireRole("admin"), async (req, res) => {
     try {
       const { id } = req.params;
+
+      // Validate booking exists and hasn't expired before approving
+      const existingBooking = await storage.getBooking(id);
+      if (!existingBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      if (new Date(existingBooking.endDate) < new Date()) {
+        return res.status(400).json({ error: "Cannot approve an expired booking. The end date has already passed." });
+      }
+
       const booking = await storage.approveBookingByAdmin(id);
       
       if (!booking) {
@@ -1332,6 +1446,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { ownerId, ...screenData } = req.body;
       
+      // Auto-calculate maxBrandsPerLoop
+      if (screenData.loopDuration && screenData.durationPerSlot) {
+        const loopDur = parseInt(String(screenData.loopDuration));
+        const slotDur = parseInt(String(screenData.durationPerSlot));
+        if (loopDur > 0 && slotDur > 0) {
+          screenData.maxBrandsPerLoop = Math.floor(loopDur / slotDur);
+        }
+      }
+
       const screen = await storage.createScreen({
         ...screenData,
         ownerId,
@@ -1493,6 +1616,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get owner's screens
   app.get("/api/owner/screens", authenticate, requireRole("screen_owner"), async (req, res) => {
     try {
+      const { page, pageSize, status, city, search } = req.query;
+
+      // If pagination params provided, use paginated query
+      if (page && pageSize) {
+        const result = await storage.getScreensPaginated({
+          ownerId: req.user!.id,
+          status: status as string | undefined,
+          city: city as string | undefined,
+          search: search as string | undefined,
+          page: Math.max(1, parseInt(page as string)),
+          pageSize: Math.min(100, Math.max(1, parseInt(pageSize as string))),
+        });
+        return res.json(result);
+      }
+
+      // Fallback: return all screens (backward compatibility)
       const screens = await storage.getScreensByOwner(req.user!.id);
       res.json(screens);
     } catch (error) {
@@ -1521,8 +1660,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create screen (owner)
   app.post("/api/owner/screens", authenticate, requireRole("screen_owner"), async (req, res) => {
     try {
+      // Auto-calculate maxBrandsPerLoop from loopDuration and durationPerSlot
+      const body = { ...req.body };
+      if (body.loopDuration && body.durationPerSlot) {
+        const loopDur = parseInt(String(body.loopDuration));
+        const slotDur = parseInt(String(body.durationPerSlot));
+        if (loopDur > 0 && slotDur > 0) {
+          body.maxBrandsPerLoop = Math.floor(loopDur / slotDur);
+        }
+      }
+
       const screenData = {
-        ...req.body,
+        ...body,
         ownerId: req.user!.id,
         ownedByAdmin: false,
         status: "pending",
@@ -1556,7 +1705,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Screen not found" });
       }
 
-      const screen = await storage.updateScreen(id, req.body);
+      // Auto-calculate maxBrandsPerLoop
+      const body = { ...req.body };
+
+      // Sanitize: convert empty strings to null for integer/numeric fields
+      // (HTML forms send "" for cleared number inputs, which breaks Postgres integer columns)
+      const integerFields = [
+        'durationPerSlot', 'avgDailyFootfall', 'avgDwellTime', 'numberOfScreens',
+        'pricePerDay', 'minBookingDays', 'loopDuration', 'maxBrandsPerLoop', 'playbackSlotsPerHour'
+      ];
+      for (const field of integerFields) {
+        if (field in body && (body[field] === '' || body[field] === null)) {
+          body[field] = null;
+        } else if (field in body && typeof body[field] === 'string') {
+          const parsed = parseInt(body[field], 10);
+          body[field] = isNaN(parsed) ? null : parsed;
+        }
+      }
+
+      const loopDur = parseInt(String(body.loopDuration || existingScreen.loopDuration || 0));
+      const slotDur = parseInt(String(body.durationPerSlot || existingScreen.durationPerSlot || 0));
+      if (loopDur > 0 && slotDur > 0) {
+        body.maxBrandsPerLoop = Math.floor(loopDur / slotDur);
+      }
+
+      const screen = await storage.updateScreen(id, body);
 
       // Async: re-generate tags if coordinates changed OR no tags exist yet
       if (screen) {
@@ -1624,11 +1797,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/owner/bookings/:id/approve", authenticate, requireRole("screen_owner"), async (req, res) => {
     try {
       const { id } = req.params;
+
+      // Validate booking exists and hasn't expired before approving
+      const existingBooking = await storage.getBooking(id);
+      if (!existingBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      if (new Date(existingBooking.endDate) < new Date()) {
+        return res.status(400).json({ error: "Cannot approve an expired booking. The end date has already passed." });
+      }
+
+      // Bank details gate: owner must have bank details before approving
+      const owner = req.user!;
+      if (!owner.bankAccountNumber || !owner.bankIfscCode || !owner.bankAccountName) {
+        return res.status(400).json({ 
+          error: "Please add your bank account details before approving bookings. Go to Settings → Bank Details.",
+          code: "BANK_DETAILS_REQUIRED"
+        });
+      }
+
       const booking = await storage.approveBookingByOwner(id);
       
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
       }
+
+      // Set payment deadline for advertiser
+      const deadlineHours = (owner as any).paymentDeadlineHours || 24;
+      const paymentDeadline = new Date(Date.now() + deadlineHours * 60 * 60 * 1000);
+      await storage.updateBooking(booking.id, { paymentDeadline } as any);
 
       // Broadcast booking update
       broadcastBookingUpdate(booking.id, booking.campaignId, booking.status);
@@ -1654,6 +1851,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             campaign,
             screen
           ).catch(err => console.error("Failed to send owner approval emails:", err));
+
+          // Send payment_required notification + email to advertiser
+          await storage.createNotification({
+            userId: advertiser.id,
+            type: "payment_required",
+            title: "Payment Required",
+            message: `Your booking for "${screen.name}" has been approved. Please complete payment of ₹${booking.price} within ${deadlineHours} hours to confirm.`,
+            data: { bookingId: booking.id, campaignId: campaign.id, paymentDeadline: paymentDeadline.toISOString() },
+            actionUrl: `/advertiser/campaigns/${campaign.id}`,
+          });
+
+          // Send payment deadline email
+          await notificationService.sendPaymentRequiredEmail(
+            advertiser, booking, campaign, screen, paymentDeadline
+          ).catch(err => console.error("Failed to send payment required email:", err));
         }
       }
 
@@ -1752,19 +1964,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all approved screens (for discovery) with SQL-level filtering & pagination
   app.get("/api/screens", authenticate, async (req, res) => {
     try {
-      const { city, type, minPrice, maxPrice, pincode, limit, offset } = req.query;
+      const { city, type, minPrice, maxPrice, pincode, limit, offset, search, page, pageSize } = req.query;
       
-      const screens = await storage.getFilteredScreens({
+      const result = await storage.getFilteredScreens({
         city: city as string | undefined,
         type: type as string | undefined,
         minPrice: minPrice ? parseInt(minPrice as string) : undefined,
         maxPrice: maxPrice ? parseInt(maxPrice as string) : undefined,
         pincode: pincode as string | undefined,
+        search: search as string | undefined,
         limit: limit ? parseInt(limit as string) : undefined,
         offset: offset ? parseInt(offset as string) : undefined,
+        page: page ? Math.max(1, parseInt(page as string)) : undefined,
+        pageSize: pageSize ? Math.min(100, Math.max(1, parseInt(pageSize as string))) : undefined,
       });
       
-      res.json(screens);
+      res.json(result);
     } catch (error) {
       console.error("Get screens error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -2000,25 +2215,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      const endDate = new Date(req.body.endDate);
+
+      // Validate screen exists
+      const screen = await storage.getScreen(req.body.screenId);
+      if (!screen) {
+        return res.status(404).json({ error: "Screen not found" });
+      }
+
+      // Check brand slot availability for the requested date range
+      const availability = await storage.getScreenBrandAvailability(req.body.screenId, startDate, endDate);
+      if (availability.availableBrands <= 0) {
+        return res.status(400).json({
+          error: `No available brand slots on this screen for the selected dates. Max brands: ${availability.maxBrands}, currently booked: ${availability.bookedBrands}.`,
+        });
+      }
+
+      // Server-side price calculation: pricePerDay * number of days
+      const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+      const serverPrice = (screen.pricePerDay || 0) * days;
+
       const booking = await storage.createBooking({
         ...req.body,
+        price: serverPrice, // Use server-calculated price (don't trust client)
         status: "pending_owner",
         ownerApproved: false,
         approvedByAdmin: false,
         startDate: startDate,
-        endDate: new Date(req.body.endDate),
+        endDate: endDate,
       });
 
       // Send notification to screen owner and admin
-      const [campaign, screen, admins] = await Promise.all([
+      const [campaign, bookingScreen, admins] = await Promise.all([
         storage.getCampaign(booking.campaignId),
         storage.getScreen(booking.screenId),
         storage.getUsersByRole("admin")
       ]);
 
-      if (campaign && screen && admins.length > 0) {
+      if (campaign && bookingScreen && admins.length > 0) {
         const advertiser = req.user!;
-        const owner = await storage.getUser(screen.ownerId);
+        const owner = await storage.getUser(bookingScreen.ownerId);
         const admin = admins[0]; // Use first admin
 
         if (owner) {
@@ -2661,6 +2897,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to send test notifications" });
     }
   });
+
+  // ========== FLOW COMPLETION ROUTES (Payments, Payouts, Creative, Notifications) ==========
+  registerFlowRoutes(app, authenticate, requireRole);
 
   const httpServer = createServer(app);
   return httpServer;

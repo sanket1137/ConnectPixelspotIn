@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { queryClient } from '@/lib/queryClient';
+import { useAuth } from '@/contexts/AuthContext';
 
 type WebSocketMessage = {
   type: string;
@@ -12,6 +13,7 @@ export function useWebSocket() {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
+  const { user } = useAuth();
 
   useEffect(() => {
     function connect() {
@@ -25,7 +27,12 @@ export function useWebSocket() {
 
         ws.onopen = () => {
           console.log('🔌 WebSocket connected');
-          reconnectAttempts.current = 0; // Reset reconnect attempts on successful connection
+          reconnectAttempts.current = 0;
+
+          // Authenticate WebSocket connection
+          if (user?.id) {
+            ws.send(JSON.stringify({ type: 'auth', userId: user.id }));
+          }
         };
 
         ws.onmessage = (event) => {
@@ -103,6 +110,16 @@ export function useWebSocket() {
           queryClient.invalidateQueries({ queryKey: ['/api/owner/screens'] });
           break;
 
+        case 'notification:new':
+          // Invalidate notifications cache to trigger UI update
+          queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread-count'] });
+          break;
+
+        case 'auth:ok':
+          console.log('✅ WebSocket authenticated as user:', message.data?.userId || '');
+          break;
+
         default:
           console.log('Unknown message type:', message.type);
       }
@@ -121,7 +138,7 @@ export function useWebSocket() {
         wsRef.current = null;
       }
     };
-  }, []);
+  }, [user?.id]);
 
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,

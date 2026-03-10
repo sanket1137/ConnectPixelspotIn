@@ -8,7 +8,7 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
 
 interface AuthContextType {
@@ -46,9 +46,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [queryClient]);
 
   // Fetch user data from our backend
-  const { data: user } = useQuery<User>({
+  // Use returnNull on 401 (normal unauthenticated state) and allow retry
+  // to handle token propagation delays after sign-in
+  const { data: user, isLoading: isUserLoading } = useQuery<User | null>({
     queryKey: ["/api/auth/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
     enabled: !!firebaseUser,
+    retry: 2,
+    retryDelay: 1000,
   });
 
 
@@ -85,17 +90,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       const token = await result.user.getIdToken();
       
-      // Send token to backend to fetch user
+      // Send token to backend to fetch/create user
       const response = await apiRequest("POST", "/api/auth/signin", {
         token,
         email: result.user.email,
         name: result.user.displayName || result.user.email,
       });
       
-      return response;
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Server returned an unexpected response. Please clear your browser cache and try again.");
+      }
+      const data = await response.json();
+      return data.user as User;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    onSuccess: (backendUser: User) => {
+      // Set query data directly from the sign-in response — eliminates
+      // the race condition where /api/auth/me fires before the backend
+      // user record is ready or the token has propagated
+      queryClient.setQueryData(["/api/auth/me"], backendUser);
     },
   });
 
@@ -117,6 +130,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role,
       });
       
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Server returned an unexpected response. Please clear your browser cache and try again.");
+      }
+      const data = await response.json();
+      
       // Automatically send email OTP for verification (manual signup only)
       try {
         await apiRequest("POST", "/api/auth/send-email-otp", {
@@ -126,10 +145,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("Failed to send email OTP:", error);
       }
       
-      return response;
+      return data.user as User;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    onSuccess: (backendUser: User) => {
+      queryClient.setQueryData(["/api/auth/me"], backendUser);
     },
   });
 
@@ -146,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextType = {
     firebaseUser,
     user: user || null,
-    loading: loading || signInEmailMutation.isPending || signUpEmailMutation.isPending,
+    loading: loading || signInEmailMutation.isPending || signUpEmailMutation.isPending || (!!firebaseUser && isUserLoading),
     signInWithEmail: async (email: string, password: string) => { 
       await signInEmailMutation.mutateAsync({ email, password });
     },

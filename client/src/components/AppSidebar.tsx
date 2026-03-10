@@ -48,6 +48,7 @@ export function AppSidebar() {
     { title: "Manage Users", url: "/admin/users", icon: Users },
     { title: "Manage Screens", url: "/admin/screens", icon: Monitor },
     { title: "Campaigns & Bookings", url: "/admin/bookings", icon: FileText },
+    { title: "Payments & Payouts", url: "/admin/payments", icon: CreditCard },
     { title: "AI Conversations", url: "/admin/ai-conversations", icon: MessageSquare },
     { title: "AI Security", url: "/admin/ai-security", icon: Shield },
     { title: "Analytics", url: "/admin/analytics", icon: TrendingUp },

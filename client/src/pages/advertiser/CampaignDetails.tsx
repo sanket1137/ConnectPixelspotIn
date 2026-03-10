@@ -15,7 +15,10 @@ import {
   Clock, 
   XCircle,
   Check,
-  X 
+  X,
+  Camera,
+  ShieldCheck,
+  AlertTriangle 
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
@@ -29,6 +32,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useState } from "react";
+import { useRazorpayCheckout } from "@/hooks/use-razorpay";
+import { Textarea } from "@/components/ui/textarea";
 
 interface BookingWithScreen {
   id: string;
@@ -62,6 +67,7 @@ interface CampaignWithBookings {
   endDate: string;
   budget: number;
   createdAt: string;
+  paymentStatus: string | null;
   bookings: BookingWithScreen[];
 }
 
@@ -71,10 +77,55 @@ export default function CampaignDetails() {
   const { toast } = useToast();
   const [alternativeDateDialog, setAlternativeDateDialog] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingWithScreen | null>(null);
+  const [disputeDialog, setDisputeDialog] = useState<{ open: boolean; proofId: string; reason: string }>({ open: false, proofId: "", reason: "" });
+  const { initiatePayment, isProcessing: isPaymentProcessing } = useRazorpayCheckout();
 
   const { data: campaign, isLoading } = useQuery<CampaignWithBookings>({
     queryKey: [`/api/advertiser/campaigns/${params?.id}`],
     enabled: !!params?.id,
+  });
+
+  // Fetch proofs for all bookings in this campaign
+  const bookingIds = campaign?.bookings?.map(b => b.id) || [];
+  const proofQueries = useQuery<any[]>({
+    queryKey: [`/api/advertiser/campaign-proofs`, params?.id],
+    queryFn: async () => {
+      const results: any[] = [];
+      for (const bid of bookingIds) {
+        try {
+          const res = await fetch(`/api/bookings/${bid}/proof-of-play`, { credentials: "include" });
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) results.push(...data);
+          }
+        } catch {}
+      }
+      return results;
+    },
+    enabled: bookingIds.length > 0,
+  });
+  const allProofs = proofQueries.data || [];
+
+  const confirmProofMutation = useMutation({
+    mutationFn: async (proofId: string) => {
+      return apiRequest("PATCH", `/api/advertiser/proof/${proofId}/confirm`, {});
+    },
+    onSuccess: () => {
+      proofQueries.refetch();
+      queryClient.invalidateQueries({ queryKey: [`/api/advertiser/campaigns/${params?.id}`] });
+      toast({ title: "Proof Confirmed", description: "Thank you for confirming the proof of play." });
+    },
+  });
+
+  const disputeProofMutation = useMutation({
+    mutationFn: async ({ proofId, reason }: { proofId: string; reason: string }) => {
+      return apiRequest("PATCH", `/api/advertiser/proof/${proofId}/dispute`, { reason });
+    },
+    onSuccess: () => {
+      proofQueries.refetch();
+      setDisputeDialog({ open: false, proofId: "", reason: "" });
+      toast({ title: "Dispute Submitted", description: "Your dispute has been logged. Admin will review." });
+    },
   });
 
   const acceptAlternativeMutation = useMutation({
@@ -240,6 +291,51 @@ export default function CampaignDetails() {
         </Card>
       </div>
 
+      {/* Payment Section */}
+      {!(["advertiser_paid", "partially_released", "fully_settled"] as string[]).includes(campaign.paymentStatus || "") && (
+        <Card className="border-2 border-primary/30 bg-primary/5">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-lg">Payment Required</h3>
+                <p className="text-sm text-muted-foreground">
+                  Complete payment to confirm your campaign bookings
+                </p>
+                <div className="mt-1 space-y-0.5">
+                  <p className="text-sm text-muted-foreground">Subtotal: ₹{campaign.budget.toLocaleString()}</p>
+                  <p className="text-sm text-muted-foreground">GST (18%): ₹{Math.round(campaign.budget * 0.18).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-primary">₹{Math.round(campaign.budget * 1.18).toLocaleString()}</p>
+                </div>
+              </div>
+              <Button
+                size="lg"
+                onClick={() => {
+                  initiatePayment({
+                    campaignId: campaign.id,
+                    amount: campaign.budget * 100, // Convert to paise
+                    campaignName: campaign.name,
+                    onSuccess: () => {
+                      queryClient.invalidateQueries({ queryKey: [`/api/advertiser/campaigns/${params?.id}`] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/payments"] });
+                    },
+                  });
+                }}
+                disabled={isPaymentProcessing}
+              >
+                <DollarSign className="mr-2 h-5 w-5" />
+                {isPaymentProcessing ? "Processing..." : "Pay Now"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {(["advertiser_paid", "partially_released", "fully_settled"] as string[]).includes(campaign.paymentStatus || "") && (
+        <Alert>
+          <CheckCircle className="h-4 w-4" />
+          <AlertDescription>Payment completed for this campaign.</AlertDescription>
+        </Alert>
+      )}
+
       {/* Bookings List */}
       <div className="space-y-4">
         <h2 className="text-2xl font-bold">Screen Bookings ({campaign.bookings?.length || 0})</h2>
@@ -360,6 +456,75 @@ export default function CampaignDetails() {
                           </AlertDescription>
                         </Alert>
                       )}
+
+                      {/* Proof of Play Review Section */}
+                      {(() => {
+                        const bookingProofs = allProofs.filter((p: any) => p.bookingId === booking.id);
+                        if (bookingProofs.length === 0) return null;
+                        return (
+                          <div className="p-3 border rounded-lg bg-muted/30 space-y-3">
+                            <div className="flex items-center gap-2">
+                              <Camera className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm font-medium">Proof of Play</span>
+                            </div>
+                            {bookingProofs.map((proof: any) => (
+                              <div key={proof.id} className="p-2 border rounded-md bg-background space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-medium">Proof #{proof.id.slice(0, 8)}...</span>
+                                  <Badge variant={
+                                    proof.status === "confirmed" ? "default" :
+                                    proof.status === "admin_verified" ? "secondary" :
+                                    proof.status === "disputed" ? "destructive" : "outline"
+                                  } className="text-xs">
+                                    {proof.status === "admin_verified" ? "Ready for Review" : proof.status}
+                                  </Badge>
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {proof.fileUrls?.length || 0} files • {new Date(proof.createdAt).toLocaleDateString()}
+                                  {proof.ownerNotes && ` • ${proof.ownerNotes}`}
+                                </div>
+                                {/* File links */}
+                                <div className="flex flex-wrap gap-1">
+                                  {proof.fileUrls?.map((f: any, i: number) => (
+                                    <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">
+                                      {f.caption || `File ${i + 1}`} ({f.type})
+                                    </a>
+                                  ))}
+                                </div>
+                                {/* Actions for admin_verified proofs */}
+                                {proof.status === "admin_verified" && (
+                                  <div className="flex gap-2 mt-1">
+                                    <Button
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={() => confirmProofMutation.mutate(proof.id)}
+                                      disabled={confirmProofMutation.isPending}
+                                    >
+                                      <ShieldCheck className="mr-1 h-3 w-3" />
+                                      Confirm Proof
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      className="h-7 text-xs"
+                                      onClick={() => setDisputeDialog({ open: true, proofId: proof.id, reason: "" })}
+                                    >
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      Dispute
+                                    </Button>
+                                  </div>
+                                )}
+                                {proof.status === "confirmed" && (
+                                  <p className="text-xs text-green-600">✅ You confirmed this proof</p>
+                                )}
+                                {proof.status === "disputed" && proof.advertiserNotes && (
+                                  <p className="text-xs text-destructive">Your dispute: {proof.advertiserNotes}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </CardHeader>
@@ -409,6 +574,36 @@ export default function CampaignDetails() {
               data-testid="button-confirm-accept-alternative"
             >
               {acceptAlternativeMutation.isPending ? "Accepting..." : "Accept New Dates"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dispute Proof Dialog */}
+      <Dialog open={disputeDialog.open} onOpenChange={(open) => setDisputeDialog(prev => ({ ...prev, open }))}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Dispute Proof of Play</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for disputing this proof. The admin and screen owner will be notified.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Describe the issue with this proof..."
+            value={disputeDialog.reason}
+            onChange={e => setDisputeDialog(prev => ({ ...prev, reason: e.target.value }))}
+            className="min-h-[80px]"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDisputeDialog({ open: false, proofId: "", reason: "" })}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => disputeProofMutation.mutate({ proofId: disputeDialog.proofId, reason: disputeDialog.reason })}
+              disabled={disputeProofMutation.isPending || !disputeDialog.reason.trim()}
+            >
+              {disputeProofMutation.isPending ? "Submitting..." : "Submit Dispute"}
             </Button>
           </DialogFooter>
         </DialogContent>

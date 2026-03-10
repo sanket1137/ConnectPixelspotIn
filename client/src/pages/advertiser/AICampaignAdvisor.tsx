@@ -323,10 +323,7 @@ export default function AICampaignAdvisor() {
                                     <div className="absolute top-2 left-2">
                                       <Checkbox 
                                         checked={isSelected}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          toggleScreenSelection(screen.id, message.id);
-                                        }}
+                                        onCheckedChange={() => toggleScreenSelection(screen.id, message.id)}
                                         data-testid={`checkbox-screen-${screen.id}`}
                                       />
                                     </div>

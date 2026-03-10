@@ -125,7 +125,7 @@ export default function AdvertiserDashboard() {
             <MapPin className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
             Find Screens
           </Button>
-          <Button onClick={() => setLocation("/advertiser/campaigns/new")} className="w-full sm:w-auto" size="lg" data-testid="button-create-campaign" data-tour="create-campaign-btn">
+          <Button onClick={() => setLocation("/advertiser/campaigns/hub")} className="w-full sm:w-auto" size="lg" data-testid="button-create-campaign" data-tour="create-campaign-btn">
             <Play className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
             Create Campaign
           </Button>
@@ -206,7 +206,7 @@ export default function AdvertiserDashboard() {
             <div className="text-center py-12">
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground mb-4">No active campaigns yet</p>
-              <Button onClick={() => setLocation("/advertiser/campaigns/new")}>
+              <Button onClick={() => setLocation("/advertiser/campaigns/hub")}>
                 Create Your First Campaign
               </Button>
             </div>
