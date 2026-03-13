@@ -184,7 +184,7 @@ export const campaigns = pgTable("campaigns", {
   
   // New: Area-based targeting (map + radius OR city)
   targetArea: jsonb("target_area").$type<{
-    type: 'map' | 'city';
+    type: 'map' | 'city' | 'india' | 'none';
     // For map type:
     latitude?: number;
     longitude?: number;

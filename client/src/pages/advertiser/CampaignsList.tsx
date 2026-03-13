@@ -111,7 +111,7 @@ export default function CampaignsList() {
           <h1 className="text-4xl font-bold text-foreground font-serif mb-2">My Campaigns</h1>
           <p className="text-muted-foreground">Manage and track your advertising campaigns</p>
         </div>
-        <Button onClick={() => setLocation("/advertiser/campaigns/hub")} size="lg" data-testid="button-create-campaign">
+        <Button onClick={() => setLocation("/advertiser/campaigns/new")} size="lg" data-testid="button-create-campaign">
           <Plus className="mr-2 h-5 w-5" />
           Create Campaign
         </Button>
@@ -127,7 +127,7 @@ export default function CampaignsList() {
                 Create your first campaign to start advertising on digital screens across India.
               </p>
             </div>
-            <Button onClick={() => setLocation("/advertiser/campaigns/hub")} size="lg">
+            <Button onClick={() => setLocation("/advertiser/campaigns/new")} size="lg">
               <Plus className="mr-2 h-5 w-5" />
               Create Your First Campaign
             </Button>

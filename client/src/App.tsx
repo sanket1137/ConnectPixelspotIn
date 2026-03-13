@@ -36,7 +36,10 @@ const AdvertiserDashboard = lazy(() => import("@/pages/advertiser/AdvertiserDash
 const DiscoverScreens = lazy(() => import("@/pages/advertiser/DiscoverScreens"));
 const CampaignsList = lazy(() => import("@/pages/advertiser/CampaignsList"));
 const CampaignDetails = lazy(() => import("@/pages/advertiser/CampaignDetails"));
+const CampaignBuilderSelect = lazy(() => import("@/pages/advertiser/CampaignBuilderSelect"));
 const CreateCampaign = lazy(() => import("@/pages/advertiser/CreateCampaign"));
+const ExpressCampaignBuilder = lazy(() => import("@/pages/advertiser/express/ExpressCampaignBuilder"));
+const AICampaignBuilder = lazy(() => import("@/pages/advertiser/ai/AICampaignBuilder"));
 const QuickCampaignFromCart = lazy(() => import("@/pages/advertiser/QuickCampaignFromCart"));
 const BookingManagement = lazy(() => import("@/pages/advertiser/BookingManagement"));
 const AICampaignAdvisor = lazy(() => import("@/pages/advertiser/AICampaignAdvisor"));
@@ -206,6 +209,21 @@ function Router() {
         </AuthGuard>
       </Route>
       <Route path="/advertiser/campaigns/new">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <CampaignBuilderSelect />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/campaigns/new/express">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <ExpressCampaignBuilder />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/campaigns/new/ai">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <AICampaignBuilder />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/campaigns/new/advanced">
         <AuthGuard allowedRoles={["advertiser"]}>
           <CreateCampaign />
         </AuthGuard>

@@ -12,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { VENUE_CATEGORIES } from "@shared/constants";
-import { ArrowLeft, ArrowRight, Target, MapPin, Calendar, Filter, Monitor as MonitorIcon, Check, List as ListIcon, Map as MapIcon, TrendingUp, DollarSign, Users, Clock, AlertTriangle, Eye, X } from "lucide-react";
+import { ArrowLeft, Target, MapPin, Filter as FilterIcon, Check, Map as MapIcon, Image as ImageIcon, X, Trash2, Search, SlidersHorizontal, ChevronRight, ChevronLeft, AlertTriangle, ArrowRight, LayoutGrid, Users } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -26,47 +26,47 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Map, AdvancedMarker, InfoWindow, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
-import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-
-const mapContainerStyle = {
-  width: '100%',
-  height: '400px'
-};
+import { Slider } from "@/components/ui/slider";
 
 const defaultCenter = {
   lat: 12.9716,
   lng: 77.5946
 };
 
+// Filter Types
+export type FilterConfig = {
+  cities: string[];
+  venueTypes: string[];
+  environmentTypes: string[];
+  tags: { id: string; name: string; displayName: string; category: string }[];
+};
+
+export type ActiveFilters = {
+  cities: string[];
+  venueTypes: string[];
+  environmentTypes: string[];
+  tags: string[];
+  priceRange: [number, number];
+  minBookingDays: number;
+};
+
+const defaultFilters: ActiveFilters = {
+  cities: [],
+  venueTypes: [],
+  environmentTypes: [],
+  tags: [],
+  priceRange: [0, 100000],
+  minBookingDays: 30
+};
+
 const createCampaignSchema = z.object({
   name: z.string().min(3, "Campaign name must be at least 3 characters"),
-  objective: z.string().min(1, "Objective is required"),
-  budget: z.number().min(1000, "Minimum budget is ₹1,000"),
+  objective: z.string().default("advanced"),
+  // budget is auto-calculated based on selected screens and duration
+  budget: z.number().optional(),
   
-  // Area targeting
-  areaType: z.enum(["map", "city"]),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
-  radiusKm: z.number().min(1).max(10).optional(),
-  targetCity: z.string().optional(),
-  targetState: z.string().optional(),
-  
-  // Duration
-  durationMode: z.enum(["auto", "custom"]),
-  customDays: z.number().min(1).optional(),
-  
-  // Optional filters
-  venueTypeFilters: z.array(z.string()).optional(),
-  targetAgeGroups: z.array(z.string()).optional(),
-  targetGender: z.string().optional(),
-  targetAffluence: z.array(z.string()).optional(),
-  timePreference: z.array(z.string()).optional(),
-  
-  // Dates (calculated from duration)
+  // Dates
   startDate: z.string().min(1, "Start date is required").refine((date) => {
     const selectedDate = new Date(date);
     const tomorrow = new Date();
@@ -74,7 +74,13 @@ const createCampaignSchema = z.object({
     tomorrow.setDate(tomorrow.getDate() + 1);
     return selectedDate >= tomorrow;
   }, "Start date must be at least tomorrow"),
-  endDate: z.string().min(1, "End date is required"),
+  endDate: z.string().min(1, "End date is required").refine((date) => {
+    const selectedDate = new Date(date);
+    const tomorrow = new Date();
+    tomorrow.setHours(0, 0, 0, 0);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return selectedDate > tomorrow;
+  }, "End date must be after start date"),
   
   // Creative URL
   creativeUrl: z.string().url("Please enter a valid URL").min(1, "Creative link is required"),
@@ -85,15 +91,6 @@ const createCampaignSchema = z.object({
 
 type CreateCampaignForm = z.infer<typeof createCampaignSchema>;
 
-const steps = [
-  { id: 1, name: "Goal & Budget", icon: Target },
-  { id: 2, name: "Choose Area", icon: MapPin },
-  { id: 3, name: "Set Duration", icon: Calendar },
-  { id: 4, name: "Filters", icon: Filter },
-  { id: 5, name: "Smart Plan", icon: MonitorIcon },
-  { id: 6, name: "Review", icon: Check },
-];
-
 const objectives = [
   { value: "brand_awareness", label: "Brand Awareness" },
   { value: "product_launch", label: "Product Launch" },
@@ -102,443 +99,180 @@ const objectives = [
   { value: "local_promotion", label: "Local Promotion" },
 ];
 
-const venueTypes = [...VENUE_CATEGORIES];
-
-// Match database values from shared/constants.ts
-const ageGroups = [
-  "Children (5-12)",
-  "Teenagers (13-17)",
-  "Young Adults (18-25)",
-  "Adults (26-40)",
-  "Middle Age (41-55)",
-  "Seniors (55+)"
-];
-
-const affluenceLevels = [
-  "Budget Conscious",
-  "Middle Income",
-  "Premium Audience",
-  "Luxury Buyers"
-];
-
-const timePreferences = ["Morning Rush", "Lunch Hours", "Evening Leisure", "Late Night"];
-
-// Helper function to calculate total slots for a screen
-const calculateTotalSlots = (screen: Screen, campaignDays: number): number => {
-  // Calculate operating hours per day from start and end times
-  const getHoursFromTime = (timeString: string | null): number => {
-    if (!timeString) return 0;
-    const [hours, minutes] = timeString.split(':').map(Number);
-    return hours + (minutes / 60);
-  };
-  
-  const startHour = getHoursFromTime(screen.customOperatingHoursStart);
-  const endHour = getHoursFromTime(screen.customOperatingHoursEnd);
-  
-  // Calculate hours per day (handle overnight scenarios)
-  let hoursPerDay = endHour - startHour;
-  if (hoursPerDay < 0) {
-    hoursPerDay += 24; // Overnight operation
-  }
-  
-  // Total slots = campaign days × slots per hour × hours per day
-  const totalSlots = campaignDays * (screen.playbackSlotsPerHour || 0) * hoursPerDay;
-  
-  return Math.round(totalSlots);
-};
-
-/**
- * Circle overlay component using the imperative Google Maps API.
- * Needed because @vis.gl/react-google-maps doesn't include a Circle component.
- */
-function CircleOverlay({
-  center,
-  radius,
-  fillColor = "#3b82f6",
-  fillOpacity = 0.1,
-  strokeColor = "#3b82f6",
-  strokeOpacity = 0.8,
-  strokeWeight = 2,
-}: {
-  center: { lat: number; lng: number };
-  radius: number;
-  fillColor?: string;
-  fillOpacity?: number;
-  strokeColor?: string;
-  strokeOpacity?: number;
-  strokeWeight?: number;
-}) {
-  const map = useMap();
-  const mapsLib = useMapsLibrary("maps");
-
-  useEffect(() => {
-    if (!map || !mapsLib) return;
-    const circle = new mapsLib.Circle({
-      map,
-      center,
-      radius,
-      fillColor,
-      fillOpacity,
-      strokeColor,
-      strokeOpacity,
-      strokeWeight,
-    });
-    return () => circle.setMap(null);
-  }, [map, mapsLib, center.lat, center.lng, radius, fillColor, fillOpacity, strokeColor, strokeOpacity, strokeWeight]);
-
-  return null;
-}
-
 export default function CreateCampaign() {
-
-
-  const [currentStep, setCurrentStep] = useState(1);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const [uploadedCreativeURL, setUploadedCreativeURL] = useState<string | null>(null);
-  const [screensInArea, setScreensInArea] = useState<Screen[]>([]);
+  // Step Management
+  // Now simpler: 1 = Build (Select Screens), 2 = Review & Confirm
+  const [currentStep, setCurrentStep] = useState(1);
+  
+  // Screen and Map State
+  const [screens, setScreens] = useState<Screen[]>([]);
   const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [selectedMapScreen, setSelectedMapScreen] = useState<Screen | null>(null);
-  const [planMode, setPlanMode] = useState<"smart" | "customize">("smart");
-  const [calculatedDuration, setCalculatedDuration] = useState<number | null>(null);
-  const [estimatedReach, setEstimatedReach] = useState<{ reach: number; impressions: number; screenCount: number } | null>(null);
-  const [screenDetailsDialog, setScreenDetailsDialog] = useState<Screen | null>(null);
-  const [campaignCreated, setCampaignCreated] = useState(false);
-  const [campaignDrafted, setCampaignDrafted] = useState(false);
-  const [skipDurationRecalc, setSkipDurationRecalc] = useState(false);
-  const [skipScreenRefetch, setSkipScreenRefetch] = useState(false);
-  const [lockedDuration, setLockedDuration] = useState<number | null>(null);
-  const [fromCart, setFromCart] = useState(false); // Track if coming from Find Screens cart
-  
-  // Map state
   const [mapCenter, setMapCenter] = useState(defaultCenter);
-  const [markerPosition, setMarkerPosition] = useState(defaultCenter);
+  const [activeScreenIndex, setActiveScreenIndex] = useState<number | null>(null);
 
-  // Fetch available cities
-  const { data: locationsData, isLoading: locationsLoading, error: locationsError } = useQuery<{ states: string[]; cities: Record<string, string[]>; allCities: string[] }>({
-    queryKey: ["/api/screens/locations"],
+  // Filter State
+  const [filterConfig, setFilterConfig] = useState<FilterConfig>({
+    cities: [],
+    venueTypes: [],
+    environmentTypes: [],
+    tags: []
   });
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(defaultFilters);
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(true);
+  const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(true);
 
-  const allCities = locationsData?.allCities || [];
-  
-  // Debug: Log locations data
+  // Load Filters from API
   useEffect(() => {
-    if (locationsData) {
-      console.log("Locations loaded:", locationsData);
-    }
-    if (locationsError) {
-      console.error("Locations error:", locationsError);
-    }
-  }, [locationsData, locationsError]);
+    const loadFilters = async () => {
+      try {
+        const response = await apiRequest("GET", "/api/public/screens/filters");
+        const data = await response.json();
+        setFilterConfig(data);
+      } catch (error) {
+        console.error("❌ Error fetching filters:", error);
+        toast({
+          title: "Error loading filters",
+          description: "Could not load screen filter options.",
+          variant: "destructive",
+        });
+      }
+    };
+    loadFilters();
+  }, []);
+
+  // Fetch Screens based on Filters
+  useEffect(() => {
+    const fetchFilteredScreens = async () => {
+      try {
+        // Build query string
+        const params = new URLSearchParams();
+        
+        if (activeFilters.cities.length > 0) {
+          activeFilters.cities.forEach(c => params.append("city", c));
+        }
+        if (activeFilters.venueTypes.length > 0) {
+          activeFilters.venueTypes.forEach(v => params.append("venueCategories", v));
+        }
+        if (activeFilters.environmentTypes.length > 0) {
+          activeFilters.environmentTypes.forEach(e => params.append("environmentTypes", e));
+        }
+        if (activeFilters.tags.length > 0) {
+          activeFilters.tags.forEach(t => params.append("environmentTags", t));
+        }
+        if (activeFilters.priceRange[0] > 0) {
+          params.append("minPrice", activeFilters.priceRange[0].toString());
+        }
+        if (activeFilters.priceRange[1] < 50000) {
+          params.append("maxPrice", activeFilters.priceRange[1].toString());
+        }
+        if (activeFilters.minBookingDays > 1) {
+          params.append('minBookingDays', activeFilters.minBookingDays.toString());
+        }
+
+        const queryString = params.toString();
+        const url = `/api/public/screens/filters${queryString ? `?${queryString}` : ''}`;
+        
+        console.log("Fetching screens with filters:", url);
+        // Note: We might need a slightly different endpoint that returns screens instead of filters
+        // For now, let's reuse api/screens or api/screens/in-area if possible, or wait to create a new one
+        // Let's assume /api/screens supports these query parameters as configured previously
+        const screenResponse = await apiRequest("GET", `/api/screens${queryString ? `?${queryString}` : ''}`);
+        const screenData = await screenResponse.json();
+        setScreens(Array.isArray(screenData) ? screenData : []);
+
+        // Recenter map if city is selected (simplistic logic)
+        if (activeFilters.cities.length > 0 && Array.isArray(screenData) && screenData.length > 0) {
+          const firstScreen = screenData[0];
+          setMapCenter({
+            lat: parseFloat(firstScreen.latitude.toString()),
+            lng: parseFloat(firstScreen.longitude.toString())
+          });
+        }
+      } catch (error) {
+        console.error("❌ Error fetching filtered screens:", error);
+      }
+    };
+
+    // Debounce screen fetching slightly to avoid spamming on slider drag
+    const timeoutId = setTimeout(() => {
+      fetchFilteredScreens();
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [activeFilters]);
+
 
   const form = useForm<CreateCampaignForm>({
     resolver: zodResolver(createCampaignSchema),
     defaultValues: {
       name: "",
-      objective: "",
-      budget: 10000,
-      areaType: "map",
-      latitude: defaultCenter.lat,
-      longitude: defaultCenter.lng,
-      radiusKm: 5,
-      targetCity: "",
-      targetState: "",
-      durationMode: "auto",
-      customDays: 7,
-      venueTypeFilters: [],
-      targetAgeGroups: [],
-      targetGender: "all",
-      targetAffluence: [],
-      timePreference: [],
+      objective: "advanced",
+      budget: 0,
       startDate: (() => {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         return tomorrow.toISOString().split('T')[0];
       })(),
-      endDate: "",
+      endDate: (() => {
+        const date = new Date();
+        date.setDate(date.getDate() + 8); // default 7 days
+        return date.toISOString().split('T')[0];
+      })(),
       creativeUrl: "",
     },
   });
 
-  const watchBudget = form.watch("budget");
-  const watchAreaType = form.watch("areaType");
-  const watchRadius = form.watch("radiusKm");
-  const watchLatitude = form.watch("latitude");
-  const watchLongitude = form.watch("longitude");
-  const watchTargetCity = form.watch("targetCity");
-  const watchDurationMode = form.watch("durationMode");
-  const watchCustomDays = form.watch("customDays");
-  const watchVenueTypeFilters = form.watch("venueTypeFilters");
-  const watchTargetAgeGroups = form.watch("targetAgeGroups");
-  const watchTargetGender = form.watch("targetGender");
-  const watchTargetAffluence = form.watch("targetAffluence");
-  const watchTimePreference = form.watch("timePreference");
+  const toggleScreenSelection = (screenId: string) => {
+    setSelectedScreenIds(prev => 
+      prev.includes(screenId) 
+        ? prev.filter(id => id !== screenId)
+        : [...prev, screenId]
+    );
+  };
 
-  // Load pre-selected screens from localStorage (from Find Screens cart)
-  useEffect(() => {
-    const SELECTED_SCREENS_KEY = "selectedScreenIds";
-    const saved = localStorage.getItem(SELECTED_SCREENS_KEY);
-    if (saved) {
-      try {
-        const savedIds = JSON.parse(saved);
-        if (Array.isArray(savedIds) && savedIds.length > 0) {
-          console.log("🛒 Loading pre-selected screens from cart:", savedIds.length, "screens");
-          
-          // Fetch full screen details using new by-ids endpoint
-          const fetchPreselectedScreens = async () => {
-            try {
-              const idsParam = savedIds.join(',');
-              const response = await apiRequest("GET", `/api/screens/by-ids?ids=${idsParam}`);
-              const preselectedScreens = await response.json();
-              
-              setScreensInArea(preselectedScreens);
-              setSelectedScreenIds(savedIds);
-              setFromCart(true);
-              
-              // Calculate total budget from selected screens (7 days default)
-              const defaultDays = 7;
-              const totalCost = preselectedScreens.reduce((sum: number, screen: Screen) => {
-                return sum + (screen.pricePerDay * defaultDays * (screen.numberOfScreens || 1));
-              }, 0);
-              
-              // Set budget to calculated cost
-              form.setValue("budget", totalCost);
-              
-              // Set duration to 7 days
-              form.setValue("durationMode", "custom");
-              form.setValue("customDays", defaultDays);
-              setCalculatedDuration(defaultDays);
-              
-              // Calculate and set end date (but allow user to change it)
-              const tomorrow = new Date();
-              tomorrow.setDate(tomorrow.getDate() + 1);
-              const endDate = new Date(tomorrow);
-              endDate.setDate(endDate.getDate() + defaultDays);
-              form.setValue("endDate", endDate.toISOString().split('T')[0]);
-              
-              // Start at Step 1 - user will flow through: Step 1 → Step 3 → Step 6
-              setCurrentStep(1);
-              setPlanMode("smart"); // Set to smart mode
-              
-              console.log("✅ Cart Mode Activated:", {
-                screens: preselectedScreens.length,
-                totalCost,
-                duration: defaultDays,
-                flow: "Step 1 → Step 3 → Step 6"
-              });
-              
-              toast({
-                title: "Screens Loaded from Cart",
-                description: `${preselectedScreens.length} screen(s) loaded. Set your campaign details!`,
-              });
-            } catch (error) {
-              console.error("❌ Error fetching pre-selected screen details:", error);
-              toast({
-                title: "Error Loading Cart",
-                description: "Could not load selected screens. Please try again.",
-                variant: "destructive",
-              });
-            }
-          };
-          fetchPreselectedScreens();
-        }
-      } catch (error) {
-        console.error("Error loading pre-selected screens:", error);
-      }
-    }
-  }, []); // Run only once on mount
+  const handleFilterChange = (key: keyof ActiveFilters, value: any) => {
+    setActiveFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const toggleArrayFilter = (key: keyof Pick<ActiveFilters, 'cities' | 'venueTypes' | 'environmentTypes' | 'tags'>, value: string) => {
+    setActiveFilters(prev => {
+      const currentArray = prev[key];
+      const newArray = currentArray.includes(value)
+        ? currentArray.filter(item => item !== value)
+        : [...currentArray, value];
+      return { ...prev, [key]: newArray };
+    });
+  };
   
-  // Debug: Log when screensInArea changes
-  useEffect(() => {
-    console.log("📍 screensInArea updated:", screensInArea.length, "screens");
-    if (screensInArea.length > 0) {
-      console.log("   Sample screen:", screensInArea[0].name, "at", screensInArea[0].city);
-    }
-  }, [screensInArea]);
+  const clearFilters = () => {
+    setActiveFilters(defaultFilters);
+  };
 
-  // Fetch screens in area when area changes (filtered by budget)
-  useEffect(() => {
-    // Skip screen refetch if flag is set (e.g., when manually increasing budget)
-    if (skipScreenRefetch) {
-      return;
-    }
+  // Calculate totals
+  const calculateDays = () => {
+    const start = new Date(form.watch("startDate"));
+    const end = new Date(form.watch("endDate"));
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+  };
 
-    const fetchScreensInArea = async () => {
-      const budget = watchBudget;
-      // Use calculated duration in auto mode (fallback to default 7 days if not calculated yet)
-      // Use custom days in custom mode
-      const duration = watchDurationMode === "auto" ? (calculatedDuration || 7) : watchCustomDays;
-      
-      console.log("🔍 Fetching screens in area:", { 
-        areaType: watchAreaType, 
-        currentStep, 
-        lat: form.getValues("latitude"), 
-        lng: form.getValues("longitude"),
-        radiusKm: watchRadius,
-        city: watchTargetCity,
-        budget,
-        duration
-      });
-      
-      if (watchAreaType === "map") {
-        const lat = form.getValues("latitude");
-        const lng = form.getValues("longitude");
-        const radiusKm = form.getValues("radiusKm");
-        
-        if (lat && lng && radiusKm) {
-          try {
-            let url = `/api/screens/in-area?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`;
-            // Only apply budget filter in Step 4 for Smart Plan selection
-            // Step 2 should show ALL available screens in the area
-            if (budget && duration && currentStep >= 4 && planMode === "smart") {
-              url += `&budget=${budget}&duration=${duration}`;
-            }
-            console.log("📡 Fetching from URL:", url);
-            const response = await apiRequest("GET", url);
-            const data = await response.json();
-            console.log("✅ Screens fetched (map):", data.length, "screens");
-            setScreensInArea(data);
-            if (planMode === "smart") {
-              setSelectedScreenIds(data.map((s: Screen) => s.id));
-            }
-          } catch (error) {
-            console.error("❌ Error fetching screens:", error);
-          }
-        }
-      } else if (watchAreaType === "city" && watchTargetCity) {
-        try {
-          let url = `/api/screens/in-area?city=${watchTargetCity}`;
-          // Only apply budget filter in Step 4 for Smart Plan selection
-          // Step 2 should show ALL available screens in the area
-          if (budget && duration && currentStep >= 4 && planMode === "smart") {
-            url += `&budget=${budget}&duration=${duration}`;
-          }
-          console.log("📡 Fetching from URL:", url);
-          const response = await apiRequest("GET", url);
-          const data = await response.json();
-          console.log("✅ Screens fetched (city):", data.length, "screens");
-          setScreensInArea(data);
-          if (planMode === "smart") {
-            setSelectedScreenIds(data.map((s: Screen) => s.id));
-          }
-        } catch (error) {
-          console.error("Error fetching screens:", error);
-        }
-      }
-    };
+  const durationDays = calculateDays();
+  
+  const selectedScreensFull = screens.filter(s => selectedScreenIds.includes(s.id));
+  const estimatedCost = selectedScreensFull.reduce((sum, s) => {
+    const multi = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
+    return sum + (s.pricePerDay * multi * durationDays);
+  }, 0);
+  
+  const totalReach = selectedScreensFull.reduce((sum, s) => sum + (s.avgDailyFootfall || 0) * durationDays, 0);
 
-    if (currentStep >= 2) {
-      fetchScreensInArea();
-    }
-  }, [watchAreaType, watchRadius, watchLatitude, watchLongitude, watchTargetCity, currentStep, watchBudget, calculatedDuration, watchDurationMode, watchCustomDays, skipScreenRefetch]);
-
-  // Calculate duration when in auto mode
-  useEffect(() => {
-    // If duration is locked (e.g., after clicking "Increase Budget"), don't recalculate
-    if (lockedDuration !== null) {
-      setCalculatedDuration(lockedDuration);
-      return;
-    }
-
-    const calculateAutoDuration = async () => {
-      if (watchDurationMode === "auto" && selectedScreenIds.length > 0 && watchBudget && !skipDurationRecalc) {
-        try {
-          const response = await apiRequest("POST", "/api/campaign/calculate-duration", {
-            budget: watchBudget,
-            screenIds: selectedScreenIds,
-          });
-          const data = await response.json();
-          setCalculatedDuration(data.days);
-        } catch (error) {
-          console.error("Error calculating duration:", error);
-        }
-      }
-    };
-
-    if (currentStep >= 3 && watchDurationMode === "auto" && !skipDurationRecalc) {
-      calculateAutoDuration();
-    }
-  }, [watchDurationMode, selectedScreenIds, watchBudget, currentStep, skipDurationRecalc, lockedDuration]);
-
-  // Apply demographic filters from Step 4 to screens
-  const filteredScreensInArea = screensInArea.filter((screen) => {
-    // Venue type filter (single value match)
-    if (watchVenueTypeFilters && watchVenueTypeFilters.length > 0) {
-      if (!watchVenueTypeFilters.includes(screen.venueCategory || "")) {
-        return false;
-      }
-    }
-    
-    // Age groups filter (array intersection) - check if any target age group matches screen's age groups
-    if (watchTargetAgeGroups && watchTargetAgeGroups.length > 0) {
-      const screenAgeGroups = screen.detailedAgeGroups || [];
-      const hasMatchingAge = watchTargetAgeGroups.some(targetAge => 
-        screenAgeGroups.includes(targetAge)
-      );
-      if (!hasMatchingAge) {
-        return false;
-      }
-    }
-    
-    // Gender filter (single value match with logic mapping)
-    if (watchTargetGender && watchTargetGender !== "all") {
-      const genderMap: Record<string, string[]> = {
-        "male": ["Male Dominant", "Mixed Gender", "Family Oriented"],
-        "female": ["Female Dominant", "Mixed Gender", "Family Oriented"],
-      };
-      const acceptableGenders = genderMap[watchTargetGender] || [];
-      if (!acceptableGenders.includes(screen.genderOrientation || "")) {
-        return false;
-      }
-    }
-    
-    // Affluence filter (single screen value must be in target array)
-    if (watchTargetAffluence && watchTargetAffluence.length > 0) {
-      if (!watchTargetAffluence.includes(screen.incomeLevel || "")) {
-        return false;
-      }
-    }
-    
-    // Time preference filter (array intersection) - check if any target time matches screen's time of day activity
-    if (watchTimePreference && watchTimePreference.length > 0) {
-      const screenTimeActivities = screen.timeOfDayActivity || [];
-      const hasMatchingTime = watchTimePreference.some(targetTime => 
-        screenTimeActivities.includes(targetTime)
-      );
-      if (!hasMatchingTime) {
-        return false;
-      }
-    }
-    
-    return true;
-  });
-
-  // Calculate reach estimate
-  useEffect(() => {
-    const calculateReach = async () => {
-      const duration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
-      
-      if (selectedScreenIds.length > 0 && duration) {
-        try {
-          const response = await apiRequest("POST", "/api/campaign/calculate-reach", {
-            screenIds: selectedScreenIds,
-            duration: duration,
-          });
-          const data = await response.json();
-          setEstimatedReach(data);
-        } catch (error) {
-          console.error("Error calculating reach:", error);
-        }
-      }
-    };
-
-    if (currentStep >= 3) {
-      calculateReach();
-    }
-  }, [selectedScreenIds, calculatedDuration, watchDurationMode, watchCustomDays, currentStep]);
 
   const createCampaignMutation = useMutation({
     mutationFn: async (data: CreateCampaignForm) => {
@@ -546,50 +280,30 @@ export default function CreateCampaign() {
         throw new Error("No screens selected for the campaign");
       }
 
-      const duration = data.durationMode === "auto" ? calculatedDuration : data.customDays;
-      if (!duration) {
-        throw new Error("Duration not calculated");
-      }
-
-      // Calculate end date
-      const startDate = new Date(data.startDate);
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + duration);
-
-      // Create campaign with targetArea
-      const targetArea = data.areaType === "map" 
-        ? {
-            type: "map" as const,
-            latitude: data.latitude,
-            longitude: data.longitude,
-            radiusKm: data.radiusKm,
-          }
-        : {
-            type: "city" as const,
-            city: data.targetCity,
-            state: data.targetState,
-          };
+      // Create campaign with targeted screens (no specific area)
+      const targetArea = {
+        type: "india" as const, // Broadest area since we hand-picked screens
+      };
 
       const campaignResponse = await apiRequest("POST", "/api/advertiser/campaigns", {
         name: data.name,
         objective: data.objective,
         targetArea,
-        // Legacy fields for backward compatibility
-        targetLocationType: data.areaType === "city" ? "city" : "india",
-        targetCities: data.areaType === "city" ? [data.targetCity || ""] : [],
-        targetState: data.targetState || null,
+        targetLocationType: "india",
+        targetCities: [],
+        targetState: null,
         targetPincodes: [],
-        targetAgeGroups: data.targetAgeGroups || [],
-        targetGender: data.targetGender || "all",
-        targetAffluence: data.targetAffluence || [],
+        targetAgeGroups: [],
+        targetGender: "all",
+        targetAffluence: [],
         targetOccupations: [],
         targetIntent: [],
         targetMood: [],
-        venueTypeFilters: data.venueTypeFilters || [],
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        budget: data.budget,
-        estimatedBudget: data.budget,
+        venueTypeFilters: [],
+        startDate: new Date(data.startDate).toISOString(),
+        endDate: new Date(data.endDate).toISOString(),
+        budget: Math.round(data.budget || estimatedCost),
+        estimatedBudget: estimatedCost,
         creativeUrl: data.creativeUrl || null,
         summary: data.summary || null,
       });
@@ -597,19 +311,16 @@ export default function CreateCampaign() {
       const campaign = await campaignResponse.json();
 
       // Create bookings for each selected screen
-      const bookingPromises = selectedScreenIds.map(screenId => {
-        const screen = screensInArea.find(s => s.id === screenId);
-        if (!screen) throw new Error(`Screen ${screenId} not found`);
-
+      const bookingPromises = selectedScreensFull.map(screen => {
         const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-        const price = screen.pricePerDay * screenMultiplier * duration;
+        const price = screen.pricePerDay * screenMultiplier * durationDays;
 
         return apiRequest("POST", "/api/advertiser/bookings", {
-          screenId,
+          screenId: screen.id,
           campaignId: campaign.id,
           price,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
+          startDate: new Date(data.startDate).toISOString(),
+          endDate: new Date(data.endDate).toISOString(),
         });
       });
 
@@ -618,22 +329,12 @@ export default function CreateCampaign() {
     },
     onSuccess: () => {
       toast({
-        title: "Campaign Created",
-        description: `Campaign created successfully with ${selectedScreenIds.length} booking requests.`,
+        title: "Campaign Submitted!",
+        description: `Campaign created successfully with ${selectedScreenIds.length} booking request(s).`,
       });
-      setCampaignCreated(true);
       queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
-      
-      // Clear localStorage if coming from cart
-      if (fromCart) {
-        const SELECTED_SCREENS_KEY = "selectedScreenIds";
-        localStorage.removeItem(SELECTED_SCREENS_KEY);
-        console.log("🧹 Cleared cart selections from localStorage");
-      }
-      
-      // Reset form and state after short delay
       setTimeout(() => {
-        resetFormAndState();
+        setLocation("/advertiser/campaigns");
       }, 2000);
     },
     onError: (error: Error) => {
@@ -645,1873 +346,692 @@ export default function CreateCampaign() {
     },
   });
 
-  const onSubmit = (data: CreateCampaignForm) => {
-    if (currentStep !== steps.length) {
-      return;
-    }
+  const onSubmitBuild = async () => {
+    // Set final calculated budget before validation/submission
+    form.setValue("budget", estimatedCost);
     
+    // We only need to gather minimum info to proceed to the review screen.
     if (selectedScreenIds.length === 0) {
       toast({
         title: "No Screens Selected",
-        description: "Please select at least one screen for your campaign.",
-        variant: "destructive",
+        description: "Please select at least one screen from the map.",
+        variant: "destructive"
       });
       return;
     }
     
+    // Validate form details (name, dates) needed before moving on
+    const isValid = await form.trigger(["name", "startDate", "endDate"]);
+    
+    if (!isValid) {
+      const errors = form.control._formState.errors;
+      const missingFields = Object.keys(errors)
+        .filter(k => ["name", "startDate", "endDate"].includes(k))
+        .map(k => k === 'startDate' ? 'Start Date' : k === 'endDate' ? 'End Date' : k.charAt(0).toUpperCase() + k.slice(1));
+      
+      toast({
+        title: "Campaign Details Required",
+        description: `Please fill in the following: ${missingFields.join(", ")}`,
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setCurrentStep(2);
+  };
+
+  const selectAllFiltered = () => {
+    const reachableScreens = screens.map(s => s.id);
+    const newSelection = Array.from(new Set([...selectedScreenIds, ...reachableScreens]));
+    setSelectedScreenIds(newSelection);
+    toast({
+      title: "Selection Updated",
+      description: `Added ${reachableScreens.length} screens to your campaign.`,
+    });
+  };
+
+  const onFinalSubmit = (data: CreateCampaignForm) => {
     createCampaignMutation.mutate(data);
   };
 
-  const handleSaveDraft = () => {
-    toast({
-      title: "Saved as Draft",
-      description: "Your campaign has been saved as a draft.",
-    });
-    setCampaignDrafted(true);
-    
-    // Reset form and state after short delay
-    setTimeout(() => {
-      resetFormAndState();
-    }, 2000);
-  };
-
-  const resetFormAndState = () => {
-    // Reset form to defaults
-    form.reset({
-      name: "",
-      objective: "",
-      budget: 10000,
-      areaType: "map",
-      latitude: defaultCenter.lat,
-      longitude: defaultCenter.lng,
-      radiusKm: 5,
-      targetCity: "",
-      targetState: "",
-      durationMode: "auto",
-      customDays: 7,
-      venueTypeFilters: [],
-      targetAgeGroups: [],
-      targetGender: "all",
-      targetAffluence: [],
-      timePreference: [],
-      startDate: (() => {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        return tomorrow.toISOString().split('T')[0];
-      })(),
-      endDate: "",
-    });
-    
-    // Reset all state
-    setCurrentStep(1);
-    setUploadedCreativeURL(null);
-    setScreensInArea([]);
-    setSelectedScreenIds([]);
-    setViewMode("list");
-    setSelectedMapScreen(null);
-    setPlanMode("smart");
-    setCalculatedDuration(null);
-    setEstimatedReach(null);
-    setScreenDetailsDialog(null);
-    setCampaignCreated(false);
-    setCampaignDrafted(false);
-    setMapCenter(defaultCenter);
-    setMarkerPosition(defaultCenter);
-  };
-
-  const nextStep = async () => {
-    // Validate current step
-    if (currentStep === 1) {
-      const isValid = await form.trigger(["name", "objective", "budget"]);
-      if (!isValid) {
-        toast({
-          title: "Incomplete Information",
-          description: "Please fill in all required fields.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
-    if (currentStep === 2) {
-      if (watchAreaType === "map") {
-        const isValid = await form.trigger(["latitude", "longitude", "radiusKm"]);
-        if (!isValid) {
-          toast({
-            title: "Invalid Area",
-            description: "Please select a valid area on the map.",
-            variant: "destructive",
-          });
-          return;
-        }
-      } else {
-        const isValid = await form.trigger(["targetCity"]);
-        if (!isValid || !watchTargetCity) {
-          toast({
-            title: "No City Selected",
-            description: "Please select a city.",
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-      
-      if (screensInArea.length === 0) {
-        toast({
-          title: "No Screens Available",
-          description: "No screens found in the selected area. Please choose a different area.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
-    if (currentStep === 3) {
-      const isValid = await form.trigger(["startDate"]);
-      if (!isValid) {
-        toast({
-          title: "Invalid Date",
-          description: "Please select a valid start date.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (watchDurationMode === "custom") {
-        const customDaysValid = await form.trigger(["customDays"]);
-        if (!customDaysValid || !watchCustomDays) {
-          toast({
-            title: "Invalid Duration",
-            description: "Please enter a valid number of days.",
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-
-      // Set end date based on duration
-      const duration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
-      if (duration) {
-        const startDate = new Date(form.getValues("startDate"));
-        const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + duration);
-        form.setValue("endDate", endDate.toISOString().split('T')[0]);
-      }
-    }
-
-    if (currentStep < steps.length) {
-      // Smart navigation for cart mode: Step 1 → Step 3 → Step 6
-      if (fromCart) {
-        if (currentStep === 1) {
-          setCurrentStep(3); // Skip Step 2 (area selection)
-        } else if (currentStep === 3) {
-          setCurrentStep(6); // Skip Steps 4-5 (filters and plan)
-        } else {
-          setCurrentStep(currentStep + 1);
-        }
-      } else {
-        setCurrentStep(currentStep + 1);
-      }
-    }
-  };
-
-  const prevStep = () => {
-    if (currentStep > 1) {
-      // Smart navigation for cart mode: Step 6 → Step 3 → Step 1
-      if (fromCart) {
-        if (currentStep === 6) {
-          setCurrentStep(3); // Back to duration
-        } else if (currentStep === 3) {
-          setCurrentStep(1); // Back to goal & budget
-        } else {
-          setCurrentStep(currentStep - 1);
-        }
-      } else {
-        setCurrentStep(currentStep - 1);
-      }
-    }
-  };
-
-  const progress = (currentStep / steps.length) * 100;
-
-  const toggleScreen = (screenId: string) => {
-    setSelectedScreenIds(prev => 
-      prev.includes(screenId) 
-        ? prev.filter(id => id !== screenId)
-        : [...prev, screenId]
-    );
-  };
-
-  const totalBudget = watchBudget;
-  const duration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
-  const spentBudget = selectedScreenIds.reduce((sum, screenId) => {
-    const screen = screensInArea.find(s => s.id === screenId);
-    if (!screen) return sum;
-    const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-    return sum + (screen.pricePerDay * screenMultiplier * (duration || 1));
-  }, 0);
-
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6">
-      <div>
-        <Button variant="ghost" onClick={() => setLocation("/advertiser")} data-testid="button-back">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
-        </Button>
-        <h1 className="text-3xl font-bold text-foreground font-serif mt-4">Create Smart Campaign</h1>
-        <p className="text-muted-foreground mt-1">AI-powered campaign creation in 6 simple steps</p>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <Progress value={progress} className="mb-4" data-testid="progress-campaign" />
-          <div className="flex justify-between">
-            {steps.map((step) => {
-              const Icon = step.icon;
-              return (
-                <div
-                  key={step.id}
-                  className={`flex items-center gap-2 ${
-                    currentStep >= step.id ? "text-primary" : "text-muted-foreground"
-                  }`}
-                >
-                  <div
-                    className={`p-2 rounded-lg ${
-                      currentStep >= step.id ? "bg-primary/10" : "bg-muted"
-                    }`}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <span className="text-sm font-medium hidden lg:inline">{step.name}</span>
-                </div>
-              );
-            })}
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden">
+      
+      {/* ------------------------------------------------------------- */}
+      {/* LEFT PANEL: FILTERS (Only in Step 1)                           */}
+      {/* ------------------------------------------------------------- */}
+      {currentStep === 1 && (
+        <div 
+          className={`flex-shrink-0 bg-background border-r flex flex-col transition-all duration-300 ${isFilterPanelOpen ? "w-80" : "w-0"} overflow-hidden`}
+        >
+          <div className="p-4 border-b flex justify-between items-center bg-card">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4 text-primary" />
+              <h2 className="font-semibold">Screen Filters</h2>
+            </div>
+            {Object.entries(activeFilters).some(([k, v]) => Array.isArray(v) ? v.length > 0 : v !== defaultFilters[k as keyof ActiveFilters]) && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs text-muted-foreground hover:text-foreground">
+                Clear all
+              </Button>
+            )}
           </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <Form {...form}>
-            <form 
-              onSubmit={(e) => {
-                e.preventDefault();
-              }} 
-              className="space-y-6"
-            >
-              {/* Step 1: Campaign Goal & Budget */}
-              {currentStep === 1 && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-2">Campaign Goal & Budget</h2>
-                    <p className="text-muted-foreground">
-                      Tell us your goal and budget — we'll show what's possible near you.
-                    </p>
+          
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Search (Optional enhancement) */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search locations..." className="pl-9 h-9" />
+            </div>
+
+            <Accordion type="multiple" defaultValue={["city", "venue", "price"]} className="w-full">
+              
+              {/* City Filter */}
+              <AccordionItem value="city" className="border-b-0 mb-2">
+                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+                  City
+                  {activeFilters.cities.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                      {activeFilters.cities.length}
+                    </Badge>
+                  )}
+                </AccordionTrigger>
+                <AccordionContent className="pt-2 pb-0 px-2 max-h-48 overflow-y-auto">
+                  <div className="space-y-2">
+                    {filterConfig.cities.map(city => (
+                      <div key={city} className="flex items-center space-x-2">
+                        <Checkbox 
+                          id={`city-${city}`} 
+                          checked={activeFilters.cities.includes(city)}
+                          onCheckedChange={() => toggleArrayFilter('cities', city)}
+                        />
+                        <label htmlFor={`city-${city}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">
+                          {city}
+                        </label>
+                      </div>
+                    ))}
                   </div>
+                </AccordionContent>
+              </AccordionItem>
 
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Campaign Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., Summer Festival Promotion 2024" {...field} data-testid="input-campaign-name" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+              {/* Price Filter */}
+              <AccordionItem value="price" className="border-b-0 mb-2">
+                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+                   Price Range / Day (₹)
+                </AccordionTrigger>
+                <AccordionContent className="pt-4 pb-2 px-3">
+                  <Slider
+                    min={0}
+                    max={100000}
+                    step={100}
+                    value={activeFilters.priceRange}
+                    onValueChange={(val) => handleFilterChange('priceRange', val as [number, number])}
+                    className="mb-6"
                   />
+                  <div className="flex items-center justify-between mt-2 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">Min</span>
+                      <Input 
+                        type="number" 
+                        value={activeFilters.priceRange[0]} 
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 0;
+                          handleFilterChange('priceRange', [val, Math.max(val, activeFilters.priceRange[1])])
+                        }}
+                        className="w-full h-8 text-xs" 
+                      />
+                    </div>
+                    <span className="text-muted-foreground text-sm self-end pb-1">-</span>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">Max</span>
+                      <Input 
+                        type="number" 
+                        value={activeFilters.priceRange[1]} 
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 0;
+                          handleFilterChange('priceRange', [Math.min(val, activeFilters.priceRange[0]), val])
+                        }}
+                        className="w-full h-8 text-xs" 
+                      />
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
 
-                  <FormField
-                    control={form.control}
-                    name="objective"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Campaign Objective</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger data-testid="select-objective">
-                              <SelectValue placeholder="Select your goal" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {objectives.map(obj => (
-                              <SelectItem key={obj.value} value={obj.value}>{obj.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+              {/* Min Booking Days Filter */}
+              <AccordionItem value="minBooking" className="border-b-0 mb-2">
+                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+                  Min Booking Days (Up to)
+                  <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 p-1 px-2 flex items-center justify-center rounded-full text-[10px]">
+                    {activeFilters.minBookingDays}d
+                  </Badge>
+                </AccordionTrigger>
+                <AccordionContent className="pt-4 pb-2 px-3">
+                  <Slider
+                    min={1}
+                    max={90}
+                    step={1}
+                    value={[activeFilters.minBookingDays]}
+                    onValueChange={(val) => handleFilterChange('minBookingDays', val[0])}
+                    className="mb-6"
                   />
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>1 day</span>
+                    <span>90 days</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-2 italic">Shows screens accepting bookings up to this duration.</p>
+                </AccordionContent>
+              </AccordionItem>
 
-                  <FormField
-                    control={form.control}
-                    name="budget"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Campaign Budget (₹)</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="e.g., 50000" 
-                            {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                            data-testid="input-budget"
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Minimum budget: ₹1,000
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              {/* Venue Type Filter */}
+              <AccordionItem value="venue" className="border-b-0 mb-2">
+                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+                  Venue Type
+                  {activeFilters.venueTypes.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                      {activeFilters.venueTypes.length}
+                    </Badge>
+                  )}
+                </AccordionTrigger>
+                <AccordionContent className="pt-2 pb-0 px-2 max-h-48 overflow-y-auto">
+                  <div className="space-y-2">
+                    {filterConfig.venueTypes.map(venue => (
+                      <div key={venue} className="flex items-center space-x-2">
+                        <Checkbox 
+                          id={`venue-${venue}`} 
+                          checked={activeFilters.venueTypes.includes(venue)}
+                          onCheckedChange={() => toggleArrayFilter('venueTypes', venue)}
+                        />
+                        <label htmlFor={`venue-${venue}`} className="text-sm font-medium leading-none cursor-pointer">
+                          {venue}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              {/* Environment Type Filter */}
+              <AccordionItem value="environment" className="border-b-0 mb-2">
+                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+                  Environment
+                  {activeFilters.environmentTypes.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                      {activeFilters.environmentTypes.length}
+                    </Badge>
+                  )}
+                </AccordionTrigger>
+                <AccordionContent className="pt-2 pb-0 px-2 max-h-48 overflow-y-auto">
+                  <div className="space-y-2">
+                    {filterConfig.environmentTypes.map(env => (
+                      <div key={env} className="flex items-center space-x-2">
+                        <Checkbox 
+                          id={`env-${env}`} 
+                          checked={activeFilters.environmentTypes.includes(env)}
+                          onCheckedChange={() => toggleArrayFilter('environmentTypes', env)}
+                        />
+                        <label htmlFor={`env-${env}`} className="text-sm font-medium leading-none cursor-pointer capitalize">
+                          {env}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+              
+               {/* Tags Filter */}
+               <AccordionItem value="tags" className="border-b-0 mb-2">
+                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+                  Tags
+                  {activeFilters.tags.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                      {activeFilters.tags.length}
+                    </Badge>
+                  )}
+                </AccordionTrigger>
+                <AccordionContent className="pt-2 pb-0 px-2 max-h-48 overflow-y-auto">
+                  <div className="space-y-2 flex flex-wrap gap-2">
+                    {filterConfig.tags.map(tag => (
+                      <Badge 
+                        key={tag.id} 
+                        variant={activeFilters.tags.includes(tag.name) ? "default" : "outline"}
+                        className="cursor-pointer font-normal rounded-sm"
+                        onClick={() => toggleArrayFilter('tags', tag.name)}
+                      >
+                        {tag.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+            </Accordion>
+          </div>
+        </div>
+      )}
+
+      {/* Panel Toggle Button (When closed) */}
+      {currentStep === 1 && !isFilterPanelOpen && (
+        <Button 
+          variant="outline" 
+          size="icon" 
+          className="absolute left-4 top-[80px] z-10 bg-background shadow-md h-9 w-9 rounded-full"
+          onClick={() => setIsFilterPanelOpen(true)}
+        >
+          <FilterIcon className="h-4 w-4" />
+        </Button>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* CENTER PANEL: MAP                                             */}
+      {/* ------------------------------------------------------------- */}
+      <div className={`flex-1 relative ${currentStep === 2 ? "px-8 py-8 overflow-y-auto" : ""}`}>
+        
+        {currentStep === 1 ? (
+          <>
+            {/* Header Overlay */}
+            <div className="absolute top-4 left-4 right-4 z-10 flex justify-between items-start pointer-events-none">
+              <div className="bg-background/90 backdrop-blur-sm p-3 rounded-xl shadow-lg border pointer-events-auto">
+                <div className="flex items-center gap-3 mb-1">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setLocation("/advertiser")}>
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <h1 className="font-bold text-lg font-serif">Advanced Builder</h1>
+                  <Badge variant="secondary" className="ml-2 bg-primary/10 text-primary border-primary/20">{screens.length} Screens Found</Badge>
                 </div>
+                <div className="flex items-center justify-between ml-11">
+                  <p className="text-xs text-muted-foreground">Select highly targeted screens from the map or list.</p>
+                  <Button 
+                    size="sm" 
+                    variant="default" 
+                    className="h-7 rounded-full px-3 font-bold text-[10px] uppercase tracking-wider ml-4"
+                    onClick={selectAllFiltered}
+                    disabled={screens.length === 0}
+                  >
+                    <Check className="mr-1 h-3 w-3" />
+                    Select All {screens.length}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel Collapse Toggles */}
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 z-10 flex">
+              {isFilterPanelOpen && (
+                <Button 
+                  variant="outline" 
+                   className="h-16 w-6 rounded-l-none rounded-r-md bg-background/90 backdrop-blur border-l-0 shadow-md p-0 flex items-center justify-center hover:bg-background group"
+                  onClick={() => setIsFilterPanelOpen(false)}
+                >
+                  <ChevronLeft className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Button>
               )}
+            </div>
 
-              {/* Step 2: Choose Area */}
-              {currentStep === 2 && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-2">Choose Your Target Area</h2>
-                    <p className="text-muted-foreground">
-                      Select an area using the map or choose a specific city.
-                    </p>
-                  </div>
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex pr-[400px]">
+               {isWorkspaceOpen && (
+                <Button 
+                  variant="outline" 
+                  className="h-16 w-6 rounded-r-none rounded-l-md bg-background/90 backdrop-blur border-r-0 shadow-md p-0 flex items-center justify-center hover:bg-background group translate-x-[400px]"
+                  onClick={() => setIsWorkspaceOpen(false)}
+                >
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Button>
+              )}
+            </div>
 
-                  <FormField
-                    control={form.control}
-                    name="areaType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Selection Method</FormLabel>
-                        <RadioGroup
-                          onValueChange={field.onChange}
-                          value={field.value}
-                          className="flex gap-4"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="map" id="map" data-testid="radio-area-map" />
-                            <Label htmlFor="map">Map & Radius</Label>
+            {/* Map Container */}
+            <div className="w-full h-full">
+               <Map
+                  style={{ width: '100%', height: '100%' }}
+                  defaultCenter={mapCenter}
+                  defaultZoom={12}
+                  mapId="advanced-campaign-map"
+                  gestureHandling="greedy"
+                  disableDefaultUI={true}
+                  zoomControl={true}
+                >
+                  {/* Render mapping markers from filtered screens */}
+                  {screens.map((screen) => (
+                    <AdvancedMarker
+                      key={screen.id}
+                      position={{
+                        lat: parseFloat(screen.latitude.toString()),
+                        lng: parseFloat(screen.longitude.toString()),
+                      }}
+                      onClick={() => setSelectedMapScreen(screen)}
+                      zIndex={selectedScreenIds.includes(screen.id) ? 10 : 1}
+                    >
+                      <div className={`relative flex items-center justify-center rounded-full shadow-lg transition-transform ${selectedScreenIds.includes(screen.id) ? 'scale-125' : 'hover:scale-110'}`}
+                           style={{
+                             width: selectedScreenIds.includes(screen.id) ? 28 : 22,
+                             height: selectedScreenIds.includes(screen.id) ? 28 : 22,
+                             backgroundColor: selectedScreenIds.includes(screen.id) ? '#22c55e' : '#8b5cf6',
+                             border: '2px solid white'
+                           }}>
+                         {selectedScreenIds.includes(screen.id) ? (
+                           <Check className="h-3 w-3 text-white" strokeWidth={3}/>
+                         ) : (
+                           <div className="h-1.5 w-1.5 bg-white rounded-full" />
+                         )}
+                      </div>
+                    </AdvancedMarker>
+                  ))}
+
+                  {/* Info Window */}
+                  {selectedMapScreen && (
+                    <InfoWindow
+                      position={{
+                        lat: parseFloat(selectedMapScreen.latitude.toString()),
+                        lng: parseFloat(selectedMapScreen.longitude.toString()),
+                      }}
+                      onCloseClick={() => setSelectedMapScreen(null)}
+                      maxWidth={300}
+                    >
+                      <div className="p-1 min-w-[240px]">
+                        <div className="h-28 w-full bg-muted rounded-md mb-2 overflow-hidden relative">
+                           {selectedMapScreen.images?.[0] ? (
+                             <img src={selectedMapScreen.images[0]} className="w-full h-full object-cover" alt="Screen" />
+                           ) : (
+                             <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                               <ImageIcon className="h-6 w-6 text-gray-400" />
+                             </div>
+                           )}
+                           <Badge className="absolute top-2 right-2 flex px-1.5 py-0 text-[10px] uppercase shadow-sm">{selectedMapScreen.environmentType || 'Indoor'}</Badge>
+                        </div>
+                        <h3 className="font-bold text-sm truncate">{selectedMapScreen.name}</h3>
+                        <p className="text-xs text-muted-foreground truncate flex items-center gap-1 mt-0.5"><MapPin className="h-3 w-3"/>{selectedMapScreen.location}, {selectedMapScreen.city}</p>
+                        <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-100">
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">Price/Day</p>
+                            <p className="font-bold text-xs text-primary">₹{selectedMapScreen.pricePerDay.toLocaleString()}</p>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="city" id="city" data-testid="radio-area-city" />
-                            <Label htmlFor="city">City Search</Label>
-                          </div>
-                        </RadioGroup>
-                      </FormItem>
-                    )}
-                  />
-
-                  {watchAreaType === "map" && (
-                    <div className="space-y-4">
-                        <div className="border rounded-lg overflow-hidden">
-                          <Map
-                            style={mapContainerStyle}
-                            defaultCenter={mapCenter}
-                            defaultZoom={12}
-                            mapId="campaign-area-map"
-                            gestureHandling="greedy"
-                            onClick={(e) => {
-                              if (e.detail.latLng) {
-                                const { lat, lng } = e.detail.latLng;
-                                setMarkerPosition({ lat, lng });
-                                form.setValue("latitude", lat);
-                                form.setValue("longitude", lng);
-                              }
-                            }}
+                          <Button 
+                            size="sm" 
+                            variant={selectedScreenIds.includes(selectedMapScreen.id) ? "destructive" : "default"}
+                            className="h-7 text-xs px-3"
+                            onClick={() => toggleScreenSelection(selectedMapScreen.id)}
                           >
-                            <AdvancedMarker
-                              position={markerPosition}
-                              draggable={true}
-                              onDragEnd={(e) => {
-                                if (e.latLng) {
-                                  const lat = e.latLng.lat();
-                                  const lng = e.latLng.lng();
-                                  setMarkerPosition({ lat, lng });
-                                  form.setValue("latitude", lat);
-                                  form.setValue("longitude", lng);
-                                }
-                              }}
-                            >
-                              <div style={{
-                                width: 16, height: 16, borderRadius: '50%',
-                                background: '#ef4444', border: '3px solid #fff',
-                                boxShadow: '0 2px 6px rgba(0,0,0,0.3)'
-                              }} />
-                            </AdvancedMarker>
-                            {watchRadius && (
-                              <CircleOverlay
-                                center={markerPosition}
-                                radius={watchRadius * 1000}
-                                fillColor="#3b82f6"
-                                fillOpacity={0.1}
-                                strokeColor="#3b82f6"
-                                strokeOpacity={0.8}
-                                strokeWeight={2}
+                            {selectedScreenIds.includes(selectedMapScreen.id) ? "Remove" : "Select"}
+                          </Button>
+                        </div>
+                      </div>
+                    </InfoWindow>
+                  )}
+                </Map>
+            </div>
+          </>
+        ) : (
+          /* Step 2: Review & Submit (Full Width) */
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <Button variant="ghost" onClick={() => setCurrentStep(1)} className="mb-4 pl-0" size="sm">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Selection
+                </Button>
+                <h1 className="text-3xl font-bold font-serif">Review & Launch</h1>
+                <p className="text-muted-foreground mt-1">Provide your creative and confirm your campaign details.</p>
+              </div>
+            </div>
+
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onFinalSubmit)} className="space-y-6">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card>
+                      <CardHeader className="pb-4">
+                        <CardTitle className="text-lg flex items-center gap-2"><ImageIcon className="h-5 w-5 text-primary"/> Add Creative</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="creativeUrl"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Creative URL</FormLabel>
+                              <FormControl>
+                                <Input placeholder="https://..." {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                         {form.watch("creativeUrl") && (
+                            <div className="border rounded-lg overflow-hidden relative aspect-video bg-muted flex flex-col justify-center items-center">
+                              <img 
+                                src={form.watch("creativeUrl")} 
+                                alt="Creative preview" 
+                                className="w-full h-full object-contain"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
                               />
-                            )}
-                            
-                            {/* Display available screens on map */}
-                            {screensInArea.map((screen) => (
-                              <AdvancedMarker
-                                key={screen.id}
-                                position={{
-                                  lat: parseFloat(screen.latitude.toString()),
-                                  lng: parseFloat(screen.longitude.toString()),
-                                }}
-                                onClick={() => setSelectedMapScreen(screen)}
-                              >
-                                <svg width="28" height="36" viewBox="0 0 24 24" fill="#8b5cf6" stroke="#ffffff" strokeWidth="2">
-                                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" />
-                                </svg>
-                              </AdvancedMarker>
-                            ))}
-                            
-                            {/* InfoWindow for selected screen */}
-                            {selectedMapScreen && (
-                              <InfoWindow
-                                position={{
-                                  lat: parseFloat(selectedMapScreen.latitude.toString()),
-                                  lng: parseFloat(selectedMapScreen.longitude.toString()),
-                                }}
-                                onCloseClick={() => setSelectedMapScreen(null)}
-                                maxWidth={350}
-                                pixelOffset={[0, -10]}
-                              >
-                                <div style={{ width: '320px', maxWidth: '320px' }}>
-                                  {/* Screen Image */}
-                                  <div className="relative h-48 bg-gray-200 overflow-hidden rounded-md mb-3">
-                                    {selectedMapScreen.images && selectedMapScreen.images.length > 0 ? (
-                                      <img
-                                        src={selectedMapScreen.images[0]}
-                                        alt={selectedMapScreen.name}
-                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                        onError={(e) => {
-                                          e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
-                                        }}
-                                      />
-                                    ) : (
-                                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e5e7eb' }}>
-                                        <MapPin style={{ width: '48px', height: '48px', color: '#9ca3af' }} />
-                                      </div>
-                                    )}
-                                    <span style={{
-                                      position: 'absolute',
-                                      top: '8px',
-                                      right: '8px',
-                                      backgroundColor: 'white',
-                                      padding: '4px 8px',
-                                      borderRadius: '4px',
-                                      fontSize: '12px',
-                                      fontWeight: '500'
-                                    }}>
-                                      {selectedMapScreen.type}
-                                    </span>
-                                  </div>
+                            </div>
+                          )}
+                      </CardContent>
+                    </Card>
 
-                                  <div style={{ padding: '0 4px' }}>
-                                    <h3 style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', color: '#111827' }}>
-                                      {selectedMapScreen.name}
-                                    </h3>
-                                    <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>
-                                      {selectedMapScreen.location}, {selectedMapScreen.city}
-                                    </p>
-
-                                    <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                                      <span style={{
-                                        padding: '2px 8px',
-                                        borderRadius: '4px',
-                                        fontSize: '11px',
-                                        border: '1px solid #d1d5db',
-                                        color: '#374151'
-                                      }}>
-                                        {selectedMapScreen.size}
-                                      </span>
-                                      <span style={{
-                                        padding: '2px 8px',
-                                        borderRadius: '4px',
-                                        fontSize: '11px',
-                                        border: '1px solid #d1d5db',
-                                        color: '#374151'
-                                      }}>
-                                        👥 {selectedMapScreen.avgDailyFootfall.toLocaleString()}/day
-                                      </span>
+                    <Card>
+                      <CardHeader className="pb-4">
+                        <CardTitle className="text-lg flex items-center gap-2"><Target className="h-5 w-5 text-primary"/> Campaign Summary</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                            <div className="bg-muted/50 rounded-lg p-4 grid grid-cols-2 gap-y-4 gap-x-2 text-sm">
+                                <div>
+                                  <span className="text-muted-foreground block text-xs mb-1">Campaign Name</span>
+                                  <span className="font-semibold">{form.watch("name") || "Unnamed Campaign"}</span>
+                                </div>
+                                <div className="hidden">
+                                  <span className="text-muted-foreground block text-xs mb-1">Objective</span>
+                                  <span className="font-semibold">{objectives.find(o => o.value === form.watch("objective"))?.label || "-"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground block text-xs mb-1">Dates</span>
+                                  <span className="font-semibold">{new Date(form.watch("startDate")).toLocaleDateString('en-GB')} - {new Date(form.watch("endDate")).toLocaleDateString('en-GB')}</span>
+                                  <span className="text-xs ml-1 text-muted-foreground">({durationDays} days)</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground block text-xs mb-1">Cost Details</span>
+                                  <div className="space-y-1">
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Subtotal:</span>
+                                      <span className="font-semibold">₹{estimatedCost.toLocaleString()}</span>
                                     </div>
-
-                                    <div style={{
-                                      display: 'flex',
-                                      justifyContent: 'space-between',
-                                      alignItems: 'center',
-                                      paddingTop: '12px',
-                                      borderTop: '1px solid #e5e7eb'
-                                    }}>
-                                      <div>
-                                        <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>Price per day</p>
-                                        <p style={{ fontWeight: 'bold', fontSize: '18px', color: '#0d9488' }}>
-                                          ₹{selectedMapScreen.pricePerDay.toLocaleString()}
-                                        </p>
-                                      </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">GST (18%):</span>
+                                      <span className="font-semibold">₹{(estimatedCost * 0.18).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div className="flex justify-between pt-1 border-t">
+                                      <span className="font-bold">Total:</span>
+                                      <span className="font-bold text-primary text-base">₹{(estimatedCost * 1.18).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                   </div>
                                 </div>
-                              </InfoWindow>
-                            )}
-                          </Map>
-                        </div>
+                            </div>
 
-                      <FormField
-                        control={form.control}
-                        name="radiusKm"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Radius: {field.value} km</FormLabel>
-                            <FormControl>
-                              <Slider
-                                min={1}
-                                max={10}
-                                step={0.5}
-                                value={[field.value || 5]}
-                                onValueChange={(value) => field.onChange(value[0])}
-                                data-testid="slider-radius"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  )}
+                            <Separator />
+                            
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-muted-foreground">Screens Targeted</span>
+                              <Badge variant="secondary" className="font-semibold text-sm">{selectedScreenIds.length} Screens</Badge>
+                            </div>
+                            
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-muted-foreground">Estimated Est. Reach</span>
+                              <span className="font-semibold">{totalReach.toLocaleString()} views</span>
+                            </div>
 
-                  {watchAreaType === "city" && (
-                    <FormField
-                      control={form.control}
-                      name="targetCity"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Select City</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value} disabled={locationsLoading}>
-                            <FormControl>
-                              <SelectTrigger data-testid="select-city">
-                                <SelectValue placeholder={
-                                  locationsLoading 
-                                    ? "Loading cities..." 
-                                    : locationsError 
-                                      ? "Error loading cities" 
-                                      : allCities.length === 0
-                                        ? "No cities available"
-                                        : "Choose a city"
-                                } />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="max-h-[300px]">
-                              {allCities.length > 0 ? (
-                                allCities.map((city) => (
-                                  <SelectItem key={city} value={city}>{city}</SelectItem>
-                                ))
-                              ) : (
-                                <div className="p-2 text-sm text-muted-foreground">No cities available</div>
-                              )}
-                            </SelectContent>
-                          </Select>
-                          {locationsError && (
-                            <p className="text-sm text-destructive">Failed to load cities. Please try again.</p>
-                          )}
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
-
-                  {/* Live Estimate Card */}
-                  {screensInArea.length > 0 && (
-                    <Card className="bg-primary/5 border-primary/20">
-                      <CardContent className="pt-6">
-                        <div className="flex items-start gap-3">
-                          <TrendingUp className="h-5 w-5 text-primary mt-1" />
-                          <div>
-                            <p className="font-medium text-foreground">
-                              In {watchAreaType === "map" 
-                                ? `selected area (${watchRadius} km radius)` 
-                                : watchTargetCity}, ₹{totalBudget.toLocaleString()} can reach ~
-                              {filteredScreensInArea.reduce((sum, s) => sum + s.avgDailyFootfall, 0).toLocaleString()} people 
-                              across {filteredScreensInArea.length} LED screens.
-                            </p>
-                          </div>
+                            <div className="flex justify-between items-center pt-2">
+                              <span className="font-semibold text-lg">Total Cost</span>
+                              <div className="text-right">
+                                <span className="font-bold text-2xl text-primary flex items-center gap-1">
+                                  ₹{estimatedCost.toLocaleString()}
+                                </span>
+                                {estimatedCost > (form.watch("budget") || 0) && (
+                                   <div className="flex items-center gap-1 text-destructive text-xs mt-1">
+                                     <AlertTriangle className="h-3 w-3" /> Over desired budget
+                                   </div>
+                                )}
+                              </div>
+                            </div>
                         </div>
                       </CardContent>
                     </Card>
-                  )}
-                </div>
-              )}
+                 </div>
 
-              {/* Step 3: Set Duration */}
-              {currentStep === 3 && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-2">Set Campaign Duration</h2>
-                    <p className="text-muted-foreground">
-                      Want to maximize your impact? Let Pixelspot auto-plan your duration — or choose days manually.
-                    </p>
-                  </div>
+                 <div className="flex justify-end pt-4">
+                    <Button type="submit" size="lg" disabled={createCampaignMutation.isPending}>
+                       {createCampaignMutation.isPending ? "Creating..." : "Confirm & Launch Campaign"}
+                       <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                 </div>
+              </form>
+            </Form>
+          </div>
+        )}
+      </div>
 
-                  <FormField
-                    control={form.control}
-                    name="startDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Campaign Start Date</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="date" 
-                            {...field} 
-                            min={(() => {
-                              const tomorrow = new Date();
-                              tomorrow.setDate(tomorrow.getDate() + 1);
-                              return tomorrow.toISOString().split('T')[0];
-                            })()} 
-                            data-testid="input-start-date" 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+       {/* Panel Toggle Button (When closed) */}
+       {currentStep === 1 && !isWorkspaceOpen && (
+        <Button 
+          variant="outline" 
+          size="icon" 
+          className="absolute right-4 top-[80px] z-10 bg-background shadow-md h-9 w-9 rounded-full"
+          onClick={() => setIsWorkspaceOpen(true)}
+        >
+           <ChevronLeft className="h-4 w-4" />
+        </Button>
+      )}
 
-                  <FormField
-                    control={form.control}
-                    name="durationMode"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                          <FormLabel className="text-base">
-                            Auto decide for me
-                          </FormLabel>
-                          <FormDescription>
-                            Let AI optimize your campaign duration based on budget
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value === "auto"}
-                            onCheckedChange={(checked) => field.onChange(checked ? "auto" : "custom")}
-                            data-testid="switch-duration-mode"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  {watchDurationMode === "auto" && calculatedDuration && (
-                    <Alert>
-                      <Check className="h-4 w-4" />
-                      <AlertDescription>
-                        Recommended duration: <strong>{calculatedDuration} days</strong> to maximize reach with your budget.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {watchDurationMode === "custom" && (
+      {/* ------------------------------------------------------------- */}
+      {/* RIGHT PANEL: WORKSPACE (Only in Step 1)                        */}
+      {/* ------------------------------------------------------------- */}
+      {currentStep === 1 && (
+        <div 
+           className={`flex-shrink-0 bg-background border-l flex flex-col transition-all duration-300 ${isWorkspaceOpen ? "w-[400px]" : "w-0"} overflow-hidden z-20 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.1)]`}
+        >
+           <div className="p-4 border-b flex flex-col gap-2 bg-card sticky top-0 z-10">
+              <div className="flex justify-between items-center">
+                 <h2 className="font-bold font-serif text-lg">Campaign Setup</h2>
+              </div>
+              
+              <Form {...form}>
+                 <div className="space-y-4 mt-2">
                     <FormField
                       control={form.control}
-                      name="customDays"
+                      name="name"
                       render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Number of Days</FormLabel>
+                        <FormItem className="space-y-1">
+                          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Campaign Name</label>
                           <FormControl>
-                            <Input 
-                              type="number" 
-                              placeholder="e.g., 7" 
-                              {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                              data-testid="input-custom-days"
-                            />
+                            <Input placeholder="E.g. Summer Sale 2024" className="h-8 text-sm" {...field} />
                           </FormControl>
-                          <FormDescription>
-                            Choose how many days you want your campaign to run
-                          </FormDescription>
-                          <FormMessage />
                         </FormItem>
                       )}
                     />
-                  )}
-                </div>
-              )}
-
-              {/* Step 4: Audience & Location Filters (Optional) */}
-              {currentStep === 4 && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-2">Audience & Location Filters</h2>
-                    <p className="text-muted-foreground">
-                      Optional: Refine your audience targeting (most users skip this)
-                    </p>
-                  </div>
-
-                  <Accordion type="single" collapsible data-testid="accordion-filters">
-                    <AccordionItem value="venue-types">
-                      <AccordionTrigger>Venue Types</AccordionTrigger>
-                      <AccordionContent>
+                    
+                    <div className="grid grid-cols-2 gap-3">
                         <FormField
                           control={form.control}
-                          name="venueTypeFilters"
-                          render={() => (
-                            <FormItem>
-                              <div className="grid grid-cols-2 gap-3">
-                                {venueTypes.map((venue) => (
-                                  <FormField
-                                    key={venue}
-                                    control={form.control}
-                                    name="venueTypeFilters"
-                                    render={({ field }) => (
-                                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                        <FormControl>
-                                          <Checkbox
-                                            checked={field.value?.includes(venue)}
-                                            onCheckedChange={(checked) => {
-                                              return checked
-                                                ? field.onChange([...(field.value || []), venue])
-                                                : field.onChange(field.value?.filter((value) => value !== venue))
-                                            }}
-                                            data-testid={`checkbox-venue-${venue.toLowerCase().replace(' ', '-')}`}
-                                          />
-                                        </FormControl>
-                                        <FormLabel className="font-normal">{venue}</FormLabel>
-                                      </FormItem>
-                                    )}
-                                  />
-                                ))}
-                              </div>
-                            </FormItem>
-                          )}
-                        />
-                      </AccordionContent>
-                    </AccordionItem>
-
-                    <AccordionItem value="age-groups">
-                      <AccordionTrigger>Age Groups</AccordionTrigger>
-                      <AccordionContent>
-                        <FormField
-                          control={form.control}
-                          name="targetAgeGroups"
-                          render={() => (
-                            <FormItem>
-                              <div className="grid grid-cols-2 gap-3">
-                                {ageGroups.map((age) => (
-                                  <FormField
-                                    key={age}
-                                    control={form.control}
-                                    name="targetAgeGroups"
-                                    render={({ field }) => (
-                                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                        <FormControl>
-                                          <Checkbox
-                                            checked={field.value?.includes(age)}
-                                            onCheckedChange={(checked) => {
-                                              return checked
-                                                ? field.onChange([...(field.value || []), age])
-                                                : field.onChange(field.value?.filter((value) => value !== age))
-                                            }}
-                                            data-testid={`checkbox-age-${age}`}
-                                          />
-                                        </FormControl>
-                                        <FormLabel className="font-normal">{age}</FormLabel>
-                                      </FormItem>
-                                    )}
-                                  />
-                                ))}
-                              </div>
-                            </FormItem>
-                          )}
-                        />
-                      </AccordionContent>
-                    </AccordionItem>
-
-                    <AccordionItem value="gender">
-                      <AccordionTrigger>Gender</AccordionTrigger>
-                      <AccordionContent>
-                        <FormField
-                          control={form.control}
-                          name="targetGender"
+                          name="startDate"
                           render={({ field }) => (
-                            <FormItem>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl>
-                                  <SelectTrigger data-testid="select-gender">
-                                    <SelectValue placeholder="Select gender" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="all">All</SelectItem>
-                                  <SelectItem value="male">Male</SelectItem>
-                                  <SelectItem value="female">Female</SelectItem>
-                                </SelectContent>
-                              </Select>
+                            <FormItem className="space-y-1">
+                              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Start Date</label>
+                              <FormControl>
+                                <Input type="date" className="h-8 text-sm px-2" {...field} />
+                              </FormControl>
                             </FormItem>
                           )}
                         />
-                      </AccordionContent>
-                    </AccordionItem>
-
-                    <AccordionItem value="affluence">
-                      <AccordionTrigger>Income Levels</AccordionTrigger>
-                      <AccordionContent>
                         <FormField
                           control={form.control}
-                          name="targetAffluence"
-                          render={() => (
-                            <FormItem>
-                              <div className="grid grid-cols-2 gap-3">
-                                {affluenceLevels.map((level) => (
-                                  <FormField
-                                    key={level}
-                                    control={form.control}
-                                    name="targetAffluence"
-                                    render={({ field }) => (
-                                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                        <FormControl>
-                                          <Checkbox
-                                            checked={field.value?.includes(level)}
-                                            onCheckedChange={(checked) => {
-                                              return checked
-                                                ? field.onChange([...(field.value || []), level])
-                                                : field.onChange(field.value?.filter((value) => value !== level))
-                                            }}
-                                            data-testid={`checkbox-affluence-${level.toLowerCase()}`}
-                                          />
-                                        </FormControl>
-                                        <FormLabel className="font-normal">{level}</FormLabel>
-                                      </FormItem>
-                                    )}
-                                  />
-                                ))}
-                              </div>
+                          name="endDate"
+                          render={({ field }) => (
+                            <FormItem className="space-y-1">
+                              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">End Date</label>
+                              <FormControl>
+                                <Input type="date" className="h-8 text-sm px-2" {...field} />
+                              </FormControl>
                             </FormItem>
                           )}
                         />
-                      </AccordionContent>
-                    </AccordionItem>
-
-                    <AccordionItem value="time">
-                      <AccordionTrigger>Time Preference</AccordionTrigger>
-                      <AccordionContent>
-                        <FormField
-                          control={form.control}
-                          name="timePreference"
-                          render={() => (
-                            <FormItem>
-                              <div className="grid grid-cols-2 gap-3">
-                                {timePreferences.map((time) => (
-                                  <FormField
-                                    key={time}
-                                    control={form.control}
-                                    name="timePreference"
-                                    render={({ field }) => (
-                                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                        <FormControl>
-                                          <Checkbox
-                                            checked={field.value?.includes(time)}
-                                            onCheckedChange={(checked) => {
-                                              return checked
-                                                ? field.onChange([...(field.value || []), time])
-                                                : field.onChange(field.value?.filter((value) => value !== time))
-                                            }}
-                                            data-testid={`checkbox-time-${time.toLowerCase().replace(' ', '-')}`}
-                                          />
-                                        </FormControl>
-                                        <FormLabel className="font-normal">{time}</FormLabel>
-                                      </FormItem>
-                                    )}
-                                  />
-                                ))}
-                              </div>
-                            </FormItem>
-                          )}
-                        />
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                </div>
-              )}
-
-              {/* Step 5: Smart Plan Suggestions */}
-              {currentStep === 5 && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-2">Smart Plan Suggestions</h2>
-                    <p className="text-muted-foreground">
-                      With your ₹{totalBudget.toLocaleString()}, you can either spread your reach for {duration} days or go big for premium screens.
-                    </p>
-                  </div>
-
-                  {/* Plan Mode Toggle */}
-                  <div className="flex gap-3">
-                    <Button
-                      type="button"
-                      variant={planMode === "smart" ? "default" : "outline"}
-                      onClick={() => {
-                        setPlanMode("smart");
-                        setSelectedScreenIds(filteredScreensInArea.map(s => s.id));
-                      }}
-                      className="flex-1"
-                      data-testid="button-smart-plan"
-                    >
-                      <Check className="mr-2 h-4 w-4" />
-                      Smart Plan (Auto-optimized)
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={planMode === "customize" ? "default" : "outline"}
-                      onClick={() => setPlanMode("customize")}
-                      className="flex-1"
-                      data-testid="button-customize-plan"
-                    >
-                      Customize Plan
-                    </Button>
-                  </div>
-
-                  {/* Smart Plan Preview */}
-                  {planMode === "smart" && (
-                    <div className="space-y-4">
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-center space-y-2">
-                            <p className="text-4xl font-bold text-primary">
-                              {(() => {
-                                const totalScreens = filteredScreensInArea.reduce((sum, s) => {
-                                  const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
-                                  return sum + screenMultiplier;
-                                }, 0);
-                                const venueCount = filteredScreensInArea.length;
-                                return venueCount === 1 && totalScreens > 1 
-                                  ? `${totalScreens} screens (1 venue) × ${duration} days`
-                                  : totalScreens === venueCount
-                                    ? `${totalScreens} screens × ${duration} days`
-                                    : `${totalScreens} screens (${venueCount} venues) × ${duration} days`;
-                              })()}
-                            </p>
-                            <p className="text-muted-foreground">
-                              Total Ad Plays: <strong className="text-foreground text-primary">{filteredScreensInArea.reduce((sum, s) => {
-                                const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
-                                return sum + (calculateTotalSlots(s, duration || 1) * screenMultiplier);
-                              }, 0).toLocaleString()} slots</strong>
-                            </p>
-                            <p className="text-muted-foreground">
-                              Estimated Reach: <strong className="text-foreground">{estimatedReach?.reach.toLocaleString() || 0}</strong> people
-                            </p>
-                            <p className="text-muted-foreground">
-                              Total Impressions: <strong className="text-foreground">{estimatedReach?.impressions.toLocaleString() || 0}</strong>
-                            </p>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Side-by-side: List and Map */}
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {/* Selected Screens Breakdown */}
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-lg">Selected Screens Breakdown</CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-3 max-h-[600px] overflow-y-auto">
-                          {filteredScreensInArea.map((screen, index) => (
-                            <div 
-                              key={screen.id} 
-                              className="border rounded-lg p-4 space-y-3 hover-elevate" 
-                              data-testid={`screen-breakdown-${screen.id}`}
-                              onMouseEnter={() => setSelectedMapScreen(screen)}
-                              onMouseLeave={() => setSelectedMapScreen(null)}
-                            >
-                              {/* Header with Number and Name */}
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-start gap-3 flex-1">
-                                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium shrink-0">
-                                    {index + 1}
-                                  </span>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <h4 className="font-semibold text-foreground">{screen.name}</h4>
-                                      {screen.isMultiScreen && screen.numberOfScreens && (
-                                        <Badge variant="default" className="bg-purple-600 hover:bg-purple-700 text-xs">
-                                          {screen.numberOfScreens} screens
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                      {screen.location}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <div className="text-lg font-semibold text-primary">
-                                    ₹{(() => {
-                                      const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-                                      return (screen.pricePerDay * screenMultiplier * (duration || 1)).toLocaleString();
-                                    })()}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground whitespace-nowrap">
-                                    {screen.isMultiScreen && screen.numberOfScreens ? (
-                                      <>₹{screen.pricePerDay.toLocaleString()}/day × {screen.numberOfScreens}</>
-                                    ) : (
-                                      <>₹{screen.pricePerDay.toLocaleString()}/day</>
-                                    )} × {duration || 1} days
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Screen Details */}
-                              <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                                <div className="flex items-center gap-2">
-                                  <Users className="h-3.5 w-3.5 shrink-0" />
-                                  <span className="truncate">{screen.avgDailyFootfall.toLocaleString()} daily footfall</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Clock className="h-3.5 w-3.5 shrink-0" />
-                                  <span className="truncate">{screen.playbackSlotsPerHour} slots/hour</span>
-                                </div>
-                              </div>
-
-                              {/* Total Slots */}
-                              <div className="bg-primary/5 rounded-md p-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium text-muted-foreground">Total Ad Plays</span>
-                                  <span className="text-lg font-bold text-primary">
-                                    {(() => {
-                                      const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-                                      return (calculateTotalSlots(screen, duration || 1) * screenMultiplier).toLocaleString();
-                                    })()} slots
-                                  </span>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {duration || 1} days × {screen.playbackSlotsPerHour} slots/hr{screen.isMultiScreen && screen.numberOfScreens ? ` × ${screen.numberOfScreens} screens` : ''}
-                                </p>
-                              </div>
-
-                              {/* Estimated Reach */}
-                              <div className="pt-2 border-t">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-muted-foreground">Estimated Reach</span>
-                                  <span className="text-sm font-medium text-foreground">
-                                    ~{(() => {
-                                      const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-                                      return (screen.avgDailyFootfall * screenMultiplier * (duration || 1)).toLocaleString();
-                                    })()} people
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* View Details Button */}
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="w-full"
-                                onClick={() => setScreenDetailsDialog(screen)}
-                                data-testid={`button-view-details-${screen.id}`}
-                              >
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
-                              </Button>
-                            </div>
-                          ))}
-                          
-                          {/* Total Summary */}
-                          <div className="border-t pt-4 mt-4 space-y-4">
-                            {/* Total Slots Summary */}
-                            <div className="bg-primary/10 rounded-lg p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-muted-foreground">Total Ad Plays</span>
-                                <span className="text-2xl font-bold text-primary">
-                                  {filteredScreensInArea.reduce((sum, s) => {
-                                    const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
-                                    return sum + (calculateTotalSlots(s, duration || 1) * screenMultiplier);
-                                  }, 0).toLocaleString()} slots
-                                </span>
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                Across {filteredScreensInArea.reduce((sum, s) => {
-                                  return sum + (s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1);
-                                }, 0)} screen{filteredScreensInArea.reduce((sum, s) => {
-                                  return sum + (s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1);
-                                }, 0) !== 1 ? 's' : ''} over {duration || 1} day{(duration || 1) !== 1 ? 's' : ''}
-                              </p>
-                            </div>
-
-                            {/* Cost Summary */}
-                            <div>
-                              <div className="flex items-center justify-between text-lg font-semibold">
-                                <span>Total Campaign Cost</span>
-                                <span className="text-primary">
-                                  ₹{filteredScreensInArea.reduce((sum, s) => {
-                                    const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
-                                    return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
-                                  }, 0).toLocaleString()}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between text-sm text-muted-foreground mt-1">
-                                <span>Your Budget</span>
-                                <span>₹{totalBudget.toLocaleString()}</span>
-                              </div>
-                              <div className="flex items-center justify-between text-sm font-medium text-foreground mt-1">
-                                <span>Remaining</span>
-                                <span className={totalBudget - filteredScreensInArea.reduce((sum, s) => {
-                                  const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
-                                  return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
-                                }, 0) >= 0 ? "text-green-600" : "text-red-600"}>
-                                  ₹{(totalBudget - filteredScreensInArea.reduce((sum, s) => {
-                                    const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
-                                    return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
-                                  }, 0)).toLocaleString()}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            {/* Budget Warning */}
-                            {(() => {
-                              const totalCost = filteredScreensInArea.reduce((sum, s) => {
-                                const screenMultiplier = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
-                                return sum + (s.pricePerDay * screenMultiplier * (duration || 1));
-                              }, 0);
-                              const overBudget = totalCost > totalBudget;
-                              
-                              if (overBudget) {
-                                const suggestedBudget = Math.ceil(totalCost / 1000) * 1000; // Round up to nearest 1000
-                                return (
-                                  <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg" data-testid="alert-budget-exceeded">
-                                    <div className="flex items-start gap-3">
-                                      <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
-                                      <div className="flex-1 space-y-2">
-                                        <h4 className="font-semibold text-destructive">Budget Exceeded</h4>
-                                        <p className="text-sm text-foreground">
-                                          The selected screens cost ₹{totalCost.toLocaleString()}, which exceeds your budget of ₹{totalBudget.toLocaleString()}.
-                                        </p>
-                                        <p className="text-sm text-foreground">
-                                          <strong>Suggestion:</strong> Increase your budget to at least ₹{suggestedBudget.toLocaleString()} to proceed with these screens.
-                                        </p>
-                                        <Button
-                                          type="button"
-                                          variant="destructive"
-                                          size="sm"
-                                          onClick={() => {
-                                            // Lock the current duration and screens to prevent recalculation
-                                            // This ensures we ONLY increase the budget without changing anything else
-                                            const currentDuration = watchDurationMode === "auto" ? calculatedDuration : watchCustomDays;
-                                            setLockedDuration(currentDuration ?? null);
-                                            setSkipScreenRefetch(true);
-                                            
-                                            // Increase the budget
-                                            form.setValue("budget", suggestedBudget);
-                                            
-                                            // Reset screen refetch flag after a brief delay
-                                            setTimeout(() => {
-                                              setSkipScreenRefetch(false);
-                                            }, 100);
-                                          }}
-                                          className="mt-2"
-                                          data-testid="button-increase-budget"
-                                        >
-                                          Increase Budget to ₹{suggestedBudget.toLocaleString()}
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            })()}
-                          </div>
-                        </CardContent>
-                        </Card>
-
-                        {/* Map View */}
-                          <Card>
-                            <CardHeader>
-                              <CardTitle className="text-lg">Screen Locations</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="h-[600px] rounded-lg overflow-hidden border">
-                                <Map
-                                  style={{ width: '100%', height: '100%' }}
-                                  defaultCenter={
-                                    watchAreaType === "map" 
-                                      ? { lat: form.getValues("latitude") || 12.9716, lng: form.getValues("longitude") || 77.5946 }
-                                      : filteredScreensInArea.length > 0
-                                        ? { lat: parseFloat(filteredScreensInArea[0].latitude.toString()), lng: parseFloat(filteredScreensInArea[0].longitude.toString()) }
-                                        : { lat: 12.9716, lng: 77.5946 }
-                                  }
-                                  defaultZoom={watchAreaType === "map" ? 12 : 11}
-                                  mapId="campaign-review-map"
-                                  zoomControl={true}
-                                  mapTypeControl={false}
-                                  scaleControl={true}
-                                  streetViewControl={false}
-                                  rotateControl={false}
-                                  fullscreenControl={true}
-                                >
-                                  {/* Show selected screens on map */}
-                                  {filteredScreensInArea.map((screen) => (
-                                    <AdvancedMarker
-                                      key={screen.id}
-                                      position={{
-                                        lat: parseFloat(screen.latitude.toString()),
-                                        lng: parseFloat(screen.longitude.toString()),
-                                      }}
-                                      onClick={() => setScreenDetailsDialog(screen)}
-                                    >
-                                      <svg width={selectedMapScreen?.id === screen.id ? 32 : 24} height={selectedMapScreen?.id === screen.id ? 42 : 36} viewBox="0 0 24 24" fill={selectedMapScreen?.id === screen.id ? "#22c55e" : "#8b5cf6"} stroke="#ffffff" strokeWidth={selectedMapScreen?.id === screen.id ? 3 : 2}>
-                                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-                                      </svg>
-                                    </AdvancedMarker>
-                                  ))}
-                                </Map>
-                              </div>
-                            </CardContent>
-                          </Card>
-                      </div>
                     </div>
-                  )}
+                 </div>
+              </Form>
+           </div>
 
-                  {/* Customize Plan */}
-                  {planMode === "customize" && (
-                    <div className="space-y-4">
-                      {/* Budget Indicator */}
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                              <span>Budget Used</span>
-                              <span className="font-semibold">
-                                ₹{spentBudget.toLocaleString()} / ₹{totalBudget.toLocaleString()}
-                              </span>
-                            </div>
-                            <Progress value={(spentBudget / totalBudget) * 100} data-testid="progress-budget" />
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Side-by-side: List and Map */}
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {/* List View */}
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-lg">Available Screens</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                          {filteredScreensInArea.map((screen) => (
-                            <Card key={screen.id} className={selectedScreenIds.includes(screen.id) ? "border-primary" : ""}>
-                              <CardContent className="pt-6">
-                                <div className="flex items-start gap-4">
-                                  <Checkbox
-                                    checked={selectedScreenIds.includes(screen.id)}
-                                    onCheckedChange={() => toggleScreen(screen.id)}
-                                    data-testid={`checkbox-screen-${screen.id}`}
-                                  />
-                                  <div className="flex-1 cursor-pointer" onClick={() => setScreenDetailsDialog(screen)}>
-                                    <div className="flex items-center gap-2">
-                                      <h3 className="font-semibold">{screen.name}</h3>
-                                      {screen.isMultiScreen && screen.numberOfScreens && (
-                                        <Badge variant="default" className="bg-purple-600 hover:bg-purple-700">
-                                          🖥️ Multi-Venue: {screen.numberOfScreens} screens
-                                        </Badge>
-                                      )}
-                                      <Eye className="h-4 w-4 ml-auto text-muted-foreground" />
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">{screen.location}</p>
-                                    <div className="flex gap-2 mt-2">
-                                      <Badge variant="outline">{screen.venueCategory}</Badge>
-                                      <Badge variant="outline">{screen.avgDailyFootfall.toLocaleString()} daily footfall</Badge>
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="font-semibold">
-                                      {screen.isMultiScreen && screen.numberOfScreens ? (
-                                        <>₹{screen.pricePerDay.toLocaleString()}/day × {screen.numberOfScreens} screens</>
-                                      ) : (
-                                        <>₹{screen.pricePerDay.toLocaleString()}/day</>
-                                      )}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                      ₹{(() => {
-                                        const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-                                        return (screen.pricePerDay * screenMultiplier * (duration || 1)).toLocaleString();
-                                      })()} total
-                                    </p>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Map View */}
-                          <Card>
-                            <CardHeader>
-                              <CardTitle className="text-lg">Screen Locations</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="h-[600px] rounded-lg overflow-hidden border">
-                                <Map
-                                  style={{ width: '100%', height: '100%' }}
-                                  defaultCenter={markerPosition}
-                                  defaultZoom={12}
-                                  mapId="campaign-summary-map"
-                                >
-                                  {filteredScreensInArea.map((screen) => (
-                                    <AdvancedMarker
-                                      key={screen.id}
-                                      position={{
-                                        lat: parseFloat(screen.latitude.toString()),
-                                        lng: parseFloat(screen.longitude.toString()),
-                                      }}
-                                      onClick={() => setSelectedMapScreen(screen)}
-                                    >
-                                      <div style={{
-                                        width: 16, height: 16, borderRadius: '50%',
-                                        background: selectedScreenIds.includes(screen.id) ? '#3b82f6' : '#6b7280',
-                                        border: '2px solid #fff',
-                                        boxShadow: '0 1px 4px rgba(0,0,0,0.3)'
-                                      }} />
-                                    </AdvancedMarker>
-                                  ))}
-                                  
-                                  {selectedMapScreen && (
-                                    <InfoWindow
-                                      position={{
-                                        lat: parseFloat(selectedMapScreen.latitude.toString()),
-                                        lng: parseFloat(selectedMapScreen.longitude.toString()),
-                                      }}
-                                      onCloseClick={() => setSelectedMapScreen(null)}
-                                      maxWidth={350}
-                                      pixelOffset={[0, -10]}
-                                    >
-                                      <div style={{ width: '320px', maxWidth: '320px' }}>
-                                        {/* Screen Image */}
-                                        <div className="relative h-48 bg-gray-200 overflow-hidden rounded-md mb-3">
-                                          {selectedMapScreen.images && selectedMapScreen.images.length > 0 ? (
-                                            <img
-                                              src={selectedMapScreen.images[0]}
-                                              alt={selectedMapScreen.name}
-                                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                              onError={(e) => {
-                                                e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
-                                              }}
-                                            />
-                                          ) : (
-                                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e5e7eb' }}>
-                                              <MapPin style={{ width: '48px', height: '48px', color: '#9ca3af' }} />
-                                            </div>
-                                          )}
-                                          <span style={{
-                                            position: 'absolute',
-                                            top: '8px',
-                                            right: '8px',
-                                            backgroundColor: 'white',
-                                            padding: '4px 8px',
-                                            borderRadius: '4px',
-                                            fontSize: '12px',
-                                            fontWeight: '500'
-                                          }}>
-                                            {selectedMapScreen.type}
-                                          </span>
-                                        </div>
-
-                                        <div style={{ padding: '0 4px' }}>
-                                          <h3 style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', color: '#111827' }}>
-                                            {selectedMapScreen.name}
-                                          </h3>
-                                          <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>
-                                            {selectedMapScreen.location}, {selectedMapScreen.city}
-                                          </p>
-
-                                          <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                                            <span style={{
-                                              padding: '2px 8px',
-                                              borderRadius: '4px',
-                                              fontSize: '11px',
-                                              border: '1px solid #d1d5db',
-                                              color: '#374151'
-                                            }}>
-                                              {selectedMapScreen.size}
-                                            </span>
-                                            <span style={{
-                                              padding: '2px 8px',
-                                              borderRadius: '4px',
-                                              fontSize: '11px',
-                                              border: '1px solid #d1d5db',
-                                              color: '#374151'
-                                            }}>
-                                              👥 {selectedMapScreen.avgDailyFootfall.toLocaleString()}/day
-                                            </span>
-                                          </div>
-
-                                          <div style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            paddingTop: '12px',
-                                            borderTop: '1px solid #e5e7eb'
-                                          }}>
-                                            <div>
-                                              <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>Price per day</p>
-                                              <p style={{ fontWeight: 'bold', fontSize: '18px', color: '#0d9488' }}>
-                                                ₹{selectedMapScreen.pricePerDay.toLocaleString()}
-                                              </p>
-                                            </div>
-                                            <button
-                                              onClick={() => toggleScreen(selectedMapScreen.id)}
-                                              style={{
-                                                backgroundColor: selectedScreenIds.includes(selectedMapScreen.id) ? '#f3f4f6' : '#0d9488',
-                                                color: selectedScreenIds.includes(selectedMapScreen.id) ? '#111827' : 'white',
-                                                padding: '8px 16px',
-                                                borderRadius: '6px',
-                                                border: 'none',
-                                                cursor: 'pointer',
-                                                fontSize: '13px',
-                                                fontWeight: '500'
-                                              }}
-                                            >
-                                              {selectedScreenIds.includes(selectedMapScreen.id) ? "Remove" : "Add"}
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </InfoWindow>
-                                  )}
-                                </Map>
-                              </div>
-                            </CardContent>
-                          </Card>
-                      </div>
-
-                      {/* Reach Stats */}
-                      {estimatedReach && (
-                        <Card className="bg-primary/5 border-primary/20">
-                          <CardContent className="pt-6">
-                            <div className="grid grid-cols-3 gap-4 text-center">
-                              <div>
-                                <p className="text-2xl font-bold text-primary">{selectedScreenIds.length}</p>
-                                <p className="text-sm text-muted-foreground">Screens</p>
-                              </div>
-                              <div>
-                                <p className="text-2xl font-bold text-primary">{estimatedReach.reach.toLocaleString()}</p>
-                                <p className="text-sm text-muted-foreground">Reach</p>
-                              </div>
-                              <div>
-                                <p className="text-2xl font-bold text-primary">{estimatedReach.impressions.toLocaleString()}</p>
-                                <p className="text-sm text-muted-foreground">Impressions</p>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
+           <div className="flex-1 overflow-y-auto bg-muted/20">
+              <div className="p-4 space-y-4">
+                 <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm flex items-center gap-1.5"><Target className="h-4 w-4 text-primary"/> Selected Inventory</h3>
+                    <Badge variant="secondary" className="bg-primary hover:bg-primary text-white text-xs">{selectedScreenIds.length} Screens</Badge>
+                 </div>
+                 
+                 {selectedScreensFull.length === 0 ? (
+                    <div className="text-center py-10 px-4 border-2 border-dashed border-muted-foreground/20 rounded-xl bg-background">
+                       <MapIcon className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                       <p className="text-sm font-medium text-muted-foreground">No screens selected</p>
+                       <p className="text-xs text-muted-foreground mt-2 px-6">Click map markers or use <span className="font-bold text-primary">"Select All"</span> to build your network.</p>
                     </div>
-                  )}
-                </div>
-              )}
-
-              {/* Step 6: Creative & Review */}
-              {currentStep === 6 && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-2">Submit Creative & Review</h2>
-                    <p className="text-muted-foreground">
-                      Provide your creative link and review your campaign before launching.
-                    </p>
-                  </div>
-
-                  {/* Creative URL Input */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Campaign Creative</CardTitle>
-                      <CardDescription>
-                        Provide a publicly available link to your creative image or video (recommended: 1920x1080)
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <FormField
-                        control={form.control}
-                        name="creativeUrl"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Creative URL</FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                type="url"
-                                placeholder="https://example.com/your-creative.jpg"
-                                data-testid="input-creative-url"
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              Enter a publicly accessible URL for your image or video creative
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      {form.watch("creativeUrl") && (
-                        <Alert className="mt-4">
-                          <Check className="h-4 w-4" />
-                          <AlertDescription>
-                            Creative URL added successfully!
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Campaign Summary / Notes */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Campaign Notes</CardTitle>
-                      <CardDescription>
-                        Optional: Add a brief summary or notes about your campaign for the screen owners
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <FormField
-                        control={form.control}
-                        name="summary"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Summary (optional)</FormLabel>
-                            <FormControl>
-                              <textarea
-                                {...field}
-                                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                placeholder="Brief description of what the creative is about, brand guidelines, etc."
-                                maxLength={500}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              {(field.value?.length || 0)}/500 characters
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </CardContent>
-                  </Card>
-
-                  {/* Summary Card */}
-                  <Card className="border-2 border-primary/20">
-                    <CardHeader>
-                      <CardTitle>Campaign Summary</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm text-muted-foreground">🎯 Campaign Goal</p>
-                          <p className="font-semibold" data-testid="text-summary-objective">
-                            {objectives.find(o => o.value === form.getValues("objective"))?.label}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">💰 Budget</p>
-                          <p className="font-semibold" data-testid="text-summary-budget">₹{totalBudget.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">📍 Target Area</p>
-                          <p className="font-semibold" data-testid="text-summary-area">
-                            {watchAreaType === "map" 
-                              ? `${watchRadius} km radius` 
-                              : watchTargetCity}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">📅 Duration</p>
-                          <p className="font-semibold" data-testid="text-summary-duration">{duration} days</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">🖥️ Screens</p>
-                          <p className="font-semibold" data-testid="text-summary-screens">{selectedScreenIds.length} screens</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">👁️ Est. Reach</p>
-                          <p className="font-semibold" data-testid="text-summary-reach">
-                            {estimatedReach?.reach.toLocaleString() || 0} people
-                          </p>
-                        </div>
-                      </div>
-
-                      {form.watch("creativeUrl") && (
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-2">🖼 Creative Preview</p>
-                          <div className="border rounded-lg overflow-hidden">
-                            <img 
-                              src={form.watch("creativeUrl")} 
-                              alt="Campaign creative" 
-                              className="w-full h-auto max-h-96 object-contain"
-                              onError={(e) => {
-                                // Hide broken image if URL is invalid
-                                e.currentTarget.style.display = 'none';
-                              }}
-                            />
+                 ) : (
+                    <div className="space-y-2">
+                       {selectedScreensFull.map((screen, idx) => (
+                          <div key={screen.id} className="bg-background border rounded-lg p-3 hover:border-primary/50 transition-colors shadow-sm group">
+                             <div className="flex gap-3">
+                                <div className="h-12 w-16 bg-muted rounded overflow-hidden flex-shrink-0">
+                                   {screen.images?.[0] ? (
+                                     <img src={screen.images[0]} alt="" className="w-full h-full object-cover" />
+                                   ) : (
+                                     <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                                        <ImageIcon className="h-4 w-4 text-gray-300" />
+                                     </div>
+                                   )}
+                                </div>
+                                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                   <div className="flex justify-between items-start gap-2">
+                                     <h4 className="text-sm font-bold truncate leading-none mt-1">{screen.name}</h4>
+                                     <button 
+                                      onClick={() => toggleScreenSelection(screen.id)}
+                                      className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                     >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                     </button>
+                                   </div>
+                                   <p className="text-[10px] text-muted-foreground truncate">{screen.location}</p>
+                                   <div className="flex justify-between items-center mt-1">
+                                      <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">₹{screen.pricePerDay.toLocaleString()}/day</span>
+                                      <span className="text-[10px] text-muted-foreground">👣 {screen.avgDailyFootfall ? (screen.avgDailyFootfall / 1000).toFixed(1) + 'k' : 'N/A'}</span>
+                                   </div>
+                                </div>
+                             </div>
                           </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Navigation Buttons */}
-              <div className="flex justify-between pt-6">
-                <div className="flex gap-2">
-                  {fromCart && currentStep === 1 ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setLocation("/advertiser/discover")}
-                      data-testid="button-back-to-find-screens"
-                    >
-                      <ArrowLeft className="mr-2 h-4 w-4" />
-                      Back to Find Screens
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={prevStep}
-                      disabled={currentStep === 1}
-                      data-testid="button-previous"
-                    >
-                      <ArrowLeft className="mr-2 h-4 w-4" />
-                      Previous
-                    </Button>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  {currentStep === steps.length && !campaignCreated && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleSaveDraft}
-                      disabled={campaignDrafted}
-                      data-testid="button-save-draft"
-                    >
-                      {campaignDrafted ? "Saved" : "Save as Draft"}
-                    </Button>
-                  )}
-                  
-                  {currentStep < steps.length ? (
-                    <Button
-                      type="button"
-                      onClick={nextStep}
-                      data-testid="button-next"
-                    >
-                      Next
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  ) : !campaignDrafted && (
-                    <Button
-                      type="button"
-                      onClick={() => form.handleSubmit(onSubmit)()}
-                      disabled={createCampaignMutation.isPending || campaignCreated}
-                      data-testid="button-create-campaign"
-                    >
-                      {createCampaignMutation.isPending ? "Creating..." : campaignCreated ? "Created" : "Create Campaign"}
-                    </Button>
-                  )}
-                </div>
+                       ))}
+                    </div>
+                 )}
               </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+           </div>
 
-      {/* Screen Details Dialog */}
-      <Dialog open={!!screenDetailsDialog} onOpenChange={() => setScreenDetailsDialog(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          {screenDetailsDialog && (
-            <>
-              <DialogHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <DialogTitle className="text-2xl">{screenDetailsDialog.name}</DialogTitle>
-                    {screenDetailsDialog.isMultiScreen && screenDetailsDialog.numberOfScreens && (
-                      <Badge variant="default" className="bg-purple-600 hover:bg-purple-700">
-                        🖥️ Multi-Venue: {screenDetailsDialog.numberOfScreens} screens
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </DialogHeader>
-
-              <div className="space-y-6 mt-4">
-                {/* Images Gallery */}
-                {screenDetailsDialog.images && screenDetailsDialog.images.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold">Images</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      {screenDetailsDialog.images.map((image, idx) => (
-                        <img
-                          key={idx}
-                          src={image}
-                          alt={`${screenDetailsDialog.name} - Image ${idx + 1}`}
-                          className="w-full h-48 object-cover rounded-lg border"
-                          onError={(e) => {
-                            e.currentTarget.src = 'https://placehold.co/400x300/1a1a1a/666?text=No+Image';
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Basic Information */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold">Basic Information</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Type</p>
-                      <p className="font-semibold">{screenDetailsDialog.type}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Size</p>
-                      <p className="font-semibold">{screenDetailsDialog.size}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Resolution</p>
-                      <p className="font-semibold">{screenDetailsDialog.resolution}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Visibility</p>
-                      <p className="font-semibold">{screenDetailsDialog.visibility}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Location */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold">Location</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-start gap-2">
-                      <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                      <div>
-                        <p className="font-semibold">{screenDetailsDialog.location}</p>
-                        <p className="text-muted-foreground">{screenDetailsDialog.city}, {screenDetailsDialog.state} - {screenDetailsDialog.pincode}</p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 mt-3">
-                      <div>
-                        <p className="text-muted-foreground">Venue Category</p>
-                        <p className="font-semibold">{screenDetailsDialog.venueCategory}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Display Format</p>
-                        <p className="font-semibold">{screenDetailsDialog.displayFormat}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Audience Demographics */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold">Audience Demographics</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Daily Footfall</p>
-                      <p className="font-semibold">{screenDetailsDialog.avgDailyFootfall.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Gender Orientation</p>
-                      <p className="font-semibold">{screenDetailsDialog.genderOrientation}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Income Level</p>
-                      <p className="font-semibold">{screenDetailsDialog.incomeLevel}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">User Intent</p>
-                      <p className="font-semibold">{screenDetailsDialog.userIntent ? screenDetailsDialog.userIntent.join(", ") : "N/A"}</p>
-                    </div>
-                  </div>
-                  {screenDetailsDialog.detailedAgeGroups && screenDetailsDialog.detailedAgeGroups.length > 0 && (
-                    <div>
-                      <p className="text-muted-foreground mb-2">Age Groups</p>
-                      <div className="flex flex-wrap gap-2">
-                        {screenDetailsDialog.detailedAgeGroups.map((age) => (
-                          <Badge key={age} variant="outline">{age}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {screenDetailsDialog.lifestyleTags && screenDetailsDialog.lifestyleTags.length > 0 && (
-                    <div>
-                      <p className="text-muted-foreground mb-2">Lifestyle Tags</p>
-                      <div className="flex flex-wrap gap-2">
-                        {screenDetailsDialog.lifestyleTags.map((tag) => (
-                          <Badge key={tag} variant="secondary">{tag}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Technical Specs */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold">Technical Specifications</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Playback Slots/Hour</p>
-                      <p className="font-semibold">{screenDetailsDialog.playbackSlotsPerHour}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Avg Dwell Time</p>
-                      <p className="font-semibold">{screenDetailsDialog.avgDwellTime} minutes</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Time of Day Activity</p>
-                      <p className="font-semibold">{screenDetailsDialog.timeOfDayActivity ? screenDetailsDialog.timeOfDayActivity.join(", ") : "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Operating Hours</p>
-                      <p className="font-semibold">
-                        {screenDetailsDialog.customOperatingHoursStart && screenDetailsDialog.customOperatingHoursEnd
-                          ? `${screenDetailsDialog.customOperatingHoursStart} - ${screenDetailsDialog.customOperatingHoursEnd}`
-                          : "Not specified"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Pricing */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold">Pricing</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Price Per Day</p>
-                      <p className="font-semibold text-primary text-lg">
-                        {screenDetailsDialog.isMultiScreen && screenDetailsDialog.numberOfScreens ? (
-                          <>₹{screenDetailsDialog.pricePerDay.toLocaleString()} × {screenDetailsDialog.numberOfScreens} screens</>
-                        ) : (
-                          <>₹{screenDetailsDialog.pricePerDay.toLocaleString()}</>
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Min Booking Days</p>
-                      <p className="font-semibold">{screenDetailsDialog.minBookingDays} days</p>
-                    </div>
-                  </div>
-                  {screenDetailsDialog.isMultiScreen && screenDetailsDialog.numberOfScreens && (
-                    <Alert className="bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900">
-                      <AlertDescription className="text-sm">
-                        This is a multi-venue location with <strong>{screenDetailsDialog.numberOfScreens} screens</strong>. 
-                        Total daily cost: <strong>₹{(screenDetailsDialog.pricePerDay * screenDetailsDialog.numberOfScreens).toLocaleString()}</strong>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </div>
+           <div className="p-4 bg-background border-t shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
+              <div className="flex justify-between items-end mb-4">
+                 <div>
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Est. Cost ({durationDays} days)</p>
+                    <p className="text-2xl font-bold font-serif text-primary leading-none">₹{estimatedCost.toLocaleString()}</p>
+                 </div>
+                 <div className="text-right">
+                    <p className="text-xs text-muted-foreground mb-0.5">Reach</p>
+                    <p className="text-sm font-semibold leading-none">{totalReach >= 1000 ? (totalReach/1000).toFixed(1) + 'k' : totalReach}</p>
+                 </div>
               </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+              <Button 
+                className="w-full font-bold shadow-md" 
+                size="lg"
+                onClick={onSubmitBuild}
+                disabled={selectedScreenIds.length === 0}
+              >
+                 Review & Launch
+                 <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+           </div>
+        </div>
+      )}
     </div>
   );
 }

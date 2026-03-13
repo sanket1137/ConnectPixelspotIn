@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Building2, LayoutDashboard, Navigation } from 'lucide-react';
+import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Building2, LayoutDashboard, Navigation, Zap } from 'lucide-react';
 import { Link } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Screen } from '@shared/schema';
@@ -315,899 +315,457 @@ export default function PublicHome() {
       </header>
 
       {/* Hero Section */}
-      <div className="bg-gradient-to-br from-primary/10 via-background to-background border-b overflow-hidden relative">
-        <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]" />
-        <div className="container mx-auto px-4 py-12 sm:py-16 md:py-20 lg:py-28 relative">
-          <div className="max-w-5xl mx-auto text-center space-y-6 sm:space-y-8">
-            <div className="animate-in fade-in slide-in-from-bottom-3 duration-1000">
-              <Badge className="mb-4 sm:mb-6 text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30 hover-elevate" data-testid="badge-ai-powered">
-                <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                AI-Powered Smart DOOH Ad Network
+      <section className="relative pt-20 pb-24 overflow-hidden bg-background">
+        <div className="container mx-auto px-4 relative z-10 text-center">
+          <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom duration-1000">
+            <div className="space-y-6">
+              <Badge variant="outline" className="px-4 py-1.5 border-primary/30 text-primary font-medium bg-primary/5 mx-auto">
+                Digital Outdoor Advertising Platform
               </Badge>
-            </div>
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
-              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold leading-tight" data-testid="text-hero-title">
-                India's Largest
-                <br />
-                <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent animate-gradient bg-300%">
-                  AI-Enabled DOOH
-                </span>{' '}
-                Advertising Network
+              <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black tracking-tighter text-foreground leading-[1.1]">
+                Run Ads Across <br />
+                <span className="text-primary italic">Real-World</span> Screens
               </h1>
-            </div>
-            <div className="animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-200">
-              <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed px-4" data-testid="text-hero-subtitle">
-                Leverage AI-driven campaign creation, smart screen matching, and intelligent audience targeting. Book premium DOOH screens instantly and launch data-powered campaigns in minutes.
+              <p className="text-xl sm:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+                Launch outdoor ad campaigns across digital screens in your city — all from one platform. Google Ads, but for the physical world.
               </p>
             </div>
-            
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-300">
-              <Card className="hover-elevate border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-                <CardContent className="pt-6 text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <div className="p-2 rounded-full bg-primary/10">
-                      <MapPin className="w-5 h-5 text-primary" />
-                    </div>
-                  </div>
-                  <p className="text-4xl font-bold text-foreground mb-1">{cityCount}</p>
-                  <p className="text-sm text-muted-foreground font-medium">Cities Covered</p>
-                </CardContent>
-              </Card>
-              
-              <Card className="hover-elevate border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-                <CardContent className="pt-6 text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <div className="p-2 rounded-full bg-primary/10">
-                      <Monitor className="w-5 h-5 text-primary" />
-                    </div>
-                  </div>
-                  <p className="text-4xl font-bold text-foreground mb-1">{platformStats?.totalPhysicalScreens?.toLocaleString() || screens.length}</p>
-                  <p className="text-sm text-muted-foreground font-medium">Live Screens</p>
-                </CardContent>
-              </Card>
-              
-              <Card className="hover-elevate border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-                <CardContent className="pt-6 text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <div className="p-2 rounded-full bg-primary/10">
-                      <Users className="w-5 h-5 text-primary" />
-                    </div>
-                  </div>
-                  <p className="text-4xl font-bold text-foreground mb-1">500+</p>
-                  <p className="text-sm text-muted-foreground font-medium">Advertisers Onboard</p>
-                </CardContent>
-              </Card>
-            </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 pt-4 sm:pt-6 animate-in fade-in slide-in-from-bottom-7 duration-1000 delay-500 px-4">
-              <Link href="/register?role=advertiser" className="w-full sm:w-auto">
-                <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group" data-testid="button-hero-cta">
-                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:rotate-12 transition-transform" />
-                  Start Advertising
-                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+            <div className="flex flex-wrap gap-6 justify-center">
+              <Link href="/register?role=advertiser">
+                <Button size="lg" className="h-16 px-10 text-xl font-bold shadow-2xl shadow-primary/20 hover:scale-[1.02] transition-transform">
+                  Start Campaign
                 </Button>
               </Link>
               <Button 
                 size="lg" 
-                variant="outline"
-                className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group"
+                variant="outline" 
+                className="h-16 px-10 text-xl font-bold border-2"
                 onClick={scrollToScreens}
-                data-testid="button-hero-explore"
               >
-                <Search className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:scale-110 transition-transform" />
                 Explore Screens
               </Button>
             </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-8 text-sm sm:text-base text-muted-foreground font-semibold pt-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-primary" />
+                No agencies
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-primary" />
+                No long contracts
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-primary" />
+                Go live in minutes
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Browse by City Section */}
-      {showCities && cities.length > 0 && (
-        <div className="container mx-auto px-4 py-8 sm:py-12 md:py-16">
-          <div className="text-center mb-8 sm:mb-10 space-y-3">
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">Browse by City</h2>
-            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
-              Explore premium DOOH screens in major cities across India
+      {/* Real-time Stats Section */}
+      <section className="-mt-12 mb-12 relative z-20 px-4">
+        <div className="container mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {/* Screens Stats */}
+            <Card className="border-2 shadow-xl hover:scale-[1.02] transition-transform duration-300">
+              <CardContent className="p-8 flex items-center gap-6">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Monitor className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-4xl font-black tracking-tight">{platformStats?.totalPhysicalScreens?.toLocaleString() || "2,400"}+</h3>
+                  <p className="text-muted-foreground font-semibold">Screens Live</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Cities Stats */}
+            <Card className="border-2 shadow-xl hover:scale-[1.02] transition-transform duration-300">
+              <CardContent className="p-8 flex items-center gap-6">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <MapPin className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-4xl font-black tracking-tight">{platformStats?.totalCities || "120"}+</h3>
+                  <p className="text-muted-foreground font-semibold">Cities We Are Live</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Campaigns Stats */}
+            <Card className="border-2 shadow-xl hover:scale-[1.02] transition-transform duration-300">
+              <CardContent className="p-8 flex items-center gap-6">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-4xl font-black tracking-tight">267+</h3>
+                  <p className="text-muted-foreground font-semibold">Campaigns Executed</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 2 — SCREENS NEAR YOU */}
+      <section className="py-32 bg-muted/30" id="screens-section">
+        <div className="container mx-auto px-4">
+          <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">Screens Near You</h2>
+            <p className="text-lg text-muted-foreground">
+              Search your city and discover digital advertising screens available around you. 
+              Browse screen locations, view venue types, and check pricing before launching your campaign.
             </p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
-            {cities.map((city) => {
-              const count = cityCounts[city] || 0;
-              const gradient = getCityGradient(city);
-              const landmarkImg = CITY_LANDMARK_IMAGES[city];
-              
-              return (
-                <Card
-                  key={city}
-                  className="hover-elevate overflow-hidden cursor-pointer group"
-                  onClick={() => handleCityClick(city)}
-                  data-testid={`card-city-${city}`}
-                >
-                  <div className="relative h-20 sm:h-24 overflow-hidden">
-                    {landmarkImg ? (
-                      <img
-                        src={landmarkImg}
-                        alt={`${city} landmark`}
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                        loading="lazy"
-                        onError={(e) => {
-                          // Hide broken image and show gradient fallback
-                          const target = e.currentTarget;
-                          target.style.display = 'none';
-                          const fallback = target.nextElementSibling as HTMLDivElement | null;
-                          if (fallback) fallback.style.display = 'block';
-                        }}
+
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            {/* Filters Sidebar */}
+            <div className="lg:col-span-1 space-y-6">
+              <Card className="bg-background border-2 sticky top-24">
+                <CardContent className="p-6 space-y-6">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                       <label className="text-sm font-bold flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-primary" />
+                        Location
+                      </label>
+                      <Select value={selectedCity} onValueChange={setSelectedCity}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select City" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Cities</SelectItem>
+                          {cities.map(city => <SelectItem key={city} value={city}>{city}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                       <label className="text-sm font-bold flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-primary" />
+                        Venue Type
+                      </label>
+                      <Select value={selectedVenue} onValueChange={setSelectedVenue}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {VENUE_TYPES.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex justify-between">
+                        <label className="text-sm font-bold">Daily Price</label>
+                        <span className="text-sm font-medium text-primary">₹{budgetRange[1].toLocaleString()}</span>
+                      </div>
+                      <Slider 
+                        value={budgetRange} 
+                        onValueChange={setBudgetRange}
+                        min={0}
+                        max={50000}
+                        step={500}
                       />
-                    ) : null}
-                    <div
-                      className="absolute inset-0 transition-transform duration-300 group-hover:scale-110"
-                      style={{ background: gradient, display: landmarkImg ? 'none' : 'block' }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                    <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3">
-                      <h3 className="font-bold text-white text-sm sm:text-base mb-0.5 drop-shadow-lg">{city}</h3>
-                      <p className="text-xs text-white/95 flex items-center gap-1 drop-shadow-md">
-                        <Monitor className="w-3 h-3" />
-                        {count} {count === 1 ? 'Screen' : 'Screens'}
-                      </p>
                     </div>
                   </div>
+
+                  <Button className="w-full" onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}>
+                    {viewMode === 'map' ? 'Switch to List View' : 'Switch to Map View'}
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Results Display */}
+            <div className="lg:col-span-3 space-y-6">
+              {viewMode === 'map' ? (
+                <Card className="h-[600px] overflow-hidden border-2 rounded-2xl">
+                  <Map
+                    style={{ width: '100%', height: '100%' }}
+                    defaultCenter={defaultCenter}
+                    defaultZoom={5}
+                    gestureHandling="greedy"
+                    disableDefaultUI
+                    zoomControl
+                    mapId="discovery-map"
+                  >
+                    {filteredScreens.map((screen) => (
+                      <AdvancedMarker
+                        key={screen.id}
+                        position={{
+                          lat: parseFloat(screen.latitude as string),
+                          lng: parseFloat(screen.longitude as string),
+                        }}
+                        onClick={() => handleMarkerClick(screen.id)}
+                      >
+                        <div className="flex flex-col items-center">
+                          <div className="px-2 py-1 bg-primary text-white text-[10px] font-bold rounded shadow-lg mb-1">
+                            ₹{screen.pricePerDay}
+                          </div>
+                          <div className="w-5 h-5 rounded-full bg-white border-4 border-primary shadow-xl" />
+                        </div>
+                      </AdvancedMarker>
+                    ))}
+                  </Map>
                 </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Our Network Section */}
-      <div className="container mx-auto px-4 py-8 sm:py-12 md:py-16">
-        <div className="text-center mb-8 sm:mb-10 space-y-3">
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
-            Our <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent">Network</span>
-          </h2>
-          <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
-            Discover premium DOOH screens across diverse venue categories
-          </p>
-        </div>
-        
-        {/* Collage Grid Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Left Column - Large Image */}
-          <div
-            className="md:row-span-2 relative overflow-hidden rounded-lg cursor-pointer group h-64 md:h-full"
-            onClick={() => {
-              setSelectedVenue('Highway');
-              setShowCities(false);
-              scrollToScreens();
-            }}
-            data-testid="card-network-highway"
-          >
-            <img
-              src={streetBillboardImg}
-              alt="Road Side Media"
-              className="w-full h-full object-cover transition-transform group-hover:scale-110"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-            <h3 className="absolute bottom-4 left-4 font-bold text-white text-lg md:text-xl">Road Side Media</h3>
-          </div>
-
-          {/* Middle Column - Airport (Top) */}
-          <div
-            className="md:col-span-2 relative overflow-hidden rounded-lg cursor-pointer group h-64"
-            onClick={() => {
-              setSelectedVenue('Airport');
-              setShowCities(false);
-              scrollToScreens();
-            }}
-            data-testid="card-network-airport"
-          >
-            <img
-              src={airportLargeImg}
-              alt="Airport"
-              className="w-full h-full object-cover transition-transform group-hover:scale-110"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-            <h3 className="absolute bottom-4 left-4 font-bold text-white text-lg md:text-xl">Airport</h3>
-          </div>
-
-          {/* Middle Column - Transit Media (Bottom) */}
-          <div
-            className="md:col-span-2 relative overflow-hidden rounded-lg cursor-pointer group h-64"
-            onClick={() => {
-              setSelectedVenue('Metro');
-              setShowCities(false);
-              scrollToScreens();
-            }}
-            data-testid="card-network-transit"
-          >
-            <img
-              src={railwayImg}
-              alt="Transit Media"
-              className="w-full h-full object-cover transition-transform group-hover:scale-110"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-            <h3 className="absolute bottom-4 left-4 font-bold text-white text-lg md:text-xl">Transit Media</h3>
-          </div>
-        </div>
-
-        {/* Bottom Row - Small Images */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mt-4">
-          {[
-            { name: 'Café', image: cafeImg, venueType: 'Café' },
-            { name: 'Tech Parks', image: corporateImg, venueType: 'Corporate Park' },
-            { name: 'Residential', image: residentialImg, venueType: 'Apartment' },
-            { name: 'Gyms', image: gymImg, venueType: 'Gym' },
-            { name: 'City Junction', image: airportKioskImg, venueType: 'Road Junction' },
-          ].map((network) => (
-            <div
-              key={network.name}
-              className="relative overflow-hidden rounded-lg cursor-pointer group h-32 sm:h-40"
-              onClick={() => {
-                setSelectedVenue(network.venueType);
-                setShowCities(false);
-                scrollToScreens();
-              }}
-              data-testid={`card-network-${network.name.toLowerCase().replace(/\s+/g, '-')}`}
-            >
-              <img
-                src={network.image}
-                alt={network.name}
-                className="w-full h-full object-cover transition-transform group-hover:scale-110"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-              <h3 className="absolute bottom-2 sm:bottom-3 left-2 sm:left-3 font-bold text-white text-xs sm:text-sm">{network.name}</h3>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Discover Perfect Screen Section */}
-      <div className="bg-gradient-to-br from-primary/5 to-background border-t mt-8 sm:mt-12 md:mt-16 overflow-hidden relative">
-        <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:60px_60px]" />
-        <div className="container mx-auto px-4 py-12 sm:py-16 md:py-20 relative">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-10 md:gap-12 items-center">
-            <div className="space-y-4 sm:space-y-6">
-              <Badge className="text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30">
-                <MapPin className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Precision Targeting
-              </Badge>
-              <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
-                Discover the
-                <br />
-                <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent">
-                  perfect screen
-                </span>
-                <br />
-                for your brand
-              </h2>
-              <p className="text-base sm:text-lg md:text-xl text-muted-foreground leading-relaxed">
-                Pinpoint high-impact locations with AI-powered recommendations. Our intelligent platform analyzes audience demographics, footfall patterns, and engagement data to match your brand with the most effective DOOH screens across India.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 sm:pt-4">
-                <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group" onClick={scrollToScreens} data-testid="button-discover-cta">
-                  <Search className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:scale-110 transition-transform" />
-                  Explore Screens
-                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                </Button>
-              </div>
-            </div>
-            <div className="relative mt-8 lg:mt-0">
-              <div className="relative rounded-2xl overflow-hidden border border-primary/20 shadow-2xl">
-                <img 
-                  src={discoverHeroImg} 
-                  alt="Digital billboard in urban setting"
-                  className="w-full h-auto"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-              </div>
-              <div className="absolute -bottom-4 sm:-bottom-6 -right-4 sm:-right-6 bg-primary text-primary-foreground p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-xl border border-primary/20">
-                <p className="text-2xl sm:text-3xl md:text-4xl font-bold">{screens.length}+</p>
-                <p className="text-xs sm:text-sm font-medium">Premium Screens</p>
-              </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {filteredScreens.slice(0, 9).map((screen) => (
+                    <ScreenCard key={screen.id} screen={screen} />
+                  ))}
+                  {filteredScreens.length > 9 && (
+                    <Card className="flex flex-col items-center justify-center p-8 border-dashed border-2">
+                      <p className="text-muted-foreground font-medium mb-4">{filteredScreens.length - 9} more screens available</p>
+                      <Link href="/register">
+                        <Button variant="outline">Sign up to explore all</Button>
+                      </Link>
+                    </Card>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* From Discovery to Delivery Section */}
-      <div className="bg-gradient-to-br from-background to-primary/10 border-y mt-8 sm:mt-12 md:mt-16">
-        <div className="container mx-auto px-4 py-12 sm:py-16 md:py-20">
-          <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
-            <Badge className="text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30">
-              <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              Complete Solution
+
+
+      {/* SECTION 5 — SCREEN NETWORK */}
+      <section className="py-24 bg-background">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col lg:flex-row gap-16 items-center">
+            <div className="flex-1 grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <div className="rounded-3xl overflow-hidden aspect-[4/5] relative group">
+                  <img src={railwayImg} alt="Metro Station" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
+                    <p className="text-white font-bold text-lg">Metro Stations</p>
+                  </div>
+                </div>
+                <div className="rounded-3xl overflow-hidden aspect-square relative group">
+                  <img src={cafeImg} alt="Cafes" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
+                    <p className="text-white font-bold text-lg">Cafes</p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4 pt-12">
+                <div className="rounded-3xl overflow-hidden aspect-square relative group">
+                  <img src={discoverHeroImg} alt="Malls" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
+                    <p className="text-white font-bold text-lg">Malls</p>
+                  </div>
+                </div>
+                <div className="rounded-3xl overflow-hidden aspect-[4/5] relative group">
+                  <img src={residentialImg} alt="Residential" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
+                    <p className="text-white font-bold text-lg">Residential Communities</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex-1 space-y-8">
+              <div className="space-y-4">
+                <h2 className="text-4xl md:text-5xl font-bold tracking-tight">A Growing Network of Digital Screens</h2>
+                <p className="text-xl text-muted-foreground leading-relaxed">
+                  Our network includes digital screens located in malls, metro stations, cafes, residential communities, highways, and tech parks.
+                </p>
+                <p className="text-lg font-medium text-foreground italic">
+                  Reach people where attention actually exists — in the real world.
+                </p>
+              </div>
+
+              <ul className="space-y-4">
+                 {[
+                   'Airports & Travel Hubs',
+                   'Corporate & Tech Parks',
+                   'High-Traffic Junctions',
+                   'Luxury Malls & Retail',
+                   'Premium Cafes & Gyms'
+                 ].map(item => (
+                   <li key={item} className="flex items-center gap-3 text-lg font-medium">
+                     <div className="w-2 h-2 rounded-full bg-primary" />
+                     {item}
+                   </li>
+                 ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 6 — FOR SCREEN OWNERS */}
+      <section className="py-24 bg-primary text-white rounded-[60px] mx-4 my-24 overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-white/5 blur-[150px] rounded-full translate-x-1/2 -translate-y-1/2" />
+        <div className="container mx-auto px-8 relative z-10 text-center space-y-12">
+          <div className="max-w-3xl mx-auto space-y-6">
+            <Badge variant="outline" className="border-white/20 text-white bg-white/10 px-4 py-1.5 backdrop-blur-sm">
+              Partnership Opportunities
             </Badge>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
-              From Discovery
-              <br />
-              <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent">
-                to Delivery
-              </span>
-            </h2>
-            <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto px-4">
-              All powered by AI on one intelligent dashboard
+            <h2 className="text-4xl md:text-6xl font-bold tracking-tight">Monetize Your Digital Screens</h2>
+            <p className="text-xl text-white/80 leading-relaxed">
+              Own a digital display or LED screen? Join the PixelSpot network and start earning by running advertiser campaigns on your screens.
             </p>
           </div>
 
-          {/* Features Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {/* AI Campaign Creation */}
-            <Card className="hover-elevate border-primary/20">
-              <CardHeader>
-                <div className="p-3 rounded-full bg-primary/10 w-fit mb-3">
-                  <Sparkles className="w-6 h-6 text-primary" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
+            {[
+              { title: "List Your Screens", desc: "Add your screen details, location, and metadata in minutes." },
+              { title: "Receive Demand", desc: "Get booking requests from verified brands across India." },
+              { title: "Manage Ads", desc: "Upload and schedule creative from one smart dashboard." },
+            ].map((f) => (
+              <div key={f.title} className="p-8 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 space-y-4">
+                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                   <Monitor className="w-6 h-6 text-white" />
                 </div>
-                <CardTitle className="text-xl">AI Campaign Creation</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Let our AI guide you through campaign creation with smart recommendations based on your goals, budget, and target audience.
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Smart Screen Matching */}
-            <Card className="hover-elevate border-primary/20">
-              <CardHeader>
-                <div className="p-3 rounded-full bg-primary/10 w-fit mb-3">
-                  <MapPin className="w-6 h-6 text-primary" />
-                </div>
-                <CardTitle className="text-xl">Smart Screen Matching</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Discover screens that align perfectly with your campaign objectives through intelligent filtering and AI-powered suggestions.
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Real-time Analytics */}
-            <Card className="hover-elevate border-primary/20">
-              <CardHeader>
-                <div className="p-3 rounded-full bg-primary/10 w-fit mb-3">
-                  <TrendingUp className="w-6 h-6 text-primary" />
-                </div>
-                <CardTitle className="text-xl">Performance Tracking</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Monitor your campaign performance with comprehensive analytics including impressions, reach, and engagement metrics.
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Instant Booking */}
-            <Card className="hover-elevate border-primary/20">
-              <CardHeader>
-                <div className="p-3 rounded-full bg-primary/10 w-fit mb-3">
-                  <DollarSign className="w-6 h-6 text-primary" />
-                </div>
-                <CardTitle className="text-xl">Instant Booking</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Book premium DOOH screens instantly with transparent pricing and secure payment processing through our platform.
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Multi-City Campaigns */}
-            <Card className="hover-elevate border-primary/20">
-              <CardHeader>
-                <div className="p-3 rounded-full bg-primary/10 w-fit mb-3">
-                  <Building2 className="w-6 h-6 text-primary" />
-                </div>
-                <CardTitle className="text-xl">Multi-City Campaigns</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Launch campaigns across multiple cities from one dashboard. Manage all your screens and bookings in a single place.
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Automated Workflows */}
-            <Card className="hover-elevate border-primary/20">
-              <CardHeader>
-                <div className="p-3 rounded-full bg-primary/10 w-fit mb-3">
-                  <Monitor className="w-6 h-6 text-primary" />
-                </div>
-                <CardTitle className="text-xl">Streamlined Approval</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Automated booking workflows with real-time notifications keep you updated on approvals, rejections, and campaign status.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-
-      {/* How It Works Section */}
-      <div className="container mx-auto px-4 py-12 sm:py-16 md:py-20">
-        <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
-          <Badge className="text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-primary/20 to-purple-500/20 border-primary/30">
-            Simple Process
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold">How It Works</h2>
-          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto px-4">
-            Launch your DOOH campaign in 4 simple steps
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
-          {/* Step 1 */}
-          <div className="relative">
-            <div className="text-center space-y-4">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 border-2 border-primary/20 text-3xl font-bold text-primary">
-                1
+                <h4 className="text-2xl font-bold">{f.title}</h4>
+                <p className="text-white/70 leading-relaxed">{f.desc}</p>
               </div>
-              <h3 className="text-xl font-bold">Sign Up Free</h3>
-              <p className="text-muted-foreground">
-                Create your advertiser account in seconds. No credit card required to get started.
-              </p>
-            </div>
-            {/* Connector line */}
-            <div className="hidden lg:block absolute top-8 left-[60%] w-full h-0.5 bg-gradient-to-r from-primary/30 to-transparent" />
+            ))}
           </div>
 
-          {/* Step 2 */}
-          <div className="relative">
-            <div className="text-center space-y-4">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 border-2 border-primary/20 text-3xl font-bold text-primary">
-                2
-              </div>
-              <h3 className="text-xl font-bold">Discover Screens</h3>
-              <p className="text-muted-foreground">
-                Browse screens on map or use AI to find the perfect match for your campaign goals.
-              </p>
-            </div>
-            <div className="hidden lg:block absolute top-8 left-[60%] w-full h-0.5 bg-gradient-to-r from-primary/30 to-transparent" />
-          </div>
-
-          {/* Step 3 */}
-          <div className="relative">
-            <div className="text-center space-y-4">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 border-2 border-primary/20 text-3xl font-bold text-primary">
-                3
-              </div>
-              <h3 className="text-xl font-bold">Book & Pay</h3>
-              <p className="text-muted-foreground">
-                Select your dates, upload creatives, and complete secure payment to confirm booking.
-              </p>
-            </div>
-            <div className="hidden lg:block absolute top-8 left-[60%] w-full h-0.5 bg-gradient-to-r from-primary/30 to-transparent" />
-          </div>
-
-          {/* Step 4 */}
-          <div className="text-center space-y-4">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 border-2 border-primary/20 text-3xl font-bold text-primary">
-              4
-            </div>
-            <h3 className="text-xl font-bold">Go Live</h3>
-            <p className="text-muted-foreground">
-              Your campaign goes live and you can track performance in real-time from your dashboard.
-            </p>
-          </div>
-        </div>
-
-        <div className="text-center mt-8 sm:mt-10 md:mt-12">
-          <Link href="/register?role=advertiser" className="inline-block w-full sm:w-auto">
-            <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14 group" data-testid="button-howitworks-cta">
-              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-              Get Started Now
-              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+          <Link href="/register?role=screen_owner" className="inline-block mt-4">
+            <Button size="lg" variant="secondary" className="h-16 px-12 text-xl font-bold bg-white text-primary hover:bg-white/90">
+              List Your Screen
             </Button>
           </Link>
         </div>
-      </div>
+      </section>
 
-      {/* ========== SCREENS NEAR YOU (IP Geolocation) ========== */}
-      {(nearbyLoading || (nearbyData && nearbyData.screens.length > 0)) && (
-        <div className="container mx-auto px-4 py-8 sm:py-12 md:py-16" id="nearby-section">
-          <div className="text-center mb-6 sm:mb-8 space-y-2">
-            {nearbyLoading ? (
-              <>
-                <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
-                  <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent animate-gradient bg-300%">
-                    Finding Screens Near You
-                  </span>
-                </h2>
-                <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Detecting your location...
-                </p>
-              </>
-            ) : nearbyData?.detectedCity ? (
-              <>
-                <Badge className="mb-2 text-xs sm:text-sm px-3 py-1.5 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-500/30">
-                  <Navigation className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" />
-                  Screens near {nearbyData.detectedCity}
-                </Badge>
-                <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
-                  Screens Near You
-                </h2>
-                <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
-                  {nearbyData.totalNearby > nearbyData.screens.length
-                    ? `Showing top ${nearbyData.screens.length} of ${nearbyData.totalNearby} screens within ${nearbyData.radiusKm}km of ${nearbyData.detectedCity}`
-                    : `${nearbyData.screens.length} screens within ${nearbyData.radiusKm}km of ${nearbyData.detectedCity}`}
-                  {nearbyData.fallback && ' — plus popular screens from across India'}
-                </p>
-              </>
-            ) : (
-              <>
-                <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
-                  Top Screens for You
-                </h2>
-                <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Our most popular DOOH screens across India
-                </p>
-              </>
-            )}
+      {/* SECTION 7 — FINAL CALL TO ACTION */}
+      <section className="py-24 bg-background">
+        <div className="container mx-auto px-4 text-center space-y-12">
+          <div className="max-w-3xl mx-auto space-y-6">
+             <h2 className="text-4xl md:text-7xl font-bold tracking-tight leading-tight">Your Audience Is <br /><span className="text-primary italic">Already</span> Outside</h2>
+             <p className="text-xl text-muted-foreground leading-relaxed">
+                Put your brand where people actually see it. Launch your outdoor campaign today and reach thousands of people daily.
+             </p>
           </div>
 
-          {/* Nearby Map */}
-          {!nearbyLoading && nearbyData && nearbyData.lat && nearbyData.lng && (
-            <Card className="mb-6">
-              <CardContent className="p-0">
-                <Map
-                  style={getMapContainerStyle()}
-                  defaultCenter={{ lat: nearbyData.lat, lng: nearbyData.lng }}
-                  defaultZoom={11}
-                  gestureHandling="greedy"
-                  disableDefaultUI
-                  zoomControl={true}
-                  fullscreenControl={true}
-                  mapId="nearby-screens-map"
-                >
-                  {nearbyData.screens.map((screen) => (
-                    <AdvancedMarker
-                      key={screen.id}
-                      position={{
-                        lat: parseFloat(screen.latitude as string),
-                        lng: parseFloat(screen.longitude as string),
-                      }}
-                      onClick={() => {
-                        const el = document.getElementById(`screen-${screen.id}`);
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 18,
-                          height: 18,
-                          borderRadius: '50%',
-                          backgroundColor: '#22c55e',
-                          border: '2px solid white',
-                          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                          cursor: 'pointer',
-                        }}
-                      />
-                    </AdvancedMarker>
-                  ))}
-                </Map>
-              </CardContent>
-            </Card>
-          )}
+          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
+            <Link href="/register?role=advertiser">
+              <Button size="lg" className="h-16 px-10 text-xl font-bold shadow-2xl shadow-primary/20">
+                Start Campaign
+              </Button>
+            </Link>
+             <Button size="lg" variant="outline" className="h-16 px-10 text-xl font-bold border-2" onClick={scrollToScreens}>
+                Explore Screens
+             </Button>
+          </div>
+        </div>
+      </section>
 
-          {/* Nearby Screen Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
-            {nearbyLoading ? (
-              // Skeleton cards while loading
-              Array.from({ length: 4 }).map((_, i) => (
-                <Card key={`skel-${i}`} className="overflow-hidden animate-pulse">
-                  <div className="h-40 sm:h-48 bg-muted" />
-                  <CardContent className="p-3 sm:p-4 space-y-2.5">
-                    <div className="h-4 bg-muted rounded w-3/4" />
-                    <div className="h-3 bg-muted rounded w-1/2" />
-                    <div className="h-3 bg-muted rounded w-2/3" />
-                    <div className="flex justify-between pt-2 border-t">
-                      <div className="h-6 bg-muted rounded w-20" />
-                      <div className="h-8 bg-muted rounded w-16" />
+
+
+      {/* SECTION 3 — HOW IT WORKS */}
+      <section className="py-40 bg-background" id="how-it-works">
+        <div className="container mx-auto px-4">
+          <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">Launch Outdoor Ads in Minutes</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 relative">
+            {[
+              { step: "01", title: "Discover Screens", desc: "Explore advertising screens near your business." },
+              { step: "02", title: "Create Campaign", desc: "Choose screens, campaign duration, and budget." },
+              { step: "03", title: "Upload Your Ad", desc: "Add your creative and preview your campaign." },
+              { step: "04", title: "Go Live", desc: "Your ads start playing across selected screens." },
+            ].map((s, i) => (
+              <div key={s.step} className="relative space-y-4">
+                <div className="text-6xl font-black text-primary/10 absolute -top-10 -left-4 select-none">
+                  {s.step}
+                </div>
+                <div className="bg-primary/5 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
+                  {i === 0 && <Search className="text-primary w-8 h-8" />}
+                  {i === 1 && <Sparkles className="text-primary w-8 h-8" />}
+                  {i === 2 && <Monitor className="text-primary w-8 h-8" />}
+                  {i === 3 && <Zap className="text-primary w-8 h-8" />}
+                </div>
+                <h3 className="text-2xl font-bold">{s.title}</h3>
+                <p className="text-muted-foreground leading-relaxed">{s.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 4 — WHY PIXELSPOT */}
+      <section className="py-40 bg-muted/30 overflow-hidden relative">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col lg:flex-row gap-16 items-center">
+            <div className="flex-1 space-y-8">
+              <div className="space-y-4">
+                <h2 className="text-4xl md:text-5xl font-bold tracking-tight">Outdoor Advertising, Simplified</h2>
+                <p className="text-xl text-muted-foreground leading-relaxed">
+                  Traditional outdoor advertising requires agencies, negotiations, and large budgets. PixelSpot makes outdoor advertising accessible for everyone.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {[
+                  { title: "Transparent Pricing", desc: "See exact daily rates before you book." },
+                  { title: "Hyperlocal Targeting", desc: "Target by city, area, or even specific zip codes." },
+                  { title: "Flexible Durations", desc: "Run ads for a day, a week, or months." },
+                  { title: "Real Inventory", desc: "Direct access to verified screen networks." },
+                  { title: "Smart Analytics", desc: "Track impressions and campaign reach." },
+                ].map((f) => (
+                  <div key={f.title} className="flex gap-4 p-4 rounded-xl bg-background border shadow-sm">
+                    <div className="mt-1 bg-primary/10 rounded-full p-1 h-fit">
+                      <Zap className="w-4 h-4 text-primary" />
                     </div>
-                  </CardContent>
-                </Card>
-              ))
-            ) : (
-              nearbyData?.screens.map((screen) => (
-                <ScreenCard
-                  key={screen.id}
-                  screen={screen}
-                  showDistance={!!nearbyData.detectedCity}
-                />
-              ))
-            )}
+                    <div>
+                      <h4 className="font-bold text-lg">{f.title}</h4>
+                      <p className="text-sm text-muted-foreground">{f.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 relative w-full h-[500px]">
+               <div className="absolute inset-x-0 inset-y-0 bg-primary/10 blur-[100px] rounded-full scale-150 rotate-45" />
+               <div className="relative h-full w-full bg-background rounded-[40px] border-8 border-muted shadow-2xl overflow-hidden p-8 flex flex-col justify-center gap-8">
+                  <div className="flex justify-between items-end border-b pb-6">
+                    <div>
+                      <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest mb-1">Live Campaign</p>
+                      <h4 className="text-3xl font-bold">Urban Reach Pro</h4>
+                    </div>
+                    <Badge className="bg-green-500 text-white animate-pulse">Running</Badge>
+                  </div>
+                  <div className="space-y-6">
+                    <div className="h-4 w-full bg-muted rounded-full overflow-hidden">
+                      <div className="h-full w-[75%] bg-primary" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-8">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1 uppercase font-bold tracking-wider">Impressions</p>
+                        <p className="text-4xl font-black">12.4K</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1 uppercase font-bold tracking-wider">Screens</p>
+                        <p className="text-4xl font-black">42</p>
+                      </div>
+                    </div>
+                    <div className="bg-muted p-4 rounded-2xl">
+                       <p className="text-sm font-medium">Hyperlocal focus: Mumbai West & South</p>
+                    </div>
+                  </div>
+               </div>
+            </div>
           </div>
-
-          {/* "Explore All" CTA */}
-          {!nearbyLoading && nearbyData && screens.length > nearbyData.screens.length && (
-            <div className="text-center mt-6">
-              <Button
-                variant="outline"
-                size="lg"
-                className="group"
-                onClick={scrollToScreens}
-              >
-                <Search className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
-                Explore All {screens.length} Screens
-                <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </div>
-          )}
         </div>
-      )}
+      </section>
 
-      {/* Main Content - Map & Screens with Horizontal Filters */}
-      <div className="container mx-auto px-4 py-8 sm:py-12 md:py-16" id="screens-section">
-        <div className="text-center mb-6 sm:mb-8 space-y-2">
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">Explore Premium Screens</h2>
-          <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
-            Find the perfect DOOH screens for your campaign
-          </p>
-        </div>
 
-        {/* Horizontal Filters */}
-        <Card className="mb-6" data-testid="card-filters">
-          <CardContent className="p-4 sm:p-6">
-            <div className="space-y-4">
-              {/* First Row: Dropdowns */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-                {/* Country Filter */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Country</label>
-                  <Select value={selectedCountry} onValueChange={setSelectedCountry}>
-                    <SelectTrigger className="h-9" data-testid="select-country">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="India">India</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* State Filter */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">State</label>
-                  <Select value={selectedState} onValueChange={setSelectedState}>
-                    <SelectTrigger className="h-9" data-testid="select-state">
-                      <SelectValue placeholder="All States" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All States</SelectItem>
-                      {states.map((state) => (
-                        <SelectItem key={state} value={state}>
-                          {state}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* City Filter */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">City</label>
-                  <Select value={selectedCity} onValueChange={setSelectedCity}>
-                    <SelectTrigger className="h-9" data-testid="select-city">
-                      <SelectValue placeholder="All Cities" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Cities ({screens.length})</SelectItem>
-                      {cities.map((city) => {
-                        const count = screens.filter((s) => s.city === city).length;
-                        return (
-                          <SelectItem key={city} value={city}>
-                            {city} ({count})
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Venue Type Filter */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Venue Type</label>
-                  <Select value={selectedVenue} onValueChange={setSelectedVenue}>
-                    <SelectTrigger className="h-9" data-testid="select-venue">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {VENUE_TYPES.map((venue) => (
-                        <SelectItem key={venue} value={venue}>
-                          {venue}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* View Mode Toggle */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">View</label>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={viewMode === 'map' ? 'default' : 'outline'}
-                      onClick={() => setViewMode('map')}
-                      className="flex-1 h-9"
-                      size="sm"
-                      data-testid="button-view-map"
-                    >
-                      <MapPin className="w-3.5 h-3.5 sm:mr-1.5" />
-                      <span className="hidden sm:inline">Map</span>
-                    </Button>
-                    <Button
-                      variant={viewMode === 'list' ? 'default' : 'outline'}
-                      onClick={() => setViewMode('list')}
-                      className="flex-1 h-9"
-                      size="sm"
-                      data-testid="button-view-list"
-                    >
-                      <Search className="w-3.5 h-3.5 sm:mr-1.5" />
-                      <span className="hidden sm:inline">List</span>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Second Row: Budget Range Slider */}
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">Daily Budget Range</label>
-                  <div className="text-xs font-semibold text-primary">
-                    ₹{budgetRange[0].toLocaleString()} - ₹{budgetRange[1].toLocaleString()}
-                  </div>
-                </div>
-                <Slider
-                  value={budgetRange}
-                  onValueChange={setBudgetRange}
-                  min={0}
-                  max={50000}
-                  step={1000}
-                  className="w-full"
-                  data-testid="slider-budget"
-                />
-              </div>
-
-              {/* Third Row: Results Count & Reset */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t">
-                <p className="text-sm text-muted-foreground" data-testid="text-results-count">
-                  Showing <span className="font-semibold text-foreground">{filteredScreens.length}</span> of {screens.length} screens
-                </p>
-                {(selectedCountry !== 'India' || selectedState !== 'all' || selectedCity !== 'all' || selectedVenue !== 'All Venues' || budgetRange[0] !== 0 || budgetRange[1] !== 50000) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedCountry('India');
-                      setSelectedState('all');
-                      setSelectedCity('all');
-                      setSelectedVenue('All Venues');
-                      setBudgetRange([0, 50000]);
-                    }}
-                    data-testid="button-reset-filters"
-                  >
-                    <Filter className="w-3.5 h-3.5 mr-1.5" />
-                    Reset Filters
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Map View */}
-        {viewMode === 'map' && (
-          <Card className="mb-6">
-            <CardContent className="p-0">
-              <Map
-                style={getMapContainerStyle()}
-                defaultCenter={defaultCenter}
-                defaultZoom={5}
-                gestureHandling="greedy"
-                disableDefaultUI
-                zoomControl={true}
-                fullscreenControl={true}
-                mapId="public-home-map"
-              >
-                {filteredScreens.map((screen) => {
-                  const isHovered = hoveredScreen === screen.id;
-                  return (
-                    <AdvancedMarker
-                      key={screen.id}
-                      position={{
-                        lat: parseFloat(screen.latitude as string),
-                        lng: parseFloat(screen.longitude as string),
-                      }}
-                      onClick={() => handleMarkerClick(screen.id)}
-                      onMouseEnter={() => setHoveredScreen(screen.id)}
-                      onMouseLeave={() => setHoveredScreen(null)}
-                    >
-                      <div
-                        style={{
-                          width: isHovered ? 20 : 16,
-                          height: isHovered ? 20 : 16,
-                          borderRadius: '50%',
-                          backgroundColor: isHovered ? '#22c55e' : '#8b5cf6',
-                          border: '2px solid white',
-                          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                          transition: 'all 0.15s ease',
-                          cursor: 'pointer',
-                        }}
-                      />
-                    </AdvancedMarker>
-                  );
-                })}
-              </Map>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Screen Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-          {screensLoading ? (
-            <div className="col-span-full text-center py-12">
-              <Monitor className="w-12 h-12 mx-auto text-muted-foreground mb-4 animate-pulse" />
-              <p className="text-muted-foreground">Loading screens...</p>
-            </div>
-          ) : filteredScreens.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <Search className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-lg font-semibold mb-2">No screens found</p>
-              <p className="text-muted-foreground mb-4">Try adjusting your filters</p>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedCountry('India');
-                  setSelectedState('all');
-                  setSelectedCity('all');
-                  setSelectedVenue('All Venues');
-                  setBudgetRange([0, 50000]);
-                }}
-                data-testid="button-reset-filters-empty"
-              >
-                Reset Filters
-              </Button>
-            </div>
-          ) : (
-            filteredScreens.map((screen) => (
-              <ScreenCard
-                key={screen.id}
-                screen={screen}
-                isHovered={hoveredScreen === screen.id}
-                onMouseEnter={() => setHoveredScreen(screen.id)}
-                onMouseLeave={() => setHoveredScreen(null)}
-              />
-            ))
-          )}
-        </div>
-
-        {/* CTA Section */}
-        <Card className="mt-8 bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
-          <CardContent className="p-6 sm:p-8 text-center">
-            <h3 className="text-xl sm:text-2xl font-bold mb-2">Ready to Launch Your Campaign?</h3>
-            <p className="text-sm sm:text-base text-muted-foreground mb-6 max-w-2xl mx-auto">
-              Join hundreds of brands using Pixelspot to create impactful DOOH campaigns
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
-              <Link href="/register?role=advertiser">
-                <Button size="lg" data-testid="button-cta-create-campaign">
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Create Campaign
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </Link>
-              <p className="text-xs text-muted-foreground">
-                No credit card required • Free to start
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Bottom CTA */}
-      <div className="bg-gradient-to-br from-primary/10 to-background border-t mt-8 sm:mt-12 md:mt-16">
+      <div className="bg-gradient-to-br from-primary/10 to-background border-t">
         <div className="container mx-auto px-4 py-12 sm:py-14 md:py-16 text-center">
           <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4">Ready to Reach Millions?</h2>
           <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-4">

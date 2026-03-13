@@ -5,8 +5,8 @@ import { verifyToken, auth as firebaseAdmin } from "./firebaseAdmin";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { User, Screen, Campaign, Booking } from "@shared/schema";
 import { db } from "./db";
-import { bookings, passwordResetTokens } from "@shared/schema";
-import { eq, and, gt } from "drizzle-orm";
+import { bookings, passwordResetTokens, campaigns } from "@shared/schema";
+import { eq, and, gt, sql } from "drizzle-orm";
 import { getCampaignAdvice } from "./ai-advisor";
 import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
 import { notificationService } from "./notifications";
@@ -99,6 +99,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get cities error:", error);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get advanced dynamic filters for screens (public equivalent)
+  app.get("/api/public/screens/filters", async (req, res) => {
+    try {
+      const filters = await storage.getScreenFilters();
+      res.json(filters);
+    } catch (error) {
+      console.error("Get public screen filters error:", error);
+      res.status(500).json({ error: "Failed to fetch screen filters" });
     }
   });
 
@@ -1964,7 +1975,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all approved screens (for discovery) with SQL-level filtering & pagination
   app.get("/api/screens", authenticate, async (req, res) => {
     try {
-      const { city, type, minPrice, maxPrice, pincode, limit, offset, search, page, pageSize } = req.query;
+      const { city, type, minPrice, maxPrice, pincode, limit, offset, search, page, pageSize, venueCategories, environmentTypes, environmentTags, minBookingDays } = req.query;
       
       const result = await storage.getFilteredScreens({
         city: city as string | undefined,
@@ -1973,6 +1984,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maxPrice: maxPrice ? parseInt(maxPrice as string) : undefined,
         pincode: pincode as string | undefined,
         search: search as string | undefined,
+        venueCategories: venueCategories ? (Array.isArray(venueCategories) ? venueCategories : [venueCategories]) as string[] : undefined,
+        environmentTypes: environmentTypes ? (Array.isArray(environmentTypes) ? environmentTypes : [environmentTypes]) as string[] : undefined,
+        environmentTags: environmentTags ? (Array.isArray(environmentTags) ? environmentTags : [environmentTags]) as string[] : undefined,
+        minBookingDays: minBookingDays ? parseInt(minBookingDays as string) : undefined,
         limit: limit ? parseInt(limit as string) : undefined,
         offset: offset ? parseInt(offset as string) : undefined,
         page: page ? Math.max(1, parseInt(page as string)) : undefined,
@@ -1998,6 +2013,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get locations error:", error);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get advanced dynamic filters for the Advanced Campaign Builder
+  app.get("/api/screens/filters", authenticate, async (req, res) => {
+    try {
+      const filters = await storage.getScreenFilters();
+      res.json(filters);
+    } catch (error) {
+      console.error("Get screen filters error:", error);
+      res.status(500).json({ error: "Failed to fetch screen filters" });
     }
   });
 
@@ -2080,23 +2106,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get screens in area (map + radius OR city search) — optimized: SQL filtering
   app.get("/api/screens/in-area", authenticate, async (req, res) => {
     try {
-      const { lat, lng, radiusKm, city, budget, duration } = req.query;
+      const { 
+        lat, lng, radiusKm, city, budget, duration,
+        venueCategories, environmentTypes, environmentTags, minBookingDays 
+      } = req.query;
 
       let screens: any[];
+      
+      const filterParams = {
+        venueCategories: venueCategories ? (Array.isArray(venueCategories) ? venueCategories : [venueCategories]) as string[] : undefined,
+        environmentTypes: environmentTypes ? (Array.isArray(environmentTypes) ? environmentTypes : [environmentTypes]) as string[] : undefined,
+        environmentTags: environmentTags ? (Array.isArray(environmentTags) ? environmentTags : [environmentTags]) as string[] : undefined,
+        minBookingDays: minBookingDays ? parseInt(minBookingDays as string) : undefined,
+      };
 
       if (lat && lng && radiusKm) {
         // Map-based + Haversine filtering done in SQL
-        screens = await storage.getFilteredScreens({
+        const result = await storage.getFilteredScreens({
           lat: parseFloat(lat as string),
           lng: parseFloat(lng as string),
           radiusKm: parseFloat(radiusKm as string),
+          ...filterParams
         });
+        screens = Array.isArray(result) ? result : result.screens;
       } else if (city) {
-        screens = await storage.getFilteredScreens({
+        const result = await storage.getFilteredScreens({
           city: city as string,
+          ...filterParams
         });
+        screens = Array.isArray(result) ? result : result.screens;
       } else {
-        screens = await storage.getFilteredScreens({});
+        const result = await storage.getFilteredScreens({
+          ...filterParams
+        });
+        screens = Array.isArray(result) ? result : result.screens;
       }
 
       // Sort by footfall (descending) for better recommendations
@@ -2158,7 +2201,308 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── AI CAMPAIGN MATCH ─────────────────────────────────────────────────────
+
+  // Keyword → venueCategory / tag mappings for deterministic matching
+  const AUDIENCE_MAP: Array<{ keywords: string[]; venueCats: string[]; lifestyleTags: string[]; reason: string }> = [
+    {
+      keywords: ["office", "corporate", "tech", "it ", "software", "professional", "business", "co-work"],
+      venueCats: ["Corporate Park", "Co-working", "Office Building", "Business District"],
+      lifestyleTags: ["Working Professionals"],
+      reason: "Near corporate offices and tech parks",
+    },
+    {
+      keywords: ["metro", "transit", "commut", "travel", "station", "railway"],
+      venueCats: ["Metro", "Bus Stop", "Transit"],
+      lifestyleTags: ["Commuters"],
+      reason: "High commuter traffic at transit points",
+    },
+    {
+      keywords: ["mall", "shop", "retail", "fashion", "brand", "store"],
+      venueCats: ["Mall", "Retail Store", "Shopping Complex"],
+      lifestyleTags: ["Shoppers"],
+      reason: "Inside shopping destinations with high retail traffic",
+    },
+    {
+      keywords: ["student", "college", "university", "campus", "school", "education"],
+      venueCats: ["College", "School"],
+      lifestyleTags: ["Students"],
+      reason: "Near educational institutions with high student footfall",
+    },
+    {
+      keywords: ["cafe", "coffee", "restaurant", "food", "dining", "eat"],
+      venueCats: ["Café", "Restaurant"],
+      lifestyleTags: ["Shoppers"],
+      reason: "In cafes and restaurants with dwell time audiences",
+    },
+    {
+      keywords: ["gym", "fitness", "health", "sport", "workout"],
+      venueCats: ["Gym"],
+      lifestyleTags: ["Health Conscious"],
+      reason: "Fitness-focused audience in gyms and wellness centres",
+    },
+    {
+      keywords: ["cinema", "movie", "theatre", "entertainment", "stadium", "sport event"],
+      venueCats: ["Cinema", "Stadium"],
+      lifestyleTags: ["Shoppers"],
+      reason: "Entertainment venue with captive seated audience",
+    },
+    {
+      keywords: ["airport", "fly", "airline", "terminal"],
+      venueCats: ["Airport"],
+      lifestyleTags: ["Tourists"],
+      reason: "High-value audience at airport terminals",
+    },
+    {
+      keywords: ["hospital", "medical", "clinic", "health"],
+      venueCats: ["Hospital"],
+      lifestyleTags: [],
+      reason: "Healthcare facility with consistent daily footfall",
+    },
+    {
+      keywords: ["apartment", "residential", "housing", "colony", "resident"],
+      venueCats: ["Apartment"],
+      lifestyleTags: ["Local Residents"],
+      reason: "Residential community with hyperlocal audience",
+    },
+  ];
+
+  app.post("/api/advertiser/campaigns/ai-match", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { location, audience, budget } = req.body as { location: string; audience: string; budget: number };
+      if (!location) return res.status(400).json({ error: "Location is required" });
+
+      const audienceLower = (audience || "").toLowerCase();
+
+      // Determine matching rules from audience text
+      const matchedRules = AUDIENCE_MAP.filter((rule) =>
+        rule.keywords.some((kw) => audienceLower.includes(kw))
+      );
+      // If no match → show all screens for that city
+      const matchedVenueCats = matchedRules.flatMap((r) => r.venueCats);
+      const matchedLifestyleTags = matchedRules.flatMap((r) => r.lifestyleTags);
+
+      // Parse city from location — try to find known cities, fallback to first comma segment
+      const locLower = location.toLowerCase();
+      const knownCities = ["bangalore", "bengaluru", "mumbai", "delhi", "hyderabad", "chennai", "pune", "kolkata", "ahmedabad"];
+      const foundCity = knownCities.find((c) => locLower.includes(c)) || location.split(",")[0].trim();
+      const cityGuess = foundCity.charAt(0).toUpperCase() + foundCity.slice(1);
+
+      // Fetch active screens in that city via direct SQL (always returns an array)
+      const rawResult = await db.execute(
+        sql`SELECT * FROM screens WHERE status = 'active' AND LOWER(city) LIKE LOWER(${`%${cityGuess}%`}) ORDER BY avg_daily_footfall DESC NULLS LAST LIMIT 100`
+      );
+      const screenList: any[] = (rawResult.rows as any[]).map((r: any) => {
+        // snake_case → camelCase for key fields the scoring logic needs
+        return {
+          id: r.id, name: r.name, city: r.city, location: r.location,
+          pricePerDay: r.price_per_day, minBookingDays: r.min_booking_days,
+          avgDailyFootfall: r.avg_daily_footfall, venueCategory: r.venue_category,
+          lifestyleTags: r.lifestyle_tags, locationTags: r.location_tags,
+          latitude: r.latitude, longitude: r.longitude, size: r.size,
+          type: r.type, resolution: r.resolution, displayFormat: r.display_format,
+          isMultiScreen: r.is_multi_screen, numberOfScreens: r.number_of_screens,
+          status: r.status, imageUrl: r.image_url, thumbnailUrl: r.thumbnail_url,
+          venueType: r.venue_type, interestSegments: r.interest_segments,
+          userIntent: r.user_intent, state: r.state, pincode: r.pincode,
+          ownerId: r.owner_id, visibility: r.visibility, category: r.category,
+          durationPerSlot: r.duration_per_slot, playbackSlotsPerHour: r.playback_slots_per_hour,
+          operatingHoursStart: r.operating_hours_start, operatingHoursEnd: r.operating_hours_end,
+          operatingDays: r.operating_days, targetAgeGroups: r.target_age_groups,
+          targetGender: r.target_gender, targetAffluence: r.target_affluence,
+          minBookingSlots: r.min_booking_slots, isNegotiable: r.is_negotiable,
+          venueName: r.venue_name, createdAt: r.created_at,
+        };
+      });
+
+      // Score each screen
+      const scored: Array<{ screen: any; score: number; reasons: string[] }> = screenList.map((screen) => {
+        let score = 0;
+        const reasons: string[] = [];
+        const vc = (screen.venueCategory || "").toLowerCase();
+        const lt = ((screen.lifestyleTags || []) as string[]).map((t: string) => t.toLowerCase());
+        const loc = ((screen.locationTags || []) as string[]).map((t: string) => t.toLowerCase());
+
+        for (const rule of matchedRules) {
+          const catMatch = rule.venueCats.some((c) => vc.includes(c.toLowerCase().replace(" ", "")));
+          const tagMatch = rule.lifestyleTags.some((t) => lt.includes(t.toLowerCase()) || loc.includes(t.toLowerCase()));
+          if (catMatch || tagMatch) {
+            score += 15;
+            if (!reasons.includes(rule.reason)) reasons.push(rule.reason);
+          }
+        }
+
+        // Bonus for high footfall
+        if (screen.avgDailyFootfall && screen.avgDailyFootfall > 5000) {
+          score += 5;
+          reasons.push("High daily footfall");
+        }
+
+        // Location text match bonus (venue name / address contains location keywords)
+        const locWords = location.toLowerCase().split(/[\s,]+/).filter((w) => w.length > 3);
+        locWords.forEach((w) => {
+          if ((screen.location || "").toLowerCase().includes(w) || (screen.city || "").toLowerCase().includes(w)) {
+            score += 3;
+          }
+        });
+
+        return { screen, score, reasons };
+      });
+
+      // Sort by score desc
+      const sorted = scored.filter((s) => s.score >= 0).sort((a, b) => b.score - a.score);
+
+      // Budget filtering
+      const budgetWarnings: Array<{ screenId: string; minCost: number; shortfall: number }> = [];
+      const results = sorted.map(({ screen, score, reasons }) => {
+        const minDays = screen.minBookingDays || 1;
+        const minCost = screen.pricePerDay * minDays;
+        if (budget > 0 && minCost > budget) {
+          budgetWarnings.push({
+            screenId: screen.id,
+            minCost,
+            shortfall: minCost - budget,
+          });
+        }
+        // Default reason if none matched
+        const finalReasons = reasons.length > 0 ? reasons : [`Screens in ${screen.city}`];
+        return {
+          screen,
+          reasons: finalReasons,
+        };
+      });
+
+      res.json({
+        screens: results.map((r) => r.screen),
+        matchReasons: results.map((r) => ({ screenId: r.screen.id, reasons: r.reasons })),
+        budgetWarnings,
+        suggestedCity: cityGuess,
+        totalFound: results.length,
+      });
+    } catch (error) {
+      console.error("[AI Match] Error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ── DRAFT CAMPAIGN ENDPOINTS ─────────────────────────────────────────────
+
+
+  // Get current draft for this advertiser
+  app.get("/api/advertiser/campaigns/draft", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const [draft] = await db
+        .select()
+        .from(campaigns)
+        .where(and(eq(campaigns.advertiserId, req.user!.id), eq(campaigns.status, "draft")))
+        .orderBy(sql`created_at DESC`)
+        .limit(1);
+      res.json(draft || null);
+    } catch (error) {
+      console.error("Get draft error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Upsert draft campaign (create or update)
+  app.put("/api/advertiser/campaigns/draft", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { draftId, name, startDate, endDate, budget, creativeUrl, targetArea, ...rest } = req.body;
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const sd = startDate ? new Date(startDate) : tomorrow;
+      const ed = endDate ? new Date(endDate) : tomorrow;
+
+      if (draftId) {
+        const [updated] = await db
+          .update(campaigns)
+          .set({
+            name: name || "Untitled Campaign",
+            summary: JSON.stringify(req.body),
+            targetArea: targetArea || null,
+            startDate: sd,
+            endDate: ed,
+            budget: budget || 0,
+            creativeUrl: creativeUrl || null,
+          })
+          .where(and(eq(campaigns.id, draftId), eq(campaigns.advertiserId, req.user!.id), eq(campaigns.status, "draft")))
+          .returning();
+        return res.json(updated || null);
+      } else {
+        const [created] = await db
+          .insert(campaigns)
+          .values({
+            advertiserId: req.user!.id,
+            name: name || "Untitled Campaign",
+            objective: "brand_awareness",
+            status: "draft",
+            summary: JSON.stringify(req.body),
+            targetArea: targetArea || null,
+            startDate: sd,
+            endDate: ed,
+            budget: budget || 0,
+            creativeUrl: creativeUrl || null,
+          })
+          .returning();
+        return res.json(created);
+      }
+    } catch (error) {
+      console.error("Upsert draft error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Delete a draft campaign
+  app.delete("/api/advertiser/campaigns/draft/:id", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      await db
+        .delete(campaigns)
+        .where(and(eq(campaigns.id, req.params.id), eq(campaigns.advertiserId, req.user!.id), eq(campaigns.status, "draft")));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete draft error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Admin: list all draft campaigns with user info for sales outreach
+  app.get("/api/admin/campaigns/drafts", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT
+          c.id, c.name, c.budget, c.summary, c.creative_url, c.created_at, c.target_area,
+          u.id AS user_id, u.name AS user_name, u.email AS user_email,
+          u.mobile_number AS user_mobile, u.company_name AS user_company
+        FROM campaigns c
+        INNER JOIN users u ON u.id = c.advertiser_id
+        WHERE c.status = 'draft'
+        ORDER BY c.created_at DESC
+        LIMIT 100
+      `);
+      res.json((result.rows as any[]).map(r => ({
+        id: r.id,
+        name: r.name,
+        budget: Number(r.budget || 0),
+        summary: r.summary,
+        creativeUrl: r.creative_url,
+        targetArea: r.target_area,
+        createdAt: r.created_at,
+        advertiser: {
+          id: r.user_id,
+          name: r.user_name,
+          email: r.user_email,
+          mobile: r.user_mobile,
+          company: r.user_company,
+        },
+      })));
+    } catch (error) {
+      console.error("Admin drafts error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get campaigns (advertiser) — optimized: single JOIN with booking stats
+
   app.get("/api/advertiser/campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
       const campaignsWithStats = await storage.getCampaignsWithBookingStats(req.user!.id);

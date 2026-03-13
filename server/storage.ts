@@ -245,6 +245,9 @@ export interface IStorage {
 
   // Screens: get unique locations from SQL (replaces full table scan)
   getScreenLocations(): Promise<{ states: string[]; citiesByState: Record<string, string[]>; allCities: string[] }>;
+  
+  // Screens: get unique filter values for the Advanced Builder
+  getScreenFilters(): Promise<{ cities: string[]; venueTypes: string[]; environmentTypes: string[]; tags: { id: string; name: string }[] }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1485,6 +1488,8 @@ export class DatabaseStorage implements IStorage {
   async getFilteredScreens(filters: {
     city?: string; type?: string; minPrice?: number; maxPrice?: number;
     pincode?: string; lat?: number; lng?: number; radiusKm?: number;
+    venueCategories?: string[]; environmentTypes?: string[];
+    environmentTags?: string[]; minBookingDays?: number;
     limit?: number; offset?: number;
     search?: string;
     page?: number; pageSize?: number;
@@ -1515,6 +1520,24 @@ export class DatabaseStorage implements IStorage {
         OR LOWER(venue_name) LIKE LOWER(${`%${filters.search}%`})
       )`);
     }
+
+    if (filters.venueCategories && filters.venueCategories.length > 0) {
+      conditions.push(drizzleSql`venue_category = ANY(${filters.venueCategories})`);
+    }
+    
+    if (filters.environmentTypes && filters.environmentTypes.length > 0) {
+      conditions.push(drizzleSql`environment_type = ANY(${filters.environmentTypes})`);
+    }
+
+    if (filters.environmentTags && filters.environmentTags.length > 0) {
+      // Postgres array overlap operator && to see if ANY of the requested tags exist in either location_tags or lifestyle_tags
+      conditions.push(drizzleSql`(location_tags && ${filters.environmentTags}::text[] OR lifestyle_tags && ${filters.environmentTags}::text[])`);
+    }
+
+    if (filters.minBookingDays !== undefined) {
+      conditions.push(drizzleSql`min_booking_days <= ${filters.minBookingDays}`);
+    }
+
     if (filters.lat !== undefined && filters.lng !== undefined && filters.radiusKm !== undefined) {
       // Bounding box pre-filter for index usage
       const latRad = filters.radiusKm / 111.0;
@@ -1686,6 +1709,51 @@ export class DatabaseStorage implements IStorage {
     });
 
     return { screens, total };
+  }
+
+  async getScreenFilters(): Promise<{ cities: string[]; venueTypes: string[]; environmentTypes: string[]; tags: { id: string; name: string; displayName: string; category: string }[] }> {
+    // Queries to extract distinct active filter values directly from the database
+    
+    // 1. Unique Cities
+    const cityResult = await db.execute(drizzleSql`
+      SELECT DISTINCT city FROM screens WHERE status = 'active' AND city IS NOT NULL ORDER BY city
+    `);
+    const cities = (cityResult.rows as any[]).map(r => r.city).filter(Boolean);
+
+    // 2. Unique Venue Types
+    const venueResult = await db.execute(drizzleSql`
+      SELECT DISTINCT venue_category as venue_type FROM screens WHERE status = 'active' AND venue_category IS NOT NULL ORDER BY venue_category
+    `);
+    const venueTypes = (venueResult.rows as any[]).map(r => r.venue_type).filter(Boolean);
+
+    // 3. Unique Environment Types (Indoor/Outdoor)
+    const envResult = await db.execute(drizzleSql`
+      SELECT DISTINCT environment_type FROM screens WHERE status = 'active' AND environment_type IS NOT NULL ORDER BY environment_type
+    `);
+    const environmentTypes = (envResult.rows as any[]).map(r => r.environment_type).filter(Boolean);
+
+    // 4. Tags: fetch from screen_tags table to get categories and display names
+    // We only return tags that are either in location_tags or lifestyle_tags of any active screen
+    const tagsResult = await db.execute(drizzleSql`
+      SELECT t.slug, t.display_name, t.category
+      FROM screen_tags t
+      WHERE t.is_active = true
+      AND (
+        EXISTS (SELECT 1 FROM screens s WHERE s.status = 'active' AND t.slug = ANY(s.location_tags))
+        OR EXISTS (SELECT 1 FROM screens s WHERE s.status = 'active' AND t.slug = ANY(s.lifestyle_tags))
+      )
+      ORDER BY t.category, t.display_name
+    `);
+    
+    const tags = (tagsResult.rows as any[])
+      .map((r, i) => ({ 
+        id: r.slug, 
+        name: r.slug, 
+        displayName: r.display_name, 
+        category: r.category 
+      }));
+
+    return { cities, venueTypes, environmentTypes, tags };
   }
 }
 

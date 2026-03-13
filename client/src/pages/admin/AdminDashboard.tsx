@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, Monitor, FileText, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
+import { Users, Monitor, FileText, DollarSign, TrendingUp, TrendingDown, Phone, Mail, Building2, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import GuidedTour from "@/components/GuidedTour";
@@ -30,6 +30,21 @@ interface ChartData {
   advertiserVisitsData: Array<{ date: string; visits: number }>;
 }
 
+interface DraftCampaign {
+  id: string;
+  name: string;
+  budget: number;
+  createdAt: string;
+  summary?: string;
+  advertiser: {
+    id: string;
+    name: string;
+    email: string;
+    mobile?: string;
+    company?: string;
+  };
+}
+
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))'];
 
 export default function AdminDashboard() {
@@ -43,6 +58,11 @@ export default function AdminDashboard() {
 
   const { data: chartData, isLoading: chartLoading } = useQuery<ChartData>({
     queryKey: ["/api/admin/chart-data"],
+  });
+
+  const { data: drafts = [] } = useQuery<DraftCampaign[]>({
+    queryKey: ["/api/admin/campaigns/drafts"],
+    refetchInterval: 60_000, // refresh every minute
   });
 
   useEffect(() => {
@@ -329,6 +349,86 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Abandoned Drafts — Sales Leads */}
+      {drafts.length > 0 && (
+        <Card className="border-amber-200 dark:border-amber-900">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              <CardTitle>Abandoned Campaign Drafts</CardTitle>
+              <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                {drafts.length} lead{drafts.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <CardDescription>
+              Advertisers who started a campaign but didn't finish — reach out to convert them
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y">
+              {drafts.map((draft) => {
+                const draftState = (() => { try { return JSON.parse(draft.summary || "{}"); } catch { return {}; } })();
+                const stepLabel = ["Name","Location","Screens","Duration","Validate","Creative","Review"][((draftState._step || 1) - 1)] || "Started";
+                const ago = (() => {
+                  const ms = Date.now() - new Date(draft.createdAt).getTime();
+                  const h = Math.floor(ms / 3_600_000);
+                  if (h < 1) return "< 1 hour ago";
+                  if (h < 24) return `${h}h ago`;
+                  return `${Math.floor(h / 24)}d ago`;
+                })();
+                return (
+                  <div key={draft.id} className="flex items-center gap-4 px-6 py-4 hover:bg-muted/40 transition-colors">
+                    {/* Avatar */}
+                    <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center shrink-0">
+                      <span className="text-sm font-bold text-amber-700">
+                        {draft.advertiser.name?.charAt(0)?.toUpperCase() || "?"}
+                      </span>
+                    </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm truncate">{draft.advertiser.name}</p>
+                        {draft.advertiser.company && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                            <Building2 className="h-3 w-3" />{draft.advertiser.company}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        Campaign: <span className="text-foreground font-medium">{draft.name}</span>
+                        <span className="mx-1.5 text-muted-foreground/40">·</span>
+                        Stopped at <span className="font-medium text-amber-600">{stepLabel}</span>
+                        <span className="mx-1.5 text-muted-foreground/40">·</span>
+                        {ago}
+                      </p>
+                    </div>
+                    {/* Contact actions */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {draft.advertiser.mobile && (
+                        <a
+                          href={`tel:${draft.advertiser.mobile}`}
+                          className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 transition-colors"
+                        >
+                          <Phone className="h-3 w-3" />
+                          Call
+                        </a>
+                      )}
+                      <a
+                        href={`mailto:${draft.advertiser.email}?subject=Your Draft Campaign on Pixelspot&body=Hi ${draft.advertiser.name}, we noticed you started a campaign "${draft.name}" on Pixelspot. Can we help you complete it?`}
+                        className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 transition-colors"
+                      >
+                        <Mail className="h-3 w-3" />
+                        Email
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Actions */}
       <Card data-tour="quick-actions">

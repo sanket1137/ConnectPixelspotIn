@@ -283,8 +283,9 @@ export default function CampaignDetails() {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Budget</p>
-                <p className="text-sm font-bold text-primary">₹{(campaign.budget / 1000).toFixed(1)}K</p>
+                <p className="text-xs text-muted-foreground mb-1">Campaign Cost</p>
+                <p className="text-sm font-bold text-primary">₹{campaign.budget.toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground">+GST</p>
               </div>
             </div>
           </CardContent>
@@ -302,9 +303,18 @@ export default function CampaignDetails() {
                   Complete payment to confirm your campaign bookings
                 </p>
                 <div className="mt-1 space-y-0.5">
-                  <p className="text-sm text-muted-foreground">Subtotal: ₹{campaign.budget.toLocaleString()}</p>
-                  <p className="text-sm text-muted-foreground">GST (18%): ₹{Math.round(campaign.budget * 0.18).toLocaleString()}</p>
-                  <p className="text-2xl font-bold text-primary">₹{Math.round(campaign.budget * 1.18).toLocaleString()}</p>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Booking Subtotal:</span>
+                    <span className="font-medium text-foreground">₹{campaign.budget.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">GST (18%):</span>
+                    <span className="font-medium text-foreground">₹{(campaign.budget * 0.18).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2 mt-2">
+                    <span className="font-semibold">Grand Total:</span>
+                    <span className="text-2xl font-bold text-primary">₹{(campaign.budget * 1.18).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
               </div>
               <Button
@@ -312,7 +322,7 @@ export default function CampaignDetails() {
                 onClick={() => {
                   initiatePayment({
                     campaignId: campaign.id,
-                    amount: campaign.budget * 100, // Convert to paise
+                    amount: Math.round(campaign.budget * 118), // Convert to paise (including 18% GST)
                     campaignName: campaign.name,
                     onSuccess: () => {
                       queryClient.invalidateQueries({ queryKey: [`/api/advertiser/campaigns/${params?.id}`] });
