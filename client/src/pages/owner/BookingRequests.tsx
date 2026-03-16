@@ -76,6 +76,25 @@ export default function BookingRequests() {
         description: "The booking request has been approved.",
       });
     },
+    onError: (error: Error) => {
+      let message = error.message;
+      let isBankDetails = false;
+      try {
+        const match = message.match(/^\d+: (.+)$/);
+        if (match) {
+          const parsed = JSON.parse(match[1]);
+          message = parsed.error || message;
+          isBankDetails = parsed.code === "BANK_DETAILS_REQUIRED";
+        }
+      } catch { /* use raw message */ }
+      toast({
+        title: "Could Not Approve Booking",
+        description: isBankDetails
+          ? "Please add your bank account details in Profile → Bank Details before approving bookings."
+          : message,
+        variant: "destructive",
+      });
+    },
   });
 
   const rejectMutation = useMutation({

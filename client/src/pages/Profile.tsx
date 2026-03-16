@@ -47,6 +47,7 @@ export default function Profile() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isEditing, setIsEditing] = useState(false);
+  const [isBankEditing, setIsBankEditing] = useState(false);
   const [showMobileDialog, setShowMobileDialog] = useState(false);
   const [mobileNumber, setMobileNumber] = useState("");
   const [otp, setOtp] = useState("");
@@ -59,6 +60,12 @@ export default function Profile() {
     address: user?.address || "",
     city: user?.city || "",
     state: user?.state || "",
+  });
+
+  const [bankFormData, setBankFormData] = useState({
+    bankAccountName: user?.bankAccountName || "",
+    bankAccountNumber: user?.bankAccountNumber || "",
+    bankIfscCode: user?.bankIfscCode || "",
   });
 
   const updateProfileMutation = useMutation({
@@ -121,6 +128,27 @@ export default function Profile() {
       toast({
         title: "Verification failed",
         description: error.message || "Invalid OTP",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateBankDetailsMutation = useMutation({
+    mutationFn: async (data: typeof bankFormData) => {
+      return await apiRequest("PATCH", "/api/owner/bank-details", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({
+        title: "Bank details updated",
+        description: "Your bank account details have been saved successfully.",
+      });
+      setIsBankEditing(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update failed",
+        description: error.message || "Failed to update bank details",
         variant: "destructive",
       });
     },
@@ -477,6 +505,123 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Bank Details - Screen Owners only */}
+        {user?.role === "screen_owner" && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Bank Details</CardTitle>
+                  <CardDescription>Required to receive payouts for approved bookings</CardDescription>
+                </div>
+                {!isBankEditing && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setBankFormData({
+                        bankAccountName: user?.bankAccountName || "",
+                        bankAccountNumber: user?.bankAccountNumber || "",
+                        bankIfscCode: user?.bankIfscCode || "",
+                      });
+                      setIsBankEditing(true);
+                    }}
+                    data-testid="button-edit-bank-details"
+                  >
+                    <Edit2 className="w-4 h-4 mr-2" />
+                    {user?.bankAccountNumber ? "Edit" : "Add Bank Details"}
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!isBankEditing ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Account Holder Name</Label>
+                    <p className="font-medium text-foreground" data-testid="text-bank-account-name">
+                      {user?.bankAccountName || "Not provided"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Account Number</Label>
+                    <p className="font-medium text-foreground" data-testid="text-bank-account-number">
+                      {user?.bankAccountNumber
+                        ? `••••${user.bankAccountNumber.slice(-4)}`
+                        : "Not provided"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">IFSC Code</Label>
+                    <p className="font-medium text-foreground" data-testid="text-bank-ifsc">
+                      {user?.bankIfscCode || "Not provided"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <Label htmlFor="bankAccountName">Account Holder Name *</Label>
+                      <Input
+                        id="bankAccountName"
+                        value={bankFormData.bankAccountName}
+                        onChange={(e) => setBankFormData({ ...bankFormData, bankAccountName: e.target.value })}
+                        placeholder="Name as on bank account"
+                        data-testid="input-bank-account-name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="bankAccountNumber">Account Number *</Label>
+                      <Input
+                        id="bankAccountNumber"
+                        value={bankFormData.bankAccountNumber}
+                        onChange={(e) => setBankFormData({ ...bankFormData, bankAccountNumber: e.target.value.replace(/\D/g, "") })}
+                        placeholder="Bank account number"
+                        data-testid="input-bank-account-number"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="bankIfscCode">IFSC Code *</Label>
+                      <Input
+                        id="bankIfscCode"
+                        value={bankFormData.bankIfscCode}
+                        onChange={(e) => setBankFormData({ ...bankFormData, bankIfscCode: e.target.value.toUpperCase() })}
+                        placeholder="e.g. HDFC0001234"
+                        maxLength={11}
+                        data-testid="input-bank-ifsc"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      onClick={() => updateBankDetailsMutation.mutate(bankFormData)}
+                      disabled={
+                        updateBankDetailsMutation.isPending ||
+                        !bankFormData.bankAccountName.trim() ||
+                        !bankFormData.bankAccountNumber.trim() ||
+                        !bankFormData.bankIfscCode.trim()
+                      }
+                      data-testid="button-save-bank-details"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      {updateBankDetailsMutation.isPending ? "Saving..." : "Save Bank Details"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsBankEditing(false)}
+                      data-testid="button-cancel-bank-edit"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Welcome Tour */}
         <Card>
