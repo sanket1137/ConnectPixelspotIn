@@ -38,6 +38,13 @@ interface PublicStatsResponse {
   totalAdvertisers: number;
 }
 
+interface HomeDataResponse {
+  screens: Screen[];
+  cities: string[];
+  cityStats: { city: string; screenCount: number }[];
+  platformStats: PublicStatsResponse;
+}
+
 interface NearbyScreensResponse {
   detectedCity: string | null;
   detectedState: string | null;
@@ -188,38 +195,17 @@ export default function PublicHome() {
   // Get current user from AuthContext (safe for unauthenticated users — returns null)
   const { user: currentUser } = useAuth();
 
-  // Fetch public screens
-  const { data: screens = [], isLoading: screensLoading } = useQuery<Screen[]>({
-    queryKey: ['/api/public/screens'],
+  // Single combined fetch — screens + cities + cityStats + platformStats in ONE round-trip
+  const { data: homeData, isLoading: screensLoading } = useQuery<HomeDataResponse>({
+    queryKey: ['/api/public/home-data'],
+    staleTime: 60 * 1000, // 1 min — matches server-side cache TTL
   });
 
-  // Fetch cities
-  const { data: citiesData } = useQuery<PublicScreensResponse>({
-    queryKey: ['/api/public/cities'],
-  });
-
-  // Fetch city stats (with physical screen counts)
-  const { data: cityStatsData } = useQuery<CityStatsResponse>({
-    queryKey: ['/api/public/city-stats'],
-  });
-
-  // Fetch platform-wide stats
-  const { data: platformStats } = useQuery<PublicStatsResponse>({
-    queryKey: ['/api/public/stats'],
-  });
-
-  // Fetch nearby screens (IP-based geolocation, no user permission needed)
-  const { data: nearbyData, isLoading: nearbyLoading } = useQuery<NearbyScreensResponse>({
-    queryKey: ['/api/public/nearby-screens'],
-    staleTime: 5 * 60 * 1000, // Cache for 5 min — IP/location doesn't change often
-    retry: 1,
-  });
-
-  const cities = citiesData?.cities || [];
-  const cityCount = platformStats?.totalCities || citiesData?.count || 0;
-
-  // Build city counts map from server-sourced city stats (physical screens, not DB rows)
-  const cityCounts = (cityStatsData?.cityStats || []).reduce((acc, cs) => {
+  const screens = homeData?.screens ?? [];
+  const cities = homeData?.cities ?? [];
+  const cityCount = homeData?.platformStats?.totalCities ?? homeData?.cities?.length ?? 0;
+  const platformStats = homeData?.platformStats;
+  const cityCounts = (homeData?.cityStats ?? []).reduce((acc, cs) => {
     acc[cs.city] = cs.screenCount;
     return acc;
   }, {} as Record<string, number>);

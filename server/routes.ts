@@ -84,6 +84,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ownerId: undefined,
       }));
       
+      res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
       res.json(publicScreens);
     } catch (error) {
       console.error("Get public screens error:", error);
@@ -95,6 +96,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/public/cities", async (req, res) => {
     try {
       const cities = await storage.getDistinctCities();
+      res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
       res.json({ cities, count: cities.length });
     } catch (error) {
       console.error("Get cities error:", error);
@@ -106,6 +108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/public/screens/filters", async (req, res) => {
     try {
       const filters = await storage.getScreenFilters();
+      res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
       res.json(filters);
     } catch (error) {
       console.error("Get public screen filters error:", error);
@@ -117,6 +120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/public/city-stats", async (req, res) => {
     try {
       const cityStats = await storage.getCityStats();
+      res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
       res.json({ cityStats });
     } catch (error) {
       console.error("Get city stats error:", error);
@@ -128,9 +132,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/public/stats", async (req, res) => {
     try {
       const stats = await storage.getPublicStats();
+      res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
       res.json(stats);
     } catch (error) {
       console.error("Get public stats error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Combined home-data endpoint — returns screens + cities + cityStats + platformStats in ONE request
+  // Reduces PublicHome from 4+ round-trips to a single fetch for all critical above-the-fold data
+  app.get("/api/public/home-data", async (req, res) => {
+    try {
+      const [screensRaw, cities, cityStats, platformStats] = await Promise.all([
+        storage.getPublicScreens(),
+        storage.getDistinctCities(),
+        storage.getCityStats(),
+        storage.getPublicStats(),
+      ]);
+      // Project only fields used by PublicHome + ScreenCard — keeps payload small (~80% reduction)
+      const screens = screensRaw.map(({ id, name, city, state, latitude, longitude, pricePerDay, venueCategory, avgDailyFootfall, screenImages, images, category, displayFormat, venueName }) => ({
+        id, name, city, state, latitude, longitude, pricePerDay, venueCategory, avgDailyFootfall,
+        screenImages: screenImages ? [screenImages[0]].filter(Boolean) : null,
+        images: images ? [images[0]].filter(Boolean) : null,
+        category, displayFormat, venueName,
+      }));
+      res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
+      res.json({ screens, cities, cityStats, platformStats });
+    } catch (error) {
+      console.error("Get home data error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });

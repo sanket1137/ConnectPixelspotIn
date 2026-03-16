@@ -1,4 +1,29 @@
 // Reference: blueprint:javascript_database
+
+// ─── Simple in-memory TTL cache for public/read-heavy data ───────────────────
+interface CacheEntry<T> { data: T; expiresAt: number; }
+class SimpleCache {
+  private store = new Map<string, CacheEntry<any>>();
+  get<T>(key: string): T | null {
+    const entry = this.store.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) { this.store.delete(key); return null; }
+    return entry.data as T;
+  }
+  set<T>(key: string, data: T, ttlMs: number): void {
+    this.store.set(key, { data, expiresAt: Date.now() + ttlMs });
+  }
+  invalidate(key: string): void { this.store.delete(key); }
+  invalidatePublicScreens(): void {
+    for (const key of this.store.keys()) {
+      if (key.startsWith('pub:')) this.store.delete(key);
+    }
+  }
+}
+export const publicCache = new SimpleCache();
+const PUBLIC_SCREENS_TTL = 60_000; // 60 seconds
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { 
   users, screens, campaigns, bookings, payments,
   ownerPayouts, invoices, notifications, proofOfPlay,
@@ -325,34 +350,43 @@ export class DatabaseStorage implements IStorage {
 
   async getApprovedScreens(): Promise<Screen[]> {
     // Return screens with 'active' status (available for booking)
+    const cached = publicCache.get<Screen[]>('pub:approvedScreens');
+    if (cached) return cached;
     const activeScreens = await db.select().from(screens).where(eq(screens.status, "active"));
     console.log(`   💾 [getApprovedScreens] Found ${activeScreens.length} active screens in database`);
     if (activeScreens.length > 0) {
       console.log(`      Sample cities: ${activeScreens.slice(0, 5).map(s => s.city).join(', ')}`);
     }
+    publicCache.set('pub:approvedScreens', activeScreens, PUBLIC_SCREENS_TTL);
     return activeScreens;
   }
 
   async getPublicScreens(): Promise<Screen[]> {
-    // Return only active screens for public viewing
-    return await db.select().from(screens).where(eq(screens.status, "active")).orderBy(desc(screens.createdAt));
+    const cached = publicCache.get<Screen[]>('pub:publicScreens');
+    if (cached) return cached;
+    const result = await db.select().from(screens).where(eq(screens.status, "active")).orderBy(desc(screens.createdAt));
+    publicCache.set('pub:publicScreens', result, PUBLIC_SCREENS_TTL);
+    return result;
   }
 
   async getDistinctCities(): Promise<string[]> {
-    // Get distinct cities from active screens
+    const cached = publicCache.get<string[]>('pub:cities');
+    if (cached) return cached;
     const result = await db
       .selectDistinct({ city: screens.city })
       .from(screens)
       .where(eq(screens.status, "active"));
-    
-    return result
+    const cities = result
       .map(r => r.city)
       .filter((city): city is string => city !== null)
       .sort();
+    publicCache.set('pub:cities', cities, PUBLIC_SCREENS_TTL);
+    return cities;
   }
 
   async getCityStats(): Promise<{ city: string; screenCount: number }[]> {
-    // Get per-city screen counts accounting for multi-screen listings
+    const cached = publicCache.get<{ city: string; screenCount: number }[]>('pub:cityStats');
+    if (cached) return cached;
     const result = await db.execute(drizzleSql`
       SELECT city,
         SUM(CASE WHEN is_multi_screen = true AND number_of_screens IS NOT NULL
@@ -360,13 +394,17 @@ export class DatabaseStorage implements IStorage {
       FROM screens WHERE status = 'active'
       GROUP BY city ORDER BY screen_count DESC
     `);
-    return (result.rows as any[]).map(r => ({
+    const cityStats = (result.rows as any[]).map(r => ({
       city: r.city as string,
       screenCount: Number(r.screen_count),
     }));
+    publicCache.set('pub:cityStats', cityStats, PUBLIC_SCREENS_TTL);
+    return cityStats;
   }
 
   async getPublicStats(): Promise<{ totalPhysicalScreens: number; totalCities: number; totalAdvertisers: number }> {
+    const cached = publicCache.get<{ totalPhysicalScreens: number; totalCities: number; totalAdvertisers: number }>('pub:stats');
+    if (cached) return cached;
     const screenStats = await db.execute(drizzleSql`
       SELECT
         SUM(CASE WHEN is_multi_screen = true AND number_of_screens IS NOT NULL
@@ -379,20 +417,24 @@ export class DatabaseStorage implements IStorage {
     `);
     const row = screenStats.rows[0] as any;
     const advRow = advStats.rows[0] as any;
-    return {
+    const stats = {
       totalPhysicalScreens: Number(row?.total_physical || 0),
       totalCities: Number(row?.total_cities || 0),
       totalAdvertisers: Number(advRow?.cnt || 0),
     };
+    publicCache.set('pub:stats', stats, PUBLIC_SCREENS_TTL);
+    return stats;
   }
 
   async createScreen(insertScreen: InsertScreen): Promise<Screen> {
     const [screen] = await db.insert(screens).values(insertScreen).returning();
+    publicCache.invalidatePublicScreens();
     return screen;
   }
 
   async updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined> {
     const [screen] = await db.update(screens).set(data).where(eq(screens.id, id)).returning();
+    publicCache.invalidatePublicScreens();
     return screen || undefined;
   }
 
@@ -402,11 +444,13 @@ export class DatabaseStorage implements IStorage {
       updateData.rejectionReason = rejectionReason;
     }
     const [screen] = await db.update(screens).set(updateData).where(eq(screens.id, id)).returning();
+    publicCache.invalidatePublicScreens();
     return screen || undefined;
   }
 
   async deleteScreen(id: string): Promise<boolean> {
     const result = await db.delete(screens).where(eq(screens.id, id));
+    publicCache.invalidatePublicScreens();
     return true;
   }
 
