@@ -30,7 +30,7 @@ export function NotificationBell() {
 
   const { data: notifData } = useQuery<{ notifications: Notification[]; unreadCount: number }>({
     queryKey: ["/api/notifications"],
-    refetchInterval: 30000, // Poll every 30s as fallback
+    refetchInterval: 60000, // Poll every 60s as fallback (WebSocket handles real-time)
   });
 
   const markReadMutation = useMutation({

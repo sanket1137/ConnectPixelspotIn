@@ -11,7 +11,9 @@ Crawl-delay: 1
 # Disallow admin and private routes
 Disallow: /admin/
 Disallow: /api/
-Disallow: /dashboard/settings/
+Disallow: /advertiser/
+Disallow: /owner/
+Disallow: /dashboard/
 Disallow: /profile/
 
 # Allow important pages

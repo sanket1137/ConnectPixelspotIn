@@ -293,27 +293,31 @@ export default function CampaignDetails() {
       </div>
 
       {/* Payment Section */}
-      {!(["advertiser_paid", "partially_released", "fully_settled"] as string[]).includes(campaign.paymentStatus || "") && (
+      {!(["advertiser_paid", "partially_released", "fully_settled"] as string[]).includes(campaign.paymentStatus || "") && (() => {
+        const approvedBookings = campaign.bookings.filter(b => b.ownerApproved || b.status === "approved");
+        const approvedTotal = approvedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
+        if (approvedBookings.length === 0) return null;
+        return (
         <Card className="border-2 border-primary/30 bg-primary/5">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-lg">Payment Required</h3>
                 <p className="text-sm text-muted-foreground">
-                  Complete payment to confirm your campaign bookings
+                  Complete payment for {approvedBookings.length} approved booking{approvedBookings.length > 1 ? "s" : ""}
                 </p>
                 <div className="mt-1 space-y-0.5">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Booking Subtotal:</span>
-                    <span className="font-medium text-foreground">₹{campaign.budget.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                    <span className="text-muted-foreground">Approved Bookings ({approvedBookings.length}):</span>
+                    <span className="font-medium text-foreground">₹{approvedTotal.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">GST (18%):</span>
-                    <span className="font-medium text-foreground">₹{(campaign.budget * 0.18).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="font-medium text-foreground">₹{(approvedTotal * 0.18).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between border-t pt-2 mt-2">
                     <span className="font-semibold">Grand Total:</span>
-                    <span className="text-2xl font-bold text-primary">₹{(campaign.budget * 1.18).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="text-2xl font-bold text-primary">₹{(approvedTotal * 1.18).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               </div>
@@ -322,7 +326,7 @@ export default function CampaignDetails() {
                 onClick={() => {
                   initiatePayment({
                     campaignId: campaign.id,
-                    amount: Math.round(campaign.budget * 100), // Base amount in paise — server adds 18% GST
+                    amount: Math.round(approvedTotal * 100), // Server recalculates from approved bookings
                     campaignName: campaign.name,
                     onSuccess: () => {
                       queryClient.invalidateQueries({ queryKey: [`/api/advertiser/campaigns/${params?.id}`] });
@@ -338,7 +342,8 @@ export default function CampaignDetails() {
             </div>
           </CardContent>
         </Card>
-      )}
+        );
+      })()}
       {(["advertiser_paid", "partially_released", "fully_settled"] as string[]).includes(campaign.paymentStatus || "") && (
         <Alert>
           <CheckCircle className="h-4 w-4" />

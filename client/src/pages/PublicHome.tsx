@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -198,7 +198,7 @@ export default function PublicHome() {
   // Single combined fetch — screens + cities + cityStats + platformStats in ONE round-trip
   const { data: homeData, isLoading: screensLoading } = useQuery<HomeDataResponse>({
     queryKey: ['/api/public/home-data'],
-    staleTime: 60 * 1000, // 1 min — matches server-side cache TTL
+    staleTime: 5 * 60 * 1000, // 5 min — matches server-side cache TTL
   });
 
   const screens = homeData?.screens ?? [];
@@ -225,6 +225,15 @@ export default function PublicHome() {
     if (screen.pricePerDay < budgetRange[0] || screen.pricePerDay > budgetRange[1]) return false;
     return true;
   });
+
+  // Limit markers on map for performance (top 200 by footfall)
+  const MAX_MAP_MARKERS = 200;
+  const mapMarkers = useMemo(() => {
+    if (filteredScreens.length <= MAX_MAP_MARKERS) return filteredScreens;
+    return [...filteredScreens]
+      .sort((a, b) => (b.avgDailyFootfall || 0) - (a.avgDailyFootfall || 0))
+      .slice(0, MAX_MAP_MARKERS);
+  }, [filteredScreens]);
 
   const handleMarkerClick = (screenId: string) => {
     const element = document.getElementById(`screen-${screenId}`);
@@ -471,6 +480,11 @@ export default function PublicHome() {
             <div className="lg:col-span-3 space-y-6">
               {viewMode === 'map' ? (
                 <Card className="h-[600px] overflow-hidden border-2 rounded-2xl">
+                  {filteredScreens.length > MAX_MAP_MARKERS && (
+                    <div className="bg-muted/80 text-center py-1 text-xs text-muted-foreground">
+                      Showing top {MAX_MAP_MARKERS} of {filteredScreens.length} screens on map
+                    </div>
+                  )}
                   <Map
                     style={{ width: '100%', height: '100%' }}
                     defaultCenter={defaultCenter}
@@ -480,7 +494,7 @@ export default function PublicHome() {
                     zoomControl
                     mapId="discovery-map"
                   >
-                    {filteredScreens.map((screen) => (
+                    {mapMarkers.map((screen) => (
                       <AdvancedMarker
                         key={screen.id}
                         position={{
@@ -773,7 +787,7 @@ export default function PublicHome() {
       {/* Footer */}
       <footer className="border-t bg-muted/30">
         <div className="container mx-auto px-4 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
             {/* Brand */}
             <div className="md:col-span-1">
               <div className="flex items-center gap-2 mb-3">
@@ -783,6 +797,9 @@ export default function PublicHome() {
               <p className="text-sm text-muted-foreground mt-3">PIXELSPOT SOLUTIONS PVT LTD</p>
               <p className="text-xs text-muted-foreground">CIN: U26103KA2025PTC201293</p>
               <p className="text-xs text-muted-foreground">GSTIN: 29AAPCP6653G1ZT</p>
+              {platformStats && (
+                <p className="text-xs text-primary font-medium mt-3">{platformStats.totalScreens?.toLocaleString()}+ screens across {platformStats.totalCities}+ cities</p>
+              )}
             </div>
             
             {/* Quick Links */}
@@ -793,6 +810,16 @@ export default function PublicHome() {
                 <Link href="/register?role=advertiser"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Start Advertising</span></Link>
                 <Link href="/login"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Sign In</span></Link>
                 <Link href="/about"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">About Us</span></Link>
+              </div>
+            </div>
+
+            {/* Popular Cities */}
+            <div>
+              <h4 className="font-semibold text-sm mb-4">Top Cities</h4>
+              <div className="flex flex-col gap-2">
+                {["Bengaluru", "Mumbai", "Delhi", "Ahmedabad", "Hyderabad", "Pune", "Chennai", "Surat"].map(city => (
+                  <button key={city} className="text-sm text-muted-foreground hover:text-foreground text-left" onClick={() => handleCityClick(city)}>{city}</button>
+                ))}
               </div>
             </div>
 
@@ -813,7 +840,7 @@ export default function PublicHome() {
               <div className="flex flex-col gap-2 text-sm text-muted-foreground">
                 <p>contact@pixelspot.in</p>
                 <p>+91 72048 08334</p>
-                <p>Bangalore, Karnataka, India</p>
+                <p>Bengaluru, Karnataka, India</p>
               </div>
             </div>
           </div>

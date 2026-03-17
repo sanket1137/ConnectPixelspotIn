@@ -43,6 +43,7 @@ export const VENUE_CATEGORY_ALIASES: Record<string, string> = {
   'hotel/restaurant': 'Hotel',
   'metro station': 'Metro',
   'office complex': 'Office Building',
+  'residential society': 'Apartment',
   'shopping mall': 'Mall',
 };
 
@@ -83,6 +84,7 @@ export const CITY_ALIASES: Record<string, string> = {
   'ahmedbad': 'Ahmedabad',
   'ahmadabad': 'Ahmedabad',
   'gurgaon': 'Gurugram',
+  'vijaywada': 'Vijayawada',
 };
 
 /**
@@ -101,7 +103,7 @@ export function normalizeCityName(raw: string): string {
 export const TIER_1_CITIES = [
   "Mumbai",
   "Delhi",
-  "Bangalore",
+  "Bengaluru",
   "Hyderabad",
   "Chennai",
   "Kolkata",
@@ -147,7 +149,7 @@ export const TIER_2_CITIES = [
   "Ghaziabad",
   "Gorakhpur",
   "Guntur",
-  "Gurgaon",
+  "Gurugram",
   "Guwahati",
   "Gwalior",
   "Hubli",
@@ -174,12 +176,12 @@ export const TIER_2_CITIES = [
   "Lucknow",
   "Ludhiana",
   "Madurai",
-  "Mangalore",
+  "Mangaluru",
   "Mathura",
   "Meerut",
   "Moradabad",
   "Muzaffarpur",
-  "Mysore",
+  "Mysuru",
   "Nagpur",
   "Nanded",
   "Nashik",
@@ -188,7 +190,6 @@ export const TIER_2_CITIES = [
   "Noida",
   "Panipat",
   "Patna",
-  "Pondicherry",
   "Prayagraj",
   "Puducherry",
   "Raichur",

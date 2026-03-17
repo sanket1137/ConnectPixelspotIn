@@ -21,7 +21,7 @@ class SimpleCache {
   }
 }
 export const publicCache = new SimpleCache();
-const PUBLIC_SCREENS_TTL = 60_000; // 60 seconds
+const PUBLIC_SCREENS_TTL = 300_000; // 5 minutes
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { 
@@ -45,6 +45,8 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, or, desc, asc, sql as drizzleSql, inArray, isNull, count } from "drizzle-orm";
+import { normalizeCityName } from "@shared/constants";
+import { notifyUser } from "./websocket";
 
 /** Convert a raw DB row (snake_case keys) to camelCase to match drizzle schema types.
  *  Recursively converts nested plain objects (e.g. from row_to_json). */
@@ -1125,6 +1127,15 @@ export class DatabaseStorage implements IStorage {
 
   async createNotification(insertNotification: InsertNotification): Promise<Notification> {
     const [notification] = await db.insert(notifications).values(insertNotification).returning();
+    // Push real-time notification via WebSocket
+    if (notification.userId) {
+      notifyUser(notification.userId, {
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        data: notification.data as Record<string, any> | undefined,
+      });
+    }
     return notification;
   }
 
@@ -1542,7 +1553,8 @@ export class DatabaseStorage implements IStorage {
     const conditions: ReturnType<typeof drizzleSql>[] = [drizzleSql`status = 'active'`];
 
     if (filters.city) {
-      conditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${filters.city}%`})`);
+      const normalizedCity = normalizeCityName(filters.city);
+      conditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${normalizedCity}%`})`);
     }
     if (filters.type) {
       conditions.push(drizzleSql`type = ${filters.type}`);
@@ -1632,21 +1644,28 @@ export class DatabaseStorage implements IStorage {
       SELECT DISTINCT state, city FROM screens WHERE status = 'active' ORDER BY state, city
     `);
     const states = new Set<string>();
-    const citiesByState: Record<string, string[]> = {};
+    const citiesByState: Record<string, Set<string>> = {};
     const allCities = new Set<string>();
 
     (result.rows as any[]).forEach(r => {
+      const normalizedCity = normalizeCityName(r.city);
       if (r.state) {
         states.add(r.state);
-        if (!citiesByState[r.state]) citiesByState[r.state] = [];
-        citiesByState[r.state].push(r.city);
+        if (!citiesByState[r.state]) citiesByState[r.state] = new Set();
+        citiesByState[r.state].add(normalizedCity);
       }
-      allCities.add(r.city);
+      allCities.add(normalizedCity);
     });
+
+    // Convert Sets to sorted arrays
+    const citiesByStateArrays: Record<string, string[]> = {};
+    for (const [state, citySet] of Object.entries(citiesByState)) {
+      citiesByStateArrays[state] = Array.from(citySet).sort();
+    }
 
     return {
       states: Array.from(states).sort(),
-      citiesByState,
+      citiesByState: citiesByStateArrays,
       allCities: Array.from(allCities).sort(),
     };
   }
@@ -1668,7 +1687,8 @@ export class DatabaseStorage implements IStorage {
       conditions.push(drizzleSql`status = ${params.status}`);
     }
     if (params.city) {
-      conditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${params.city}%`})`);
+      const normalizedCity = normalizeCityName(params.city);
+      conditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${normalizedCity}%`})`);
     }
     if (params.search) {
       conditions.push(drizzleSql`(

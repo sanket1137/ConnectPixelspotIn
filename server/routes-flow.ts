@@ -48,9 +48,9 @@ export function registerFlowRoutes(
   // Create Razorpay order for a campaign payment
   app.post("/api/payments/create-order", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
-      const { campaignId, amount } = req.body;
-      if (!campaignId || !amount) {
-        return res.status(400).json({ error: "campaignId and amount are required" });
+      const { campaignId } = req.body;
+      if (!campaignId) {
+        return res.status(400).json({ error: "campaignId is required" });
       }
 
       const campaign = await storage.getCampaign(campaignId);
@@ -67,8 +67,15 @@ export function registerFlowRoutes(
         return res.status(400).json({ error: "Payment already completed for this campaign" });
       }
 
-      // Amount is already in paise from client (client sends budget * 100)
-      const basePaise = Math.round(amount);
+      // Calculate payable amount from approved bookings (server-side, not trusting client)
+      const bookings = await storage.getBookingsByCampaign(campaignId);
+      const approvedBookings = bookings.filter(b => b.ownerApproved === true || b.status === "approved");
+      if (approvedBookings.length === 0) {
+        return res.status(400).json({ error: "No approved bookings to pay for" });
+      }
+      const approvedTotal = approvedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
+      const basePaise = Math.round(approvedTotal * 100);
+
       const GST_PERCENT = 18;
       const gstPaise = Math.round(basePaise * GST_PERCENT / 100);
       const totalPaise = basePaise + gstPaise;
