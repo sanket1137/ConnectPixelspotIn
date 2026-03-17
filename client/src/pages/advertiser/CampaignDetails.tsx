@@ -322,7 +322,7 @@ export default function CampaignDetails() {
                 onClick={() => {
                   initiatePayment({
                     campaignId: campaign.id,
-                    amount: Math.round(campaign.budget * 118), // Convert to paise (including 18% GST)
+                    amount: Math.round(campaign.budget * 100), // Base amount in paise — server adds 18% GST
                     campaignName: campaign.name,
                     onSuccess: () => {
                       queryClient.invalidateQueries({ queryKey: [`/api/advertiser/campaigns/${params?.id}`] });
