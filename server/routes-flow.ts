@@ -31,12 +31,13 @@ const creativeUpload = multer({
 export function registerFlowRoutes(
   app: Express,
   authenticate: (req: Request, res: Response, next: NextFunction) => void,
-  requireRole: (...roles: string[]) => (req: Request, res: Response, next: NextFunction) => void
+  requireRole: (...roles: string[]) => (req: Request, res: Response, next: NextFunction) => void,
+  requireVerified: (req: Request, res: Response, next: NextFunction) => void
 ) {
 
   // ========== RAZORPAY CONFIG (public key for client) ==========
 
-  app.get("/api/payments/config", authenticate, (req, res) => {
+  app.get("/api/payments/config", authenticate, requireVerified, (req, res) => {
     res.json({
       keyId: razorpayService.getPublicKey(),
       configured: razorpayService.isConfigured(),
@@ -45,12 +46,12 @@ export function registerFlowRoutes(
 
   // ========== PAYMENT ROUTES (Advertiser) ==========
 
-  // Create Razorpay order for a campaign payment
+  // Create Razorpay order for a booking payment
   app.post("/api/payments/create-order", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
-      const { campaignId } = req.body;
-      if (!campaignId) {
-        return res.status(400).json({ error: "campaignId is required" });
+      const { campaignId, bookingId } = req.body;
+      if (!campaignId || !bookingId) {
+        return res.status(400).json({ error: "campaignId and bookingId are required" });
       }
 
       const campaign = await storage.getCampaign(campaignId);
@@ -61,20 +62,26 @@ export function registerFlowRoutes(
         return res.status(403).json({ error: "Not your campaign" });
       }
 
-      // Check if payment already exists and is completed
-      const existingPayment = await storage.getPaymentByCampaign(campaignId);
-      if (existingPayment && existingPayment.status === "completed") {
-        return res.status(400).json({ error: "Payment already completed for this campaign" });
+      // Get the specific booking
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      if (booking.campaignId !== campaignId) {
+        return res.status(400).json({ error: "Booking does not belong to this campaign" });
+      }
+      if (!(booking.ownerApproved === true || booking.status === "approved")) {
+        return res.status(400).json({ error: "Booking is not approved yet" });
       }
 
-      // Calculate payable amount from approved bookings (server-side, not trusting client)
-      const bookings = await storage.getBookingsByCampaign(campaignId);
-      const approvedBookings = bookings.filter(b => b.ownerApproved === true || b.status === "approved");
-      if (approvedBookings.length === 0) {
-        return res.status(400).json({ error: "No approved bookings to pay for" });
+      // Check if this booking already has a completed payment
+      const existingPayment = await storage.getPaymentByBooking(bookingId);
+      if (existingPayment && existingPayment.status === "completed") {
+        return res.status(400).json({ error: "Payment already completed for this booking" });
       }
-      const approvedTotal = approvedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
-      const basePaise = Math.round(approvedTotal * 100);
+
+      const bookingPrice = booking.price || 0;
+      const basePaise = Math.round(bookingPrice * 100);
 
       const GST_PERCENT = 18;
       const gstPaise = Math.round(basePaise * GST_PERCENT / 100);
@@ -83,9 +90,10 @@ export function registerFlowRoutes(
       // Create Razorpay order with GST-inclusive amount
       const order = await razorpayService.createOrder({
         amount: totalPaise,
-        receipt: `cmp_${campaignId.replace(/-/g, "")}`,
+        receipt: `bkg_${bookingId.replace(/-/g, "").slice(0, 30)}`,
         notes: {
           campaignId,
+          bookingId,
           advertiserId: req.user!.id,
           campaignName: campaign.name || "",
         },
@@ -101,6 +109,7 @@ export function registerFlowRoutes(
       } else {
         await storage.createPayment({
           campaignId,
+          bookingId,
           advertiserId: req.user!.id,
           amount: totalPaise,
           status: "pending",
@@ -124,7 +133,7 @@ export function registerFlowRoutes(
   // Verify Razorpay payment after client-side checkout
   app.post("/api/payments/verify", authenticate, requireRole("advertiser"), async (req, res) => {
     try {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, campaignId } = req.body;
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, campaignId, bookingId } = req.body;
       if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
         return res.status(400).json({ error: "Missing payment verification parameters" });
       }
@@ -152,11 +161,24 @@ export function registerFlowRoutes(
         status: "completed",
       });
 
-      // Update campaign payment status
-      if (payment.campaignId) {
-        await storage.updateCampaign(payment.campaignId, {
-          paymentStatus: "advertiser_paid",
+      // Mark this specific booking as paid
+      const paidBookingId = bookingId || payment.bookingId;
+      if (paidBookingId) {
+        await storage.updateBooking(paidBookingId, {
+          bookingPaymentStatus: "paid",
         } as any);
+      }
+
+      // Check if ALL approved bookings for the campaign are now paid → update campaign paymentStatus
+      if (payment.campaignId) {
+        const campaignBookings = await storage.getBookingsByCampaign(payment.campaignId);
+        const approvedBookings = campaignBookings.filter(b => b.ownerApproved === true || b.status === "approved");
+        const allPaid = approvedBookings.length > 0 && approvedBookings.every(b => (b as any).bookingPaymentStatus === "paid" || b.id === paidBookingId);
+        if (allPaid) {
+          await storage.updateCampaign(payment.campaignId, {
+            paymentStatus: "advertiser_paid",
+          } as any);
+        }
       }
 
       // Generate invoice for the advertiser
@@ -209,6 +231,24 @@ export function registerFlowRoutes(
           data: { campaignId: payment.campaignId, paymentId: payment.id, advertiserId: advertiser.id },
           actionUrl: `/admin/payments`,
         });
+      }
+
+      // Notify screen owner of the specific paid booking
+      if (paidBookingId) {
+        const paidBooking = await storage.getBooking(paidBookingId);
+        if (paidBooking) {
+          const screen = await storage.getScreen(paidBooking.screenId);
+          if (screen && screen.ownerId) {
+            await storage.createNotification({
+              userId: screen.ownerId,
+              type: "advertiser_payment_received",
+              title: "Advertiser Payment Received",
+              message: `Advertiser payment of ₹${(payment.amount / 100).toLocaleString("en-IN")} received for screen "${screen.name}" in campaign "${campaign?.name || ""}". Please confirm your booking.`,
+              data: { campaignId: payment.campaignId, bookingId: paidBookingId },
+              actionUrl: `/owner/requests`,
+            });
+          }
+        }
       }
 
       res.json({
@@ -926,7 +966,7 @@ export function registerFlowRoutes(
   // ========== NOTIFICATION CENTER ROUTES ==========
 
   // Get user's notifications
-  app.get("/api/notifications", authenticate, async (req, res) => {
+  app.get("/api/notifications", authenticate, requireVerified, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const notifications = await storage.getUserNotifications(req.user!.id, limit);
@@ -939,7 +979,7 @@ export function registerFlowRoutes(
   });
 
   // Get unread notification count
-  app.get("/api/notifications/unread-count", authenticate, async (req, res) => {
+  app.get("/api/notifications/unread-count", authenticate, requireVerified, async (req, res) => {
     try {
       const count = await storage.getUnreadNotificationCount(req.user!.id);
       res.json({ unreadCount: count });
@@ -950,7 +990,7 @@ export function registerFlowRoutes(
   });
 
   // Mark single notification as read
-  app.patch("/api/notifications/:id/read", authenticate, async (req, res) => {
+  app.patch("/api/notifications/:id/read", authenticate, requireVerified, async (req, res) => {
     try {
       const notification = await storage.markNotificationRead(req.params.id);
       if (!notification) {
@@ -964,51 +1004,12 @@ export function registerFlowRoutes(
   });
 
   // Mark all notifications as read
-  app.patch("/api/notifications/read-all", authenticate, async (req, res) => {
+  app.patch("/api/notifications/read-all", authenticate, requireVerified, async (req, res) => {
     try {
       await storage.markAllNotificationsRead(req.user!.id);
       res.json({ success: true });
     } catch (error) {
       console.error("Mark all read error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  // ========== SCREEN AVAILABILITY ==========
-
-  // Get brand slot availability for a screen
-  app.get("/api/screens/:id/availability", authenticate, async (req, res) => {
-    try {
-      const { startDate, endDate } = req.query;
-      if (!startDate || !endDate) {
-        return res.status(400).json({ error: "startDate and endDate query params are required" });
-      }
-
-      const availability = await storage.getScreenBrandAvailability(
-        req.params.id,
-        new Date(startDate as string),
-        new Date(endDate as string)
-      );
-      res.json(availability);
-    } catch (error) {
-      console.error("Get screen availability error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  // Get screen availability for today (for card display)
-  app.get("/api/screens/:id/slots", async (req, res) => {
-    try {
-      const now = new Date();
-      const thirtyDaysLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-      const availability = await storage.getScreenBrandAvailability(
-        req.params.id,
-        now,
-        thirtyDaysLater
-      );
-      res.json(availability);
-    } catch (error) {
-      console.error("Get screen slots error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1365,6 +1366,8 @@ export function registerFlowRoutes(
       // Get all bookings with approved/active/completed status that have payments
       const allBookings = await storage.getEnrichedBookings();
       const paidBookings = allBookings.filter((b: any) => {
+        // Show bookings where either the individual booking is paid OR the campaign-level status is paid
+        if ((b as any).bookingPaymentStatus === "paid") return true;
         const campaign = b.campaign;
         return campaign && ["advertiser_paid", "partially_released", "fully_settled"].includes(campaign.paymentStatus);
       });

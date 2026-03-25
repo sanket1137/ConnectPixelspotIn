@@ -5,8 +5,8 @@ import { verifyToken, auth as firebaseAdmin } from "./firebaseAdmin";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { User, Screen, Campaign, Booking } from "@shared/schema";
 import { db } from "./db";
-import { bookings, passwordResetTokens, campaigns } from "@shared/schema";
-import { eq, and, gt, sql } from "drizzle-orm";
+import { bookings, passwordResetTokens, campaigns, screens } from "@shared/schema";
+import { eq, and, gt, sql, inArray } from "drizzle-orm";
 import { getCampaignAdvice } from "./ai-advisor";
 import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
 import { notificationService } from "./notifications";
@@ -18,6 +18,8 @@ import { emailService } from "./email";
 import { generateTagsForScreen, generateTagsForAllScreens } from "./services/screen-tagging";
 import { registerFlowRoutes } from "./routes-flow";
 import { geolocationService } from "./services/geolocation";
+import { serveSitemap, serveRobotsTxt } from "./sitemap";
+import { fromCitySlug, fromVenueSlug, toSlug, normalizeCityName } from "@shared/constants";
 
 // Extend Express Request to include user
 declare global {
@@ -53,14 +55,49 @@ async function authenticate(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// Role-based access control middleware
+// Role-based access control middleware — also enforces verification for non-admin roles
 function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({ error: "Forbidden" });
     }
+    // Admins bypass verification checks (pre-verified in DB)
+    if (req.user.role === "admin") return next();
+    // Enforce verification for advertiser/screen_owner roles
+    if (!req.user.emailVerified) {
+      return res.status(403).json({ error: "Email not verified. Please verify your email first." });
+    }
+    if (!req.user.mobileVerified) {
+      return res.status(403).json({ error: "Mobile not verified. Please verify your phone number via OTP." });
+    }
+    if (!req.user.profileCompleted) {
+      return res.status(403).json({ error: "Profile not completed. Please complete your profile first." });
+    }
     next();
   };
+}
+
+// Verification enforcement middleware — blocks access unless user has completed
+// email verification, mobile OTP verification, and profile setup.
+// Exempt routes (auth, profile, OTP, onboarding) must NOT use this middleware.
+function requireVerified(req: Request, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  // Admins bypass verification checks (they are pre-verified in DB)
+  if (req.user.role === "admin") {
+    return next();
+  }
+  if (!req.user.emailVerified) {
+    return res.status(403).json({ error: "Email not verified. Please verify your email first." });
+  }
+  if (!req.user.mobileVerified) {
+    return res.status(403).json({ error: "Mobile not verified. Please verify your phone number via OTP." });
+  }
+  if (!req.user.profileCompleted) {
+    return res.status(403).json({ error: "Profile not completed. Please complete your profile first." });
+  }
+  next();
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -70,6 +107,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  // Screen map pins — restricted to pixelspot.in domains only
+  app.get("/api/public/screen-locations", async (req, res) => {
+    const origin = req.headers.origin || "";
+    const allowed = [
+      "https://pixelspot.in",
+      "https://www.pixelspot.in",
+    ];
+    if (origin && !allowed.includes(origin)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    // Set CORS headers explicitly for this endpoint
+    if (origin && allowed.includes(origin)) {
+      res.set("Access-Control-Allow-Origin", origin);
+      res.set("Vary", "Origin");
+    }
+    try {
+      // Fetch all active screens with their multi-screen count
+      const rows = await db
+        .select({
+          latitude: screens.latitude,
+          longitude: screens.longitude,
+          isMultiScreen: screens.isMultiScreen,
+          numberOfScreens: screens.numberOfScreens,
+          city: screens.city,
+        })
+        .from(screens)
+        .where(eq(screens.status, "active"));
+      const locations = rows.map((r) => ({
+        lat: Number(r.latitude),
+        lng: Number(r.longitude),
+      }));
+      // Real total: sum numberOfScreens for multi-screen, 1 for single
+      const totalScreens = rows.reduce(
+        (sum, r) => sum + (r.isMultiScreen && r.numberOfScreens ? r.numberOfScreens : 1),
+        0
+      );
+      // Distinct cities
+      const cities = new Set(rows.map((r) => r.city?.toLowerCase().trim()).filter(Boolean));
+      // Campaigns executed (completed + live + approved)
+      const [campResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(campaigns)
+        .where(inArray(campaigns.status, ["completed", "live", "approved"]));
+      res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+      res.json({
+        count: totalScreens,
+        cities: cities.size,
+        campaignsExecuted: campResult?.count ?? 0,
+        locations,
+      });
+    } catch (error) {
+      console.error("Screen locations error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ========== DYNAMIC SITEMAP & ROBOTS ==========
+  app.get("/sitemap.xml", serveSitemap);
+  app.get("/robots.txt", serveRobotsTxt);
+
+  // ========== SEO PUBLIC API ENDPOINTS ==========
+  
+  // City page data for landing pages
+  app.get("/api/public/city/:slug", async (req, res) => {
+    try {
+      const cityName = fromCitySlug(req.params.slug);
+      if (!cityName) {
+        return res.status(404).json({ error: "City not found" });
+      }
+      const data = await storage.getCityPageData(cityName);
+      if (!data) {
+        return res.status(404).json({ error: "No screens in this city" });
+      }
+      res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+      res.json({ ...data, slug: toSlug(cityName) });
+    } catch (error) {
+      console.error("City page data error:", error);
+      res.status(500).json({ error: "Failed to fetch city data" });
+    }
+  });
+
+  // City + Venue page data
+  app.get("/api/public/city/:citySlug/:venueSlug", async (req, res) => {
+    try {
+      const cityName = fromCitySlug(req.params.citySlug);
+      const venueName = fromVenueSlug(req.params.venueSlug);
+      if (!cityName || !venueName) {
+        return res.status(404).json({ error: "City or venue not found" });
+      }
+      const data = await storage.getCityVenuePageData(cityName, venueName);
+      if (!data) {
+        return res.status(404).json({ error: "No screens for this combination" });
+      }
+      res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+      res.json({ ...data, citySlug: toSlug(cityName), venueSlug: toSlug(venueName) });
+    } catch (error) {
+      console.error("City venue page data error:", error);
+      res.status(500).json({ error: "Failed to fetch city venue data" });
+    }
   });
 
   // Get public screens (approved only, no contact info)
@@ -827,7 +965,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Check if profile is complete
+      // Check if profile is complete — requires mobile verification via OTP
       let isComplete = !!(name && mobileNumber && companyName && city && state && address);
       
       // For advertisers, also require account type and corresponding name
@@ -838,8 +976,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ));
       }
       
-      if (isComplete) {
+      // Only mark profile as complete if mobile number has been verified via OTP
+      if (isComplete && req.user!.mobileVerified) {
         updateData.profileCompleted = true;
+      } else if (isComplete && !req.user!.mobileVerified) {
+        // All fields filled but mobile not verified — don't complete profile
+        console.warn(`⚠️ User ${req.user!.id} (${req.user!.email}) submitted complete profile but mobile is not verified`);
       }
 
       const user = await storage.updateUser(req.user!.id, updateData);
@@ -1071,7 +1213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upload file directly through backend (avoids CORS issues)
-  app.post("/api/objects/upload-file", authenticate, upload.single("file"), async (req, res) => {
+  app.post("/api/objects/upload-file", authenticate, requireVerified, upload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
@@ -1118,7 +1260,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get upload URL for file uploads (legacy - for direct browser uploads)
-  app.post("/api/objects/upload", authenticate, async (req, res) => {
+  app.post("/api/objects/upload", authenticate, requireVerified, async (req, res) => {
     try {
       const objectStorageService = new ObjectStorageService();
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
@@ -1130,7 +1272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update entity with uploaded file (for screens and campaigns)
-  app.put("/api/objects/entity", authenticate, async (req, res) => {
+  app.put("/api/objects/entity", authenticate, requireVerified, async (req, res) => {
     try {
       const { fileURL, entityType } = req.body;
 
@@ -1391,8 +1533,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!existingBooking) {
         return res.status(404).json({ error: "Booking not found" });
       }
-      if (new Date(existingBooking.endDate) < new Date()) {
-        return res.status(400).json({ error: "Cannot approve an expired booking. The end date has already passed." });
+      if (new Date(existingBooking.startDate) <= new Date()) {
+        return res.status(400).json({ error: "Cannot approve — the campaign start date has already passed." });
       }
 
       const booking = await storage.approveBookingByAdmin(id);
@@ -1522,7 +1664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========== SCREEN TAG ROUTES ==========
 
   // Get all master tags
-  app.get("/api/screen-tags", authenticate, async (req, res) => {
+  app.get("/api/screen-tags", authenticate, requireVerified, async (req, res) => {
     try {
       const tags = await storage.getActiveMasterTags();
       res.json(tags);
@@ -1533,7 +1675,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get tag assignments for a screen
-  app.get("/api/screens/:id/tags", authenticate, async (req, res) => {
+  app.get("/api/screens/:id/tags", authenticate, requireVerified, async (req, res) => {
     try {
       const { id } = req.params;
       const assignments = await storage.getScreenTagAssignments(id);
@@ -1545,7 +1687,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trigger tag generation for a screen (manual)
-  app.post("/api/screens/:id/generate-tags", authenticate, async (req, res) => {
+  app.post("/api/screens/:id/generate-tags", authenticate, requireVerified, async (req, res) => {
     try {
       const { id } = req.params;
       const screen = await storage.getScreen(id);
@@ -1576,7 +1718,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add manual tag to a screen
-  app.post("/api/screens/:id/tags", authenticate, async (req, res) => {
+  app.post("/api/screens/:id/tags", authenticate, requireVerified, async (req, res) => {
     try {
       const { id } = req.params;
       const { tagId } = req.body;
@@ -1604,7 +1746,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Remove tag assignment
-  app.delete("/api/screens/:screenId/tags/:assignmentId", authenticate, async (req, res) => {
+  app.delete("/api/screens/:screenId/tags/:assignmentId", authenticate, requireVerified, async (req, res) => {
     try {
       const { screenId, assignmentId } = req.params;
       const screen = await storage.getScreen(screenId);
@@ -1844,8 +1986,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!existingBooking) {
         return res.status(404).json({ error: "Booking not found" });
       }
-      if (new Date(existingBooking.endDate) < new Date()) {
-        return res.status(400).json({ error: "Cannot approve an expired booking. The end date has already passed." });
+      if (new Date(existingBooking.startDate) <= new Date()) {
+        return res.status(400).json({ error: "Cannot approve — the campaign start date has already passed." });
       }
 
       // Bank details gate: owner must have bank details before approving
@@ -1857,10 +1999,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Handle partial acceptance for flexible multi-screen bookings — counter-offer flow
+      const screen = await storage.getScreen(existingBooking.screenId);
+      if (screen && screen.isMultiScreen && !screen.bulkBookingMandatory && req.body.screensAccepted) {
+        const screensAccepted = parseInt(req.body.screensAccepted);
+        if (screensAccepted < 1 || screensAccepted > (screen.numberOfScreens || 1)) {
+          return res.status(400).json({ error: `Screens accepted must be between 1 and ${screen.numberOfScreens}` });
+        }
+
+        const screensRequested = existingBooking.screensRequested || screensAccepted;
+
+        // If fewer screens than requested → counter-offer (advertiser must accept/reject)
+        if (screensAccepted < screensRequested) {
+          const days = Math.max(1, Math.ceil((new Date(existingBooking.endDate).getTime() - new Date(existingBooking.startDate).getTime()) / (1000 * 60 * 60 * 24)));
+          let newPrice: number;
+          if (screensAccepted === screen.numberOfScreens && screen.bundlePricePerDay) {
+            newPrice = screen.bundlePricePerDay * days;
+          } else {
+            newPrice = screen.pricePerDay * screensAccepted * days;
+          }
+
+          const counterBooking = await storage.counterOfferBooking(id, screensAccepted, newPrice, req.body.reason);
+          if (!counterBooking) {
+            return res.status(404).json({ error: "Booking not found" });
+          }
+
+          broadcastBookingUpdate(counterBooking.id, counterBooking.campaignId, counterBooking.status);
+
+          // Send counter-offer notifications
+          const [campaign, admins] = await Promise.all([
+            storage.getCampaign(counterBooking.campaignId),
+            storage.getUsersByRole("admin")
+          ]);
+
+          if (campaign && screen) {
+            const advertiser = await storage.getUser(campaign.advertiserId);
+            if (advertiser) {
+              await storage.createNotification({
+                userId: advertiser.id,
+                type: "counter_offer",
+                title: "Counter-Offer Received",
+                message: `The screen owner for "${screen.name}" can provide ${screensAccepted} of ${screensRequested} screens at ₹${newPrice.toLocaleString()}. Please review and accept or decline.`,
+                data: { bookingId: counterBooking.id, campaignId: campaign.id, screensAccepted, screensRequested, newPrice, originalPrice: existingBooking.price },
+                actionUrl: `/advertiser/campaigns/${campaign.id}`,
+              });
+
+              const admin = admins.length > 0 ? admins[0] : null;
+              await notificationService.sendCounterOfferEmail(
+                advertiser, owner, admin, counterBooking, campaign, screen,
+                screensRequested, screensAccepted, newPrice, existingBooking.price
+              ).catch(err => console.error("Failed to send counter-offer email:", err));
+            }
+          }
+
+          return res.json(counterBooking);
+        }
+      }
+
+      // Full approval path (screensAccepted === screensRequested or non-multi-screen)
       const booking = await storage.approveBookingByOwner(id);
       
       if (!booking) {
         return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Handle full multi-screen acceptance (update screensAccepted to match)
+      if (screen && screen.isMultiScreen && !screen.bulkBookingMandatory && req.body.screensAccepted) {
+        const screensAccepted = parseInt(req.body.screensAccepted);
+        const days = Math.max(1, Math.ceil((new Date(booking.endDate).getTime() - new Date(booking.startDate).getTime()) / (1000 * 60 * 60 * 24)));
+        let newPrice: number;
+        if (screensAccepted === screen.numberOfScreens && screen.bundlePricePerDay) {
+          newPrice = screen.bundlePricePerDay * days;
+        } else {
+          newPrice = screen.pricePerDay * screensAccepted * days;
+        }
+        await storage.updateBooking(booking.id, { screensAccepted, price: newPrice } as any);
+        booking.screensAccepted = screensAccepted;
+        booking.price = newPrice;
       }
 
       // Set payment deadline for advertiser
@@ -1872,13 +2087,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       broadcastBookingUpdate(booking.id, booking.campaignId, booking.status);
 
       // Send notifications to advertiser and admin
-      const [campaign, screen, admins] = await Promise.all([
+      const [campaign, bookingScreen, admins] = await Promise.all([
         storage.getCampaign(booking.campaignId),
         storage.getScreen(booking.screenId),
         storage.getUsersByRole("admin")
       ]);
 
-      if (campaign && screen && admins.length > 0) {
+      if (campaign && bookingScreen && admins.length > 0) {
         const advertiser = await storage.getUser(campaign.advertiserId);
         const owner = req.user!;
         const admin = admins[0];
@@ -1890,7 +2105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             admin,
             booking,
             campaign,
-            screen
+            bookingScreen
           ).catch(err => console.error("Failed to send owner approval emails:", err));
 
           // Send payment_required notification + email to advertiser
@@ -1898,14 +2113,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userId: advertiser.id,
             type: "payment_required",
             title: "Payment Required",
-            message: `Your booking for "${screen.name}" has been approved. Please complete payment of ₹${booking.price} within ${deadlineHours} hours to confirm.`,
+            message: `Your booking for "${bookingScreen.name}" has been approved. Please complete payment of ₹${booking.price} within ${deadlineHours} hours to confirm.`,
             data: { bookingId: booking.id, campaignId: campaign.id, paymentDeadline: paymentDeadline.toISOString() },
             actionUrl: `/advertiser/campaigns/${campaign.id}`,
           });
 
           // Send payment deadline email
           await notificationService.sendPaymentRequiredEmail(
-            advertiser, booking, campaign, screen, paymentDeadline
+            advertiser, booking, campaign, bookingScreen, paymentDeadline
           ).catch(err => console.error("Failed to send payment required email:", err));
         }
       }
@@ -1978,6 +2193,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Owner confirms booking after advertiser payment
+  app.patch("/api/owner/bookings/:id/confirm-payment", authenticate, requireRole("screen_owner"), async (req, res) => {
+    try {
+      const bookingId = req.params.id;
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Verify ownership
+      const screen = await storage.getScreen(booking.screenId);
+      if (!screen || screen.ownerId !== req.user!.id) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      // Verify campaign payment status
+      const campaign = await storage.getCampaign(booking.campaignId);
+      if (!campaign || !["advertiser_paid", "partially_released", "fully_settled"].includes(campaign.paymentStatus || "")) {
+        return res.status(400).json({ error: "Advertiser payment not yet received for this campaign" });
+      }
+
+      // Update booking
+      await storage.updateBooking(bookingId, { ownerPaymentConfirmed: true } as any);
+      broadcastBookingUpdate(bookingId, booking.campaignId, booking.status);
+
+      // Notify admins that owner confirmed
+      const admins = await storage.getUsersByRole("admin");
+      for (const admin of admins) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: "owner_confirmed_payment",
+          title: "Owner Confirmed Booking",
+          message: `Owner "${req.user!.name}" confirmed payment received for booking on screen "${screen.name}". Payout can now be initiated.`,
+          data: { bookingId, campaignId: booking.campaignId, screenId: screen.id },
+          actionUrl: `/admin/payments`,
+        });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Owner confirm payment error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Owner confirms receipt of payout
+  app.patch("/api/owner/payouts/:id/confirm-receipt", authenticate, requireRole("screen_owner"), async (req, res) => {
+    try {
+      const payoutId = req.params.id;
+      const payouts = await storage.getOwnerPayoutsByOwner(req.user!.id);
+      const payout = payouts.find(p => p.id === payoutId);
+      if (!payout) {
+        return res.status(404).json({ error: "Payout not found" });
+      }
+
+      if (payout.status !== "processed" && payout.status !== "accepted") {
+        return res.status(400).json({ error: "Payout must be processed before confirming receipt" });
+      }
+
+      await storage.updateOwnerPayout(payoutId, { 
+        ownerConfirmedReceipt: true, 
+        status: "processed" 
+      } as any);
+
+      // Check if all payouts for this campaign are confirmed — if so, mark fully settled
+      const campaignPayouts = payouts.filter(p => p.campaignId === payout.campaignId);
+      const allConfirmed = campaignPayouts.every(p => 
+        p.id === payoutId ? true : (p as any).ownerConfirmedReceipt === true
+      );
+      if (allConfirmed) {
+        await storage.updateCampaign(payout.campaignId, { paymentStatus: "fully_settled" } as any);
+      }
+
+      // Notify admins
+      const admins = await storage.getUsersByRole("admin");
+      for (const admin of admins) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: "owner_confirmed_receipt",
+          title: "Owner Confirmed Payout Receipt",
+          message: `Owner confirmed receipt of payout ₹${(payout.payoutAmount / 100).toLocaleString("en-IN")} for booking.`,
+          data: { payoutId, bookingId: payout.bookingId },
+          actionUrl: `/admin/payments`,
+        });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Owner confirm receipt error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get all proofs of play for the owner
+  app.get("/api/owner/proof-of-play", authenticate, requireRole("screen_owner"), async (req, res) => {
+    try {
+      const proofs = await storage.getProofOfPlayByOwner(req.user!.id);
+      res.json(proofs);
+    } catch (error) {
+      console.error("Get owner proofs error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Upload proof of play for a booking
+  app.post("/api/owner/bookings/:id/proof", authenticate, requireRole("screen_owner"), upload.array("files", 10), async (req, res) => {
+    try {
+      const bookingId = req.params.id;
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Verify the owner owns the screen for this booking
+      const screen = await storage.getScreen(booking.screenId);
+      if (!screen || screen.ownerId !== req.user!.id) {
+        return res.status(403).json({ error: "Not authorized for this booking" });
+      }
+
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: "At least one file is required" });
+      }
+
+      // Upload each file to object storage
+      const objectStorageService = new ObjectStorageService();
+      const fileUrls: Array<{ url: string; type: "photo" | "video" | "log"; caption?: string }> = [];
+
+      for (const file of files) {
+        const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+        const uploadResponse = await fetch(uploadURL, {
+          method: "PUT",
+          body: file.buffer,
+          headers: { "Content-Type": file.mimetype },
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`Upload to storage failed: ${uploadResponse.status}`);
+        }
+
+        const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(uploadURL, {
+          owner: req.user!.id.toString(),
+          visibility: "public",
+        });
+
+        const fileType: "photo" | "video" | "log" = file.mimetype.startsWith("video/") ? "video" :
+          file.mimetype === "application/pdf" ? "log" : "photo";
+
+        fileUrls.push({ url: objectPath, type: fileType, caption: file.originalname });
+      }
+
+      const proof = await storage.createProofOfPlay({
+        bookingId,
+        campaignId: booking.campaignId,
+        screenId: booking.screenId,
+        ownerId: req.user!.id,
+        fileUrls,
+        ownerNotes: req.body.notes || null,
+        status: "pending",
+      });
+
+      res.json(proof);
+    } catch (error) {
+      console.error("Upload proof error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ========== ADVERTISER ROUTES ==========
   
   // Advertiser dashboard stats (optimized: single SQL aggregation query)
@@ -2003,7 +2386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all approved screens (for discovery) with SQL-level filtering & pagination
-  app.get("/api/screens", authenticate, async (req, res) => {
+  app.get("/api/screens", authenticate, requireVerified, async (req, res) => {
     try {
       const { city, type, minPrice, maxPrice, pincode, limit, offset, search, page, pageSize, venueCategories, environmentTypes, environmentTags, minBookingDays } = req.query;
       
@@ -2032,7 +2415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get available locations (optimized: SQL DISTINCT instead of full table scan)
-  app.get("/api/screens/locations", authenticate, async (req, res) => {
+  app.get("/api/screens/locations", authenticate, requireVerified, async (req, res) => {
     try {
       const locations = await storage.getScreenLocations();
       res.json({
@@ -2047,7 +2430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get advanced dynamic filters for the Advanced Campaign Builder
-  app.get("/api/screens/filters", authenticate, async (req, res) => {
+  app.get("/api/screens/filters", authenticate, requireVerified, async (req, res) => {
     try {
       const filters = await storage.getScreenFilters();
       res.json(filters);
@@ -2058,7 +2441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Calculate auto-duration based on budget and screens
-  app.post("/api/campaign/calculate-duration", authenticate, async (req, res) => {
+  app.post("/api/campaign/calculate-duration", authenticate, requireVerified, async (req, res) => {
     try {
       const { budget, screenIds } = req.body;
       
@@ -2096,7 +2479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Calculate reach estimate
-  app.post("/api/campaign/calculate-reach", authenticate, async (req, res) => {
+  app.post("/api/campaign/calculate-reach", authenticate, requireVerified, async (req, res) => {
     try {
       const { screenIds, duration } = req.body;
       
@@ -2113,8 +2496,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Reach = sum of (footfall × numberOfScreens × duration) for each screen
       const totalReach = selectedScreens.reduce((sum, screen) => {
-        const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-        return sum + (screen.avgDailyFootfall * screenMultiplier * duration);
+        const screenCount = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
+        return sum + (screen.avgDailyFootfall * screenCount * duration);
       }, 0);
       
       // Impressions = reach × average dwell time slots
@@ -2134,7 +2517,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get screens in area (map + radius OR city search) — optimized: SQL filtering
-  app.get("/api/screens/in-area", authenticate, async (req, res) => {
+  app.get("/api/screens/in-area", authenticate, requireVerified, async (req, res) => {
     try {
       const { 
         lat, lng, radiusKm, city, budget, duration,
@@ -2204,7 +2587,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get screens by IDs (for cart pre-selection)
-  app.get("/api/screens/by-ids", authenticate, async (req, res) => {
+  app.get("/api/screens/by-ids", authenticate, requireVerified, async (req, res) => {
     try {
       const { ids } = req.query;
       
@@ -2312,11 +2695,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const matchedVenueCats = matchedRules.flatMap((r) => r.venueCats);
       const matchedLifestyleTags = matchedRules.flatMap((r) => r.lifestyleTags);
 
-      // Parse city from location — try to find known cities, fallback to first comma segment
+      // Parse city from location — normalize alternate names, fallback to first comma segment
       const locLower = location.toLowerCase();
-      const knownCities = ["bangalore", "bengaluru", "mumbai", "delhi", "hyderabad", "chennai", "pune", "kolkata", "ahmedabad"];
+      const knownCities = ["bangalore", "bengaluru", "mumbai", "delhi", "hyderabad", "chennai", "pune", "kolkata", "ahmedabad", "bombay", "madras", "calcutta", "poona", "cochin", "kochi", "trivandrum", "gurgaon", "gurugram", "vizag", "visakhapatnam", "mysore", "mysuru", "baroda", "vadodara", "mangalore", "mangaluru", "pondicherry", "puducherry", "noida", "goa", "jaipur", "lucknow", "chandigarh", "indore", "bhopal", "nagpur", "coimbatore", "surat", "patna", "ranchi"];
       const foundCity = knownCities.find((c) => locLower.includes(c)) || location.split(",")[0].trim();
-      const cityGuess = foundCity.charAt(0).toUpperCase() + foundCity.slice(1);
+      const cityGuess = normalizeCityName(foundCity.charAt(0).toUpperCase() + foundCity.slice(1));
 
       // Fetch active screens in that city via direct SQL (always returns an array)
       const rawResult = await db.execute(
@@ -2332,6 +2715,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           latitude: r.latitude, longitude: r.longitude, size: r.size,
           type: r.type, resolution: r.resolution, displayFormat: r.display_format,
           isMultiScreen: r.is_multi_screen, numberOfScreens: r.number_of_screens,
+          bundlePricePerDay: r.bundle_price_per_day, bulkBookingMandatory: r.bulk_booking_mandatory,
+          screenImages: r.screen_images, environmentType: r.environment_type,
           status: r.status, imageUrl: r.image_url, thumbnailUrl: r.thumbnail_url,
           venueType: r.venue_type, interestSegments: r.interest_segments,
           userIntent: r.user_intent, state: r.state, pincode: r.pincode,
@@ -2597,21 +2982,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Screen not found" });
       }
 
-      // Check brand slot availability for the requested date range
-      const availability = await storage.getScreenBrandAvailability(req.body.screenId, startDate, endDate);
-      if (availability.availableBrands <= 0) {
-        return res.status(400).json({
-          error: `No available brand slots on this screen for the selected dates. Max brands: ${availability.maxBrands}, currently booked: ${availability.bookedBrands}.`,
-        });
-      }
-
-      // Server-side price calculation: pricePerDay * number of days
+      // Server-side price calculation based on booking mode
       const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
-      const serverPrice = (screen.pricePerDay || 0) * days;
+      let serverPrice: number;
+      let screensRequested: number | null = null;
+
+      if (screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1) {
+        const requestedScreens = req.body.screensRequested ? parseInt(req.body.screensRequested) : null;
+
+        if (screen.bulkBookingMandatory) {
+          // Bulk mode: must book all screens, use bundle price if available
+          screensRequested = screen.numberOfScreens;
+          const dailyPrice = screen.bundlePricePerDay || (screen.pricePerDay * screen.numberOfScreens);
+          serverPrice = dailyPrice * days;
+        } else if (requestedScreens && requestedScreens >= 1) {
+          // Flexible mode: advertiser chose specific number of screens
+          if (requestedScreens > screen.numberOfScreens) {
+            return res.status(400).json({ error: `Cannot request more than ${screen.numberOfScreens} screens` });
+          }
+          screensRequested = requestedScreens;
+          if (requestedScreens === screen.numberOfScreens && screen.bundlePricePerDay) {
+            // Booking all screens — use bundle discount
+            serverPrice = screen.bundlePricePerDay * days;
+          } else {
+            serverPrice = screen.pricePerDay * requestedScreens * days;
+          }
+        } else {
+          // Flexible mode but no screens specified — default to all screens with bundle
+          screensRequested = screen.numberOfScreens;
+          const dailyPrice = screen.bundlePricePerDay || (screen.pricePerDay * screen.numberOfScreens);
+          serverPrice = dailyPrice * days;
+        }
+      } else {
+        // Single screen
+        serverPrice = (screen.pricePerDay || 0) * days;
+      }
 
       const booking = await storage.createBooking({
         ...req.body,
         price: serverPrice, // Use server-calculated price (don't trust client)
+        screensRequested: screensRequested,
         status: "pending_owner",
         ownerApproved: false,
         approvedByAdmin: false,
@@ -2643,6 +3053,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      broadcastBookingUpdate(booking.id, booking.campaignId, booking.status);
       res.status(201).json(booking);
     } catch (error) {
       console.error("Create booking error:", error);
@@ -2799,6 +3210,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedBooking);
     } catch (error) {
       console.error("Reject alternative dates error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Accept counter-offer from screen owner (advertiser accepts fewer screens at new price)
+  app.patch("/api/advertiser/bookings/:id/accept-counter", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const booking = await storage.getBooking(id);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      if (booking.status !== "counter_offer") {
+        return res.status(400).json({ error: "This booking does not have a pending counter-offer" });
+      }
+
+      const campaign = await storage.getCampaign(booking.campaignId);
+      if (!campaign || campaign.advertiserId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const updatedBooking = await storage.acceptCounterOffer(id);
+      if (!updatedBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Set payment deadline
+      const screen = await storage.getScreen(booking.screenId);
+      const owner = screen ? await storage.getUser(screen.ownerId) : null;
+      const deadlineHours = (owner as any)?.paymentDeadlineHours || 24;
+      const paymentDeadline = new Date(Date.now() + deadlineHours * 60 * 60 * 1000);
+      await storage.updateBooking(id, { paymentDeadline } as any);
+
+      // Update campaign budget to reflect accepted bookings
+      const allBookings = await storage.getBookingsByCampaign(campaign.id);
+      const newBudget = allBookings
+        .filter(b => !["rejected", "owner_rejected", "counter_offer"].includes(b.status))
+        .reduce((sum, b) => sum + (b.price || 0), 0);
+      await storage.updateCampaign(campaign.id, { budget: newBudget } as any);
+
+      broadcastBookingUpdate(updatedBooking.id, updatedBooking.campaignId, updatedBooking.status);
+
+      // Send notifications to owner
+      if (screen && owner) {
+        const advertiser = req.user!;
+        const admins = await storage.getUsersByRole("admin");
+
+        await storage.createNotification({
+          userId: owner.id,
+          type: "counter_offer_accepted",
+          title: "Counter-Offer Accepted",
+          message: `The advertiser accepted your counter-offer for "${screen.name}" (${updatedBooking.screensAccepted} screens at ₹${updatedBooking.price.toLocaleString()}).`,
+          data: { bookingId: updatedBooking.id, campaignId: campaign.id },
+          actionUrl: `/owner/bookings`,
+        });
+
+        // Payment required notification to advertiser
+        await storage.createNotification({
+          userId: advertiser.id,
+          type: "payment_required",
+          title: "Payment Required",
+          message: `You accepted the counter-offer for "${screen.name}". Please complete payment of ₹${updatedBooking.price.toLocaleString()} within ${deadlineHours} hours.`,
+          data: { bookingId: updatedBooking.id, campaignId: campaign.id, paymentDeadline: paymentDeadline.toISOString() },
+          actionUrl: `/advertiser/campaigns/${campaign.id}`,
+        });
+
+        const admin = admins.length > 0 ? admins[0] : null;
+        await notificationService.sendCounterOfferAcceptedEmail(
+          advertiser, owner, admin, updatedBooking, campaign, screen
+        ).catch(err => console.error("Failed to send counter-offer accepted email:", err));
+
+        await notificationService.sendPaymentRequiredEmail(
+          advertiser, updatedBooking, campaign, screen, paymentDeadline
+        ).catch(err => console.error("Failed to send payment required email:", err));
+      }
+
+      res.json(updatedBooking);
+    } catch (error) {
+      console.error("Accept counter-offer error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Reject counter-offer from screen owner (booking gets cancelled)
+  app.patch("/api/advertiser/bookings/:id/reject-counter", authenticate, requireRole("advertiser"), async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const booking = await storage.getBooking(id);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+      if (booking.status !== "counter_offer") {
+        return res.status(400).json({ error: "This booking does not have a pending counter-offer" });
+      }
+
+      const campaign = await storage.getCampaign(booking.campaignId);
+      if (!campaign || campaign.advertiserId !== req.user!.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const updatedBooking = await storage.rejectCounterOffer(id);
+      if (!updatedBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Update campaign budget
+      const allBookings = await storage.getBookingsByCampaign(campaign.id);
+      const newBudget = allBookings
+        .filter(b => !["rejected", "owner_rejected", "counter_offer"].includes(b.status))
+        .reduce((sum, b) => sum + (b.price || 0), 0);
+      await storage.updateCampaign(campaign.id, { budget: newBudget } as any);
+
+      broadcastBookingUpdate(updatedBooking.id, updatedBooking.campaignId, updatedBooking.status);
+
+      // Notify owner that counter-offer was rejected
+      const screen = await storage.getScreen(booking.screenId);
+      if (screen) {
+        const owner = await storage.getUser(screen.ownerId);
+        if (owner) {
+          const advertiser = req.user!;
+          const admins = await storage.getUsersByRole("admin");
+
+          await storage.createNotification({
+            userId: owner.id,
+            type: "counter_offer_rejected",
+            title: "Counter-Offer Declined",
+            message: `The advertiser declined your counter-offer for "${screen.name}". The booking has been cancelled.`,
+            data: { bookingId: updatedBooking.id, campaignId: campaign.id },
+            actionUrl: `/owner/bookings`,
+          });
+
+          const admin = admins.length > 0 ? admins[0] : null;
+          await notificationService.sendCounterOfferRejectedEmail(
+            advertiser, owner, admin, updatedBooking, campaign, screen
+          ).catch(err => console.error("Failed to send counter-offer rejected email:", err));
+        }
+      }
+
+      res.json(updatedBooking);
+    } catch (error) {
+      console.error("Reject counter-offer error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -3273,7 +3827,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== FLOW COMPLETION ROUTES (Payments, Payouts, Creative, Notifications) ==========
-  registerFlowRoutes(app, authenticate, requireRole);
+  registerFlowRoutes(app, authenticate, requireRole, requireVerified);
 
   const httpServer = createServer(app);
   return httpServer;

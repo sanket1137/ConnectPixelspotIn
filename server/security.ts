@@ -75,8 +75,15 @@ export function setupSecurity(app: Express) {
 
   app.use(cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, etc.)
-      if (!origin) return callback(null, true);
+      // Allow requests with no origin (mobile apps, server-to-server, health checks)
+      // but log them in production for security monitoring
+      if (!origin) {
+        if (process.env.NODE_ENV === 'production') {
+          // Log for monitoring — no-origin requests can come from curl/Postman/scripts
+          console.log(`🔍 CORS: No-origin request to ${process.env.PORT || 'server'}`);
+        }
+        return callback(null, true);
+      }
       
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
