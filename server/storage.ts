@@ -73,6 +73,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   updateUserRole(id: string, role: string): Promise<User | undefined>;
+  updateUserLogin(id: string, ip: string): Promise<void>;
   verifyUserEmail(id: string): Promise<User | undefined>;
   verifyUserMobile(id: string): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
@@ -312,6 +313,10 @@ export class DatabaseStorage implements IStorage {
   async updateUserRole(id: string, role: string): Promise<User | undefined> {
     const [user] = await db.update(users).set({ role }).where(eq(users.id, id)).returning();
     return user || undefined;
+  }
+
+  async updateUserLogin(id: string, ip: string): Promise<void> {
+    await db.update(users).set({ lastLoginAt: new Date(), lastLoginIp: ip }).where(eq(users.id, id));
   }
 
   async verifyUserEmail(id: string): Promise<User | undefined> {

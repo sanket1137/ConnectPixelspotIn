@@ -50,6 +50,10 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("advertiser"), // admin, screen_owner, advertiser
   status: text("status").notNull().default("active"), // active, inactive, pending
   createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // Login tracking (updated on every signin)
+  lastLoginAt: timestamp("last_login_at"),
+  lastLoginIp: text("last_login_ip"),
 }, (table) => [
   index("idx_users_role").on(table.role),
   index("idx_users_status").on(table.status),
@@ -608,6 +612,8 @@ export const aiRateLimitsRelations = relations(aiRateLimits, ({ one }) => ({
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
+  lastLoginAt: true,
+  lastLoginIp: true,
 });
 
 export const insertScreenSchema = createInsertSchema(screens).omit({

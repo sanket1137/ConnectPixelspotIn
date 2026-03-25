@@ -625,6 +625,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ user });
+
+      // Track login time and IP (fire-and-forget, don't block response)
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+      storage.updateUserLogin(user!.id, clientIp).catch(err => console.error("Login tracking error:", err));
     } catch (error) {
       console.error("Sign in error:", error);
       res.status(500).json({ error: "Internal server error" });
