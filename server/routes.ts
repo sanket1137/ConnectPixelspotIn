@@ -17,6 +17,7 @@ import { randomBytes } from "crypto";
 import { emailService } from "./email";
 import { generateTagsForScreen, generateTagsForAllScreens } from "./services/screen-tagging";
 import { registerFlowRoutes } from "./routes-flow";
+import { registerAgencyRoutes } from "./routes-agency";
 import { geolocationService } from "./services/geolocation";
 import { serveSitemap, serveRobotsTxt } from "./sitemap";
 import { fromCitySlug, fromVenueSlug, toSlug, normalizeCityName } from "@shared/constants";
@@ -606,7 +607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!user) {
         // Create new user with selected role (or default to advertiser)
-        const userRole = role && (role === "screen_owner" || role === "advertiser") 
+        const userRole = role && (role === "screen_owner" || role === "advertiser" || role === "agency") 
           ? role 
           : "advertiser";
         
@@ -2379,7 +2380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get recent campaigns for advertiser dashboard (optimized: single JOIN query)
-  app.get("/api/advertiser/recent-campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.get("/api/advertiser/recent-campaigns", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const recentCampaigns = await storage.getRecentCampaignsEnriched(req.user!.id);
       res.json(recentCampaigns);
@@ -2684,7 +2685,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   ];
 
-  app.post("/api/advertiser/campaigns/ai-match", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.post("/api/advertiser/campaigns/ai-match", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const { location, audience, budget } = req.body as { location: string; audience: string; budget: number };
       if (!location) return res.status(400).json({ error: "Location is required" });
@@ -2808,7 +2809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Get current draft for this advertiser
-  app.get("/api/advertiser/campaigns/draft", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.get("/api/advertiser/campaigns/draft", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const [draft] = await db
         .select()
@@ -2824,7 +2825,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upsert draft campaign (create or update)
-  app.put("/api/advertiser/campaigns/draft", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.put("/api/advertiser/campaigns/draft", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const { draftId, name, startDate, endDate, budget, creativeUrl, targetArea, ...rest } = req.body;
       const tomorrow = new Date();
@@ -2872,7 +2873,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete a draft campaign
-  app.delete("/api/advertiser/campaigns/draft/:id", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.delete("/api/advertiser/campaigns/draft/:id", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       await db
         .delete(campaigns)
@@ -2922,7 +2923,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get campaigns (advertiser) — optimized: single JOIN with booking stats
 
-  app.get("/api/advertiser/campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.get("/api/advertiser/campaigns", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const campaignsWithStats = await storage.getCampaignsWithBookingStats(req.user!.id);
       res.json(campaignsWithStats);
@@ -2933,7 +2934,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create campaign (advertiser)
-  app.post("/api/advertiser/campaigns", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.post("/api/advertiser/campaigns", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       // Validate start date is at least tomorrow
       const startDate = new Date(req.body.startDate);
@@ -3077,7 +3078,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get specific campaign with all bookings (advertiser)
-  app.get("/api/advertiser/campaigns/:id", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.get("/api/advertiser/campaigns/:id", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const { id } = req.params;
       const campaign = await storage.getCampaign(id);
@@ -3110,7 +3111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update campaign (advertiser - only for rejected campaigns)
-  app.patch("/api/advertiser/campaigns/:id", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.patch("/api/advertiser/campaigns/:id", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const { id } = req.params;
       const campaign = await storage.getCampaign(id);
@@ -3139,7 +3140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Resubmit rejected campaign (advertiser)
-  app.patch("/api/advertiser/campaigns/:id/resubmit", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.patch("/api/advertiser/campaigns/:id/resubmit", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const { id } = req.params;
       const campaign = await storage.getCampaign(id);
@@ -3832,6 +3833,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========== FLOW COMPLETION ROUTES (Payments, Payouts, Creative, Notifications) ==========
   registerFlowRoutes(app, authenticate, requireRole, requireVerified);
+
+  // ========== AGENCY ROUTES (Media Planning) ==========
+  registerAgencyRoutes(app, authenticate, requireRole);
 
   const httpServer = createServer(app);
   return httpServer;

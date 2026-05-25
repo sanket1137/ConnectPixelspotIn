@@ -244,13 +244,15 @@ export default function AIConversations() {
 
       {/* Conversation Details Dialog */}
       <Dialog open={!!selectedConversation} onOpenChange={(open) => !open && setSelectedConversation(null)}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl w-full overflow-hidden flex flex-col" style={{ maxHeight: '85vh' }}>
+          <DialogHeader className="shrink-0">
             <DialogTitle>Conversation Details</DialogTitle>
             <DialogDescription>
               Full conversation thread and user interactions
             </DialogDescription>
           </DialogHeader>
+
+          <div className="overflow-y-auto flex-1 pr-1">
 
           {detailsLoading ? (
             <div className="space-y-4 mt-4">
@@ -306,7 +308,7 @@ export default function AIConversations() {
                         {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
                       </span>
                     </div>
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    <p className="text-sm whitespace-pre-wrap break-words overflow-wrap-anywhere">{msg.content}</p>
                     
                     {msg.screenRecommendations && msg.screenRecommendations.length > 0 && (
                       <div className="mt-3 pt-3 border-t">
@@ -328,6 +330,7 @@ export default function AIConversations() {
               </div>
             </div>
           ) : null}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -46,8 +46,8 @@ export function registerFlowRoutes(
 
   // ========== PAYMENT ROUTES (Advertiser) ==========
 
-  // Create Razorpay order for a booking payment
-  app.post("/api/payments/create-order", authenticate, requireRole("advertiser"), async (req, res) => {
+  // Create Razorpay order for a campaign payment
+  app.post("/api/payments/create-order", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const { campaignId, bookingId } = req.body;
       if (!campaignId || !bookingId) {
@@ -131,7 +131,7 @@ export function registerFlowRoutes(
   });
 
   // Verify Razorpay payment after client-side checkout
-  app.post("/api/payments/verify", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.post("/api/payments/verify", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature, campaignId, bookingId } = req.body;
       if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -444,7 +444,7 @@ export function registerFlowRoutes(
   });
 
   // Get advertiser's payments
-  app.get("/api/advertiser/payments", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.get("/api/advertiser/payments", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const payments = await storage.getPaymentsByAdvertiser(req.user!.id);
       res.json(payments);
@@ -455,7 +455,7 @@ export function registerFlowRoutes(
   });
 
   // Get advertiser's invoices
-  app.get("/api/advertiser/invoices", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.get("/api/advertiser/invoices", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const invoices = await storage.getInvoicesByAdvertiser(req.user!.id);
       res.json(invoices);
@@ -761,7 +761,7 @@ export function registerFlowRoutes(
 
   // Advertiser: upload creative for a campaign
   app.post("/api/advertiser/campaigns/:id/upload-creative",
-    authenticate, requireRole("advertiser"),
+    authenticate, requireRole("advertiser", "agency"),
     creativeUpload.single("creative"),
     async (req, res) => {
       try {
@@ -1248,7 +1248,7 @@ export function registerFlowRoutes(
   });
 
   // Advertiser: confirm proof of play
-  app.patch("/api/advertiser/proof/:id/confirm", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.patch("/api/advertiser/proof/:id/confirm", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const proof = await storage.getProofOfPlay(req.params.id);
       if (!proof) {
@@ -1303,7 +1303,7 @@ export function registerFlowRoutes(
   });
 
   // Advertiser: dispute proof of play
-  app.patch("/api/advertiser/proof/:id/dispute", authenticate, requireRole("advertiser"), async (req, res) => {
+  app.patch("/api/advertiser/proof/:id/dispute", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const proof = await storage.getProofOfPlay(req.params.id);
       if (!proof) {

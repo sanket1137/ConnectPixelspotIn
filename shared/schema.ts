@@ -47,7 +47,7 @@ export const users = pgTable("users", {
   // Payment deadline configuration (for screen owners)
   paymentDeadlineHours: integer("payment_deadline_hours").default(24), // how many hours advertiser gets to pay after owner approves
 
-  role: text("role").notNull().default("advertiser"), // admin, screen_owner, advertiser
+  role: text("role").notNull().default("advertiser"), // admin, screen_owner, advertiser, agency
   status: text("status").notNull().default("active"), // active, inactive, pending
   createdAt: timestamp("created_at").defaultNow().notNull(),
 
@@ -692,6 +692,72 @@ export const insertAiMessageSchema = createInsertSchema(aiMessages).omit({
 export const insertAiRateLimitSchema = createInsertSchema(aiRateLimits).omit({
   id: true,
 });
+
+// ============================================================
+// Agency Media Plans
+// ============================================================
+
+// Media Plans table — one plan per client pitch
+export const mediaPlans = pgTable("media_plans", {
+  id:           varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agencyId:     varchar("agency_id").notNull(),
+  name:         text("name").notNull(),
+  clientBrand:  text("client_brand").notNull(),
+  startDate:    timestamp("start_date").notNull(),
+  endDate:      timestamp("end_date").notNull(),
+  budget:       integer("budget").notNull().default(0),
+  agencyMargin: integer("agency_margin").notNull().default(0), // % markup, never shown in client PDF
+  notes:        text("notes"),
+  status:       text("status").notNull().default("draft"), // draft | sent | executed
+  createdAt:    timestamp("created_at").defaultNow().notNull(),
+  updatedAt:    timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_media_plans_agency_id").on(table.agencyId),
+  index("idx_media_plans_status").on(table.status),
+]);
+
+// Media Plan Items table — individual screen line-items within a plan
+export const mediaPlanItems = pgTable("media_plan_items", {
+  id:             varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  planId:         varchar("plan_id").notNull(),
+  screenId:       varchar("screen_id").notNull(),
+  screenOwnerId:  varchar("screen_owner_id"),  // denormalised for owner tag display
+  days:           integer("days").notNull().default(1),
+  pricePerDay:    integer("price_per_day").notNull().default(0),
+  totalPrice:     integer("total_price").notNull().default(0),  // days × pricePerDay (net, pre-margin)
+  notes:          text("notes"),
+  status:         text("status").notNull().default("included"), // included | removed
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_media_plan_items_plan_id").on(table.planId),
+  index("idx_media_plan_items_screen_id").on(table.screenId),
+]);
+
+// Relations
+export const mediaPlansRelations = relations(mediaPlans, ({ one, many }) => ({
+  agency: one(users, { fields: [mediaPlans.agencyId], references: [users.id] }),
+  items:  many(mediaPlanItems),
+}));
+
+export const mediaPlanItemsRelations = relations(mediaPlanItems, ({ one }) => ({
+  plan:   one(mediaPlans, { fields: [mediaPlanItems.planId],    references: [mediaPlans.id] }),
+  screen: one(screens,    { fields: [mediaPlanItems.screenId],  references: [screens.id] }),
+}));
+
+// Insert schemas
+export const insertMediaPlanSchema = createInsertSchema(mediaPlans).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+
+export const insertMediaPlanItemSchema = createInsertSchema(mediaPlanItems).omit({
+  id: true, createdAt: true,
+});
+
+// Types
+export type MediaPlan     = typeof mediaPlans.$inferSelect;
+export type InsertMediaPlan = z.infer<typeof insertMediaPlanSchema>;
+export type MediaPlanItem   = typeof mediaPlanItems.$inferSelect;
+export type InsertMediaPlanItem = z.infer<typeof insertMediaPlanItemSchema>;
 
 // Password Reset Tokens table
 export const passwordResetTokens = pgTable("password_reset_tokens", {

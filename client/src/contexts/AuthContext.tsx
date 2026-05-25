@@ -16,12 +16,13 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string, name: string, role: "screen_owner" | "advertiser") => Promise<void>;
+  signUpWithEmail: (email: string, password: string, name: string, role: "screen_owner" | "advertiser" | "agency") => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isScreenOwner: boolean;
   isAdvertiser: boolean;
+  isAgency: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -117,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: string; 
       password: string; 
       name: string; 
-      role: "screen_owner" | "advertiser" 
+      role: "screen_owner" | "advertiser" | "agency"
     }) => {
       const result = await createUserWithEmailAndPassword(auth, email, password);
       const token = await result.user.getIdToken();
@@ -169,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signInWithEmail: async (email: string, password: string) => { 
       await signInEmailMutation.mutateAsync({ email, password });
     },
-    signUpWithEmail: async (email: string, password: string, name: string, role: "screen_owner" | "advertiser") => {
+    signUpWithEmail: async (email: string, password: string, name: string, role: "screen_owner" | "advertiser" | "agency") => {
       await signUpEmailMutation.mutateAsync({ email, password, name, role });
     },
     resetPassword: async (email: string) => {
@@ -184,6 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAdmin: user?.role === "admin",
     isScreenOwner: user?.role === "screen_owner",
     isAdvertiser: user?.role === "advertiser",
+    isAgency: user?.role === "agency",
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

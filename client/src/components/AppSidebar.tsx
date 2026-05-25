@@ -30,6 +30,8 @@ import {
   MessageSquare,
   Shield,
   RefreshCw,
+  Briefcase,
+  ClipboardList,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -38,7 +40,7 @@ import { queryClient } from "@/lib/queryClient";
 import logo from "@assets/pixelspot-logo.png";
 
 export function AppSidebar() {
-  const { user, signOut, isAdmin, isScreenOwner, isAdvertiser } = useAuth();
+  const { user, signOut, isAdmin, isScreenOwner, isAdvertiser, isAgency } = useAuth();
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -48,6 +50,7 @@ export function AppSidebar() {
     { title: "Manage Users", url: "/admin/users", icon: Users },
     { title: "Manage Screens", url: "/admin/screens", icon: Monitor },
     { title: "Campaigns & Bookings", url: "/admin/bookings", icon: FileText },
+    { title: "Agency Media Plans", url: "/admin/media-plans", icon: ClipboardList },
     { title: "Payments & Payouts", url: "/admin/payments", icon: CreditCard },
     { title: "AI Conversations", url: "/admin/ai-conversations", icon: MessageSquare },
     { title: "AI Security", url: "/admin/ai-security", icon: Shield },
@@ -75,7 +78,17 @@ export function AppSidebar() {
     { title: "Profile", url: "/advertiser/profile", icon: UserCircle },
   ];
 
-  const items = isAdmin ? adminItems : isScreenOwner ? ownerItems : advertiserItems;
+  const agencyItems = [
+    { title: "Dashboard", url: "/agency", icon: LayoutDashboard },
+    { title: "Media Plans", url: "/agency/media-plans", icon: ClipboardList },
+    { title: "Find Screens", url: "/agency/discover", icon: MapPin },
+    { title: "My Campaigns", url: "/agency/campaigns", icon: Briefcase },
+    { title: "AI Campaign Advisor", url: "/agency/ai-advisor", icon: Sparkles },
+    { title: "Payments", url: "/agency/payments", icon: CreditCard },
+    { title: "Profile", url: "/agency/profile", icon: UserCircle },
+  ];
+
+  const items = isAdmin ? adminItems : isScreenOwner ? ownerItems : isAgency ? agencyItems : advertiserItems;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -114,7 +127,7 @@ export function AppSidebar() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          {isAdmin ? "Admin Portal" : isScreenOwner ? "Screen Owner Portal" : "Advertiser Portal"}
+          {isAdmin ? "Admin Portal" : isScreenOwner ? "Screen Owner Portal" : isAgency ? "Agency Portal" : "Advertiser Portal"}
         </p>
       </SidebarHeader>
       

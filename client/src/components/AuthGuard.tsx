@@ -32,6 +32,7 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
       // Redirect to appropriate dashboard based on role
       if (user.role === "admin") setLocation("/admin");
       else if (user.role === "screen_owner") setLocation("/owner");
+      else if (user.role === "agency") setLocation("/agency");
       else setLocation("/advertiser");
     }
   }, [user, loading, allowedRoles, setLocation]);

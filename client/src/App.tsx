@@ -27,6 +27,7 @@ const Analytics = lazy(() => import("@/pages/admin/Analytics"));
 const AIConversations = lazy(() => import("@/pages/admin/AIConversations"));
 const AISecurityDashboard = lazy(() => import("@/pages/admin/AISecurityDashboard"));
 const Settings = lazy(() => import("@/pages/admin/Settings"));
+const AdminMediaPlans = lazy(() => import("@/pages/admin/AdminMediaPlans"));
 const OwnerDashboard = lazy(() => import("@/pages/owner/OwnerDashboard"));
 const ScreensList = lazy(() => import("@/pages/owner/ScreensList"));
 const AddScreen = lazy(() => import("@/pages/owner/AddScreen"));
@@ -57,6 +58,15 @@ const TermsOfService = lazy(() => import("@/pages/legal/TermsOfService"));
 const RefundPolicy = lazy(() => import("@/pages/legal/RefundPolicy"));
 const ContactUs = lazy(() => import("@/pages/legal/ContactUs"));
 const AboutUs = lazy(() => import("@/pages/legal/AboutUs"));
+
+// Agency pages
+const AgencyDashboard = lazy(() => import("@/pages/agency/AgencyDashboard"));
+const MediaPlansList = lazy(() => import("@/pages/agency/MediaPlansList"));
+const MediaPlanBuilder = lazy(() => import("@/pages/agency/MediaPlanBuilder"));
+// Agency reuses the same full-featured advertiser components for these flows:
+const AgencyDiscover = lazy(() => import("@/pages/advertiser/DiscoverScreens"));
+const AgencyCampaigns = lazy(() => import("@/pages/advertiser/CampaignsList"));
+const AgencyPayments = lazy(() => import("@/pages/advertiser/AdvertiserPayments"));
 
 // Loading fallback for code-split pages
 function PageLoader() {
@@ -142,6 +152,11 @@ function Router() {
       <Route path="/admin/settings">
         <AuthGuard allowedRoles={["admin"]}>
           <Settings />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/media-plans">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminMediaPlans />
         </AuthGuard>
       </Route>
       <Route path="/admin/profile">
@@ -253,6 +268,58 @@ function Router() {
           <Profile />
         </AuthGuard>
       </Route>
+
+      {/* Agency Routes */}
+      <Route path="/agency">
+        <AuthGuard allowedRoles={["agency"]}>
+          <AgencyDashboard />
+        </AuthGuard>
+      </Route>
+      <Route path="/agency/media-plans">
+        <AuthGuard allowedRoles={["agency"]}>
+          <MediaPlansList />
+        </AuthGuard>
+      </Route>
+      <Route path="/agency/media-plans/new">
+        <AuthGuard allowedRoles={["agency"]}>
+          <MediaPlanBuilder />
+        </AuthGuard>
+      </Route>
+      <Route path="/agency/media-plans/:id">
+        <AuthGuard allowedRoles={["agency"]}>
+          <MediaPlanBuilder />
+        </AuthGuard>
+      </Route>
+      <Route path="/agency/discover">
+        <AuthGuard allowedRoles={["agency"]}>
+          <AgencyDiscover />
+        </AuthGuard>
+      </Route>
+      <Route path="/agency/campaigns">
+        <AuthGuard allowedRoles={["agency"]}>
+          <AgencyCampaigns />
+        </AuthGuard>
+      </Route>
+      <Route path="/agency/campaigns/:id">
+        <AuthGuard allowedRoles={["agency"]}>
+          <AgencyCampaigns />
+        </AuthGuard>
+      </Route>
+      <Route path="/agency/ai-advisor">
+        <AuthGuard allowedRoles={["agency"]}>
+          <AICampaignAdvisor />
+        </AuthGuard>
+      </Route>
+      <Route path="/agency/payments">
+        <AuthGuard allowedRoles={["agency"]}>
+          <AgencyPayments />
+        </AuthGuard>
+      </Route>
+      <Route path="/agency/profile">
+        <AuthGuard allowedRoles={["agency"]}>
+          <Profile />
+        </AuthGuard>
+      </Route>
       
       {/* Fallback */}
       <Route component={NotFound} />
@@ -273,7 +340,8 @@ function AuthenticatedLayout() {
   const shouldShowSidebar = user && (
     location.startsWith('/admin') ||
     location.startsWith('/owner') ||
-    location.startsWith('/advertiser')
+    location.startsWith('/advertiser') ||
+    location.startsWith('/agency')
   );
 
   const style = {

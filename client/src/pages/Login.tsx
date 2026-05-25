@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Monitor, TrendingUp, MapPin, Building2, Megaphone, Mail } from "lucide-react";
+import { Monitor, TrendingUp, MapPin, Building2, Megaphone, Mail, Briefcase } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,7 @@ export default function Login() {
   const { user, signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [showRoleSelection, setShowRoleSelection] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<"screen_owner" | "advertiser" | null>(null);
+  const [selectedRole, setSelectedRole] = useState<"screen_owner" | "advertiser" | "agency" | null>(null);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
@@ -45,7 +45,7 @@ export default function Login() {
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
-  const [signupRole, setSignupRole] = useState<"screen_owner" | "advertiser">(
+  const [signupRole, setSignupRole] = useState<"screen_owner" | "advertiser" | "agency">(
     roleParam === 'advertiser' ? 'advertiser' : 'advertiser'
   );
 
@@ -54,6 +54,7 @@ export default function Login() {
       // Redirect based on role
       if (user.role === "admin") setLocation("/admin");
       else if (user.role === "screen_owner") setLocation("/owner");
+      else if (user.role === "agency") setLocation("/agency");
       else setLocation("/advertiser");
     }
   }, [user, setLocation]);
@@ -101,9 +102,8 @@ export default function Login() {
     window.location.href = '/auth/google';
   };
 
-  const handleRoleSelect = async (role: "screen_owner" | "advertiser") => {
+  const handleRoleSelect = async (role: "screen_owner" | "advertiser" | "agency") => {
     setSelectedRole(role);
-    // Redirect to backend OAuth endpoint with role parameter
     window.location.href = `/auth/google?role=${role}`;
   };
 
@@ -381,28 +381,39 @@ export default function Login() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signup-role">I am a...</Label>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-2">
                       <button
                         type="button"
                         onClick={() => setSignupRole("advertiser")}
-                        className={`p-4 border-2 rounded-lg hover-elevate active-elevate-2 text-left transition-all ${
+                        className={`p-3 border-2 rounded-lg text-left transition-all ${
                           signupRole === "advertiser" ? "border-primary bg-primary/5" : "border-border"
                         }`}
                         data-testid="button-role-advertiser-signup"
                       >
-                        <Megaphone className="w-5 h-5 text-chart-2 mb-2" />
-                        <p className="text-sm font-semibold">Advertiser</p>
+                        <Megaphone className="w-4 h-4 text-chart-2 mb-1" />
+                        <p className="text-xs font-semibold">Advertiser</p>
                       </button>
                       <button
                         type="button"
                         onClick={() => setSignupRole("screen_owner")}
-                        className={`p-4 border-2 rounded-lg hover-elevate active-elevate-2 text-left transition-all ${
+                        className={`p-3 border-2 rounded-lg text-left transition-all ${
                           signupRole === "screen_owner" ? "border-primary bg-primary/5" : "border-border"
                         }`}
                         data-testid="button-role-owner-signup"
                       >
-                        <Building2 className="w-5 h-5 text-primary mb-2" />
-                        <p className="text-sm font-semibold">Screen Owner</p>
+                        <Building2 className="w-4 h-4 text-primary mb-1" />
+                        <p className="text-xs font-semibold">Screen Owner</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSignupRole("agency")}
+                        className={`p-3 border-2 rounded-lg text-left transition-all ${
+                          signupRole === "agency" ? "border-violet-500 bg-violet-50" : "border-border"
+                        }`}
+                        data-testid="button-role-agency-signup"
+                      >
+                        <Briefcase className="w-4 h-4 text-violet-600 mb-1" />
+                        <p className="text-xs font-semibold">Agency</p>
                       </button>
                     </div>
                   </div>
@@ -476,6 +487,25 @@ export default function Login() {
                   <h3 className="text-lg font-semibold text-foreground mb-1">Advertiser</h3>
                   <p className="text-sm text-muted-foreground">
                     I want to discover screens and run advertising campaigns
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => handleRoleSelect("agency")}
+              disabled={loading}
+              className="group relative p-6 border-2 border-border rounded-lg hover-elevate active-elevate-2 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="button-role-agency"
+            >
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-violet-100 rounded-lg">
+                  <Briefcase className="w-6 h-6 text-violet-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-foreground mb-1">Agency</h3>
+                  <p className="text-sm text-muted-foreground">
+                    I manage media buying and campaigns for multiple clients
                   </p>
                 </div>
               </div>
