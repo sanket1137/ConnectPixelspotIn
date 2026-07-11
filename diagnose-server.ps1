@@ -5,8 +5,8 @@
 # Diagnoses why connect.pixelspot.in is unreachable
 
 $ErrorActionPreference = "Continue"
-$SERVER = "root@188.245.231.251"
-$SSH_KEY = "pixelssh"
+$SERVER = "root@5.223.70.55"
+$SSH_KEY = "$HOME\Desktop\pixelssh"
 
 Write-Host "Diagnosing server: connect.pixelspot.in" -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan

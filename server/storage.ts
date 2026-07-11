@@ -89,6 +89,9 @@ export interface IStorage {
   getDistinctCities(): Promise<string[]>;
   getCityStats(): Promise<{ city: string; screenCount: number }[]>;
   getPublicStats(): Promise<{ totalPhysicalScreens: number; totalCities: number; totalAdvertisers: number }>;
+  getCityPageData(cityName: string): Promise<{ city: string; totalScreens: number; venueCategories: { name: string; count: number }[]; screens: Screen[] } | null>;
+  getCityVenuePageData(cityName: string, venueCategory: string): Promise<{ city: string; venueCategory: string; totalScreens: number; screens: Screen[] } | null>;
+  getSitemapData(): Promise<{ cities: string[]; cityVenues: { city: string; venueCategory: string }[]; lastUpdated: Date }>;
   createScreen(screen: InsertScreen): Promise<Screen>;
   updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined>;
   updateScreenStatus(id: string, status: string, rejectionReason?: string): Promise<Screen | undefined>;
@@ -431,6 +434,86 @@ export class DatabaseStorage implements IStorage {
     };
     publicCache.set('pub:stats', stats, PUBLIC_SCREENS_TTL);
     return stats;
+  }
+
+  async getCityPageData(cityName: string): Promise<{ city: string; totalScreens: number; venueCategories: { name: string; count: number }[]; screens: Screen[] } | null> {
+    const canonical = normalizeCityName(cityName);
+    const cacheKey = `pub:cityPage:${canonical.toLowerCase()}`;
+    const cached = publicCache.get<{ city: string; totalScreens: number; venueCategories: { name: string; count: number }[]; screens: Screen[] }>(cacheKey);
+    if (cached) return cached;
+    // Case-insensitive city match against canonical + alias spellings
+    const rows = await db
+      .select()
+      .from(screens)
+      .where(and(
+        eq(screens.status, "active"),
+        drizzleSql`LOWER(${screens.city}) = LOWER(${canonical})`
+      ))
+      .orderBy(desc(screens.createdAt));
+    if (rows.length === 0) return null;
+    const totalScreens = rows.reduce(
+      (sum, r) => sum + (r.isMultiScreen && r.numberOfScreens ? r.numberOfScreens : 1),
+      0,
+    );
+    const venueMap = new Map<string, number>();
+    for (const r of rows) {
+      const key = r.venueCategory || "Other";
+      const inc = r.isMultiScreen && r.numberOfScreens ? r.numberOfScreens : 1;
+      venueMap.set(key, (venueMap.get(key) ?? 0) + inc);
+    }
+    const venueCategories = Array.from(venueMap.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+    const data = { city: canonical, totalScreens, venueCategories, screens: rows };
+    publicCache.set(cacheKey, data, PUBLIC_SCREENS_TTL);
+    return data;
+  }
+
+  async getCityVenuePageData(cityName: string, venueCategory: string): Promise<{ city: string; venueCategory: string; totalScreens: number; screens: Screen[] } | null> {
+    const canonicalCity = normalizeCityName(cityName);
+    const cacheKey = `pub:cityVenue:${canonicalCity.toLowerCase()}:${venueCategory.toLowerCase()}`;
+    const cached = publicCache.get<{ city: string; venueCategory: string; totalScreens: number; screens: Screen[] }>(cacheKey);
+    if (cached) return cached;
+    const rows = await db
+      .select()
+      .from(screens)
+      .where(and(
+        eq(screens.status, "active"),
+        drizzleSql`LOWER(${screens.city}) = LOWER(${canonicalCity})`,
+        drizzleSql`LOWER(${screens.venueCategory}) = LOWER(${venueCategory})`,
+      ))
+      .orderBy(desc(screens.createdAt));
+    if (rows.length === 0) return null;
+    const totalScreens = rows.reduce(
+      (sum, r) => sum + (r.isMultiScreen && r.numberOfScreens ? r.numberOfScreens : 1),
+      0,
+    );
+    const data = { city: canonicalCity, venueCategory, totalScreens, screens: rows };
+    publicCache.set(cacheKey, data, PUBLIC_SCREENS_TTL);
+    return data;
+  }
+
+  async getSitemapData(): Promise<{ cities: string[]; cityVenues: { city: string; venueCategory: string }[]; lastUpdated: Date }> {
+    const cached = publicCache.get<{ cities: string[]; cityVenues: { city: string; venueCategory: string }[]; lastUpdated: Date }>('pub:sitemap');
+    if (cached) return cached;
+    const cityRows = await db
+      .selectDistinct({ city: screens.city })
+      .from(screens)
+      .where(eq(screens.status, "active"));
+    const cities = cityRows
+      .map(r => r.city)
+      .filter((c): c is string => !!c)
+      .sort();
+    const pairRows = await db
+      .selectDistinct({ city: screens.city, venueCategory: screens.venueCategory })
+      .from(screens)
+      .where(eq(screens.status, "active"));
+    const cityVenues = pairRows
+      .filter((r): r is { city: string; venueCategory: string } => !!r.city && !!r.venueCategory)
+      .sort((a, b) => a.city.localeCompare(b.city) || a.venueCategory.localeCompare(b.venueCategory));
+    const data = { cities, cityVenues, lastUpdated: new Date() };
+    publicCache.set('pub:sitemap', data, PUBLIC_SCREENS_TTL);
+    return data;
   }
 
   async createScreen(insertScreen: InsertScreen): Promise<Screen> {
