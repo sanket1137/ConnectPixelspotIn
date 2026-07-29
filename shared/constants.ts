@@ -419,3 +419,19 @@ export const LOCATION_TAGS = {
 
 // Flatten all location tags for easy access
 export const ALL_LOCATION_TAGS = Object.values(LOCATION_TAGS).flat();
+
+// Slug utilities
+export function toSlug(str: string): string {
+  if (!str) return '';
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+}
+
+export function fromCitySlug(slug: string): string | null {
+  if (!slug) return null;
+  return slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+export function fromVenueSlug(slug: string): string | null {
+  if (!slug) return null;
+  return slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}

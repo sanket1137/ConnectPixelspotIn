@@ -1,860 +1,1335 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
-import { MapPin, Users, DollarSign, Monitor, Sparkles, ArrowRight, Search, Filter, TrendingUp, Building2, LayoutDashboard, Navigation, Zap } from 'lucide-react';
-import { Link } from 'wouter';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { MapPin, Monitor, Search, ArrowRight, LayoutDashboard, ChevronRight, Star, Users, TrendingUp, Zap, Building2, X, Utensils, Stethoscope, Dumbbell, Scissors, ShoppingBag, Home, GraduationCap, Coffee, Pill, Car, BusFront, Film } from 'lucide-react';
+import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
+import { motion, useScroll, useTransform } from 'framer-motion';
 import type { Screen } from '@shared/schema';
-import ScreenCard from '@/components/ScreenCard';
 import { VENUE_CATEGORIES } from '@shared/constants';
+import { PublicFooter } from "@/components/PublicFooter";
 import logo from "@assets/pixelspot-logo.png";
 import railwayImg from "@assets/Gemini_Generated_Image_wfa0lrwfa0lrwfa0_1763277847119.png";
 import airportLargeImg from "@assets/Gemini_Generated_Image_pla8lvpla8lvpla8_1763277847120.png";
-import airportKioskImg from "@assets/Gemini_Generated_Image_ladsi7ladsi7lads_1763277847120.png";
 import corporateImg from "@assets/Gemini_Generated_Image_fjsgtufjsgtufjsg_1763277847121.png";
 import streetBillboardImg from "@assets/Gemini_Generated_Image_a8c8zna8c8zna8c8_1763278640800.png";
 import gymImg from "@assets/Gemini_Generated_Image_58c0x558c0x558c0_1763278104633.png";
 import residentialImg from "@assets/Gemini_Generated_Image_n8g1q2n8g1q2n8g1_1763278640800.png";
 import cafeImg from "@assets/Gemini_Generated_Image_gkftp9gkftp9gkft_1763278160282.png";
 import discoverHeroImg from "@assets/Gemini_Generated_Image_a8c8zna8c8zna8c8_1763278499067.png";
-
-interface PublicScreensResponse {
-  cities: string[];
-  count: number;
-}
-
-interface CityStatsResponse {
-  cityStats: { city: string; screenCount: number }[];
-}
-
-interface PublicStatsResponse {
-  totalPhysicalScreens: number;
-  totalCities: number;
-  totalAdvertisers: number;
-}
-
+import airportKioskImg from "@assets/Gemini_Generated_Image_ladsi7ladsi7lads_1763277847120.png";
+import cinema1Img from "@assets/Screenshot 2025-11-16 at 9.47.23 PM_1763309847078.png";
+import cinema2Img from "@assets/Screenshot 2025-11-16 at 9.32.10 PM_1763308932655.png";
+import newCafeImg from "@assets/CAFE 3.png";
+import newCinemaImg from "@assets/Cinema Hall 2.png";
+import newCinemaImgAlt from "@assets/CINEMA HALL 5.png";
+import newBillboardImg from "@assets/billboard1.png";
+import newMallImg from "@assets/Mall1.png";
+import newSupermarketImg from "@assets/supper market1.png";
+import newTechParkImg from "@assets/Tech Park.png";
+import newSalonImg from "@assets/Salon.jpeg";
+import newGymImg from "@assets/Gym.jpeg";
+import newBusStopImg from "@assets/Bus Stop.png";
 interface HomeDataResponse {
   screens: Screen[];
   cities: string[];
   cityStats: { city: string; screenCount: number }[];
-  platformStats: PublicStatsResponse;
+  platformStats: {
+    totalPhysicalScreens: number;
+    totalCities: number;
+    totalAdvertisers: number;
+  };
 }
 
-interface NearbyScreensResponse {
-  detectedCity: string | null;
-  detectedState: string | null;
-  lat: number | null;
-  lng: number | null;
-  screens: (Screen & { distanceKm?: number })[];
-  totalNearby: number;
-  radiusKm: number;
-  fallback: boolean;
-}
+// ──────────────────────────────────────────────────────────
+// Venue filter chips: derived from VENUE_CATEGORIES
+// ──────────────────────────────────────────────────────────
+const VENUE_CHIPS = [
+  { label: 'All', value: '' },
+  { label: 'Malls', value: 'Mall' },
+  { label: 'Airports', value: 'Airport' },
+  { label: 'Restaurants', value: 'Restaurant' },
+  { label: 'Cafés', value: 'Café' },
+  { label: 'Corporate Parks', value: 'Corporate Park' },
+  { label: 'Gyms', value: 'Gym' },
+  { label: 'Cinemas', value: 'Cinema' },
+  { label: 'Hospitals', value: 'Hospital' },
+  { label: 'Apartments', value: 'Apartment' },
+  { label: 'Retail Stores', value: 'Retail Store' },
+  { label: 'Hotels', value: 'Hotel' },
+];
 
-const getMapContainerStyle = () => ({
-  width: '100%',
-  height: window.innerWidth < 640 ? '300px' : window.innerWidth < 1024 ? '400px' : '500px',
-});
-
-const defaultCenter = {
-  lat: 20.5937,
-  lng: 78.9629,
-};
-
-const VENUE_TYPES = ['All Venues', ...VENUE_CATEGORIES];
-
-// Famous landmark / cityscape images for Browse by City cards (Unsplash CDN, 400×250 crop)
-// Every city has a UNIQUE photo ID — zero duplicates. Landmark chosen per B2B OOH relevance.
-const CITY_LANDMARK_IMAGES: Record<string, string> = {
-  // ═══ TOP-TIER METROS ═══
-  'Mumbai':     'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400&h=250&fit=crop', // Gateway of India
-  'Delhi':      'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&h=250&fit=crop', // India Gate
-  'Bengaluru':  'https://images.unsplash.com/photo-1596176530529-78163a4f7af2?w=400&h=250&fit=crop', // Vidhana Soudha
-  'Hyderabad':  'https://images.unsplash.com/photo-1572638668779-e0e354c04a62?w=400&h=250&fit=crop', // Charminar
-  'Chennai':    'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=400&h=250&fit=crop', // Marina Beach Lighthouse
-  'Kolkata':    'https://images.unsplash.com/photo-1558431382-27e303142255?w=400&h=250&fit=crop', // Victoria Memorial
-  'Pune':       'https://images.unsplash.com/photo-1567157577867-05ccb1388e13?w=400&h=250&fit=crop', // Shaniwar Wada
-  'Ahmedabad':  'https://images.unsplash.com/photo-1627894483216-2138af692e32?w=400&h=250&fit=crop', // Sabarmati Riverfront
-  'Jaipur':     'https://images.unsplash.com/photo-1477587458883-47145ed94245?w=400&h=250&fit=crop', // Hawa Mahal
-  'Lucknow':    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=250&fit=crop', // Rumi Darwaza / Bara Imambara
-  // ═══ DELHI VARIANTS (unique landmark each) ═══
-  'New Delhi':       'https://images.unsplash.com/photo-1597040663342-45b6af3d91a5?w=400&h=250&fit=crop', // Rashtrapati Bhavan
-  'Delhi - Central': 'https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=400&h=250&fit=crop', // India Gate / Connaught Place area
-  'Delhi - South':   'https://images.unsplash.com/photo-1548013146-72479768bada?w=400&h=250&fit=crop', // Qutub Minar
-  'Delhi - West':    'https://images.unsplash.com/photo-1585135497273-1a86b09fe70e?w=400&h=250&fit=crop', // Akshardham / Lotus Temple
-  // ═══ MUMBAI REGION ═══
-  'Thane':       'https://images.unsplash.com/photo-1595658658481-d53d3f999875?w=400&h=250&fit=crop', // Thane cityscape
-  'Navi Mumbai': 'https://images.unsplash.com/photo-1529253355930-ddbe423a2ac7?w=400&h=250&fit=crop', // Navi Mumbai skyline
-  // ═══ NCR / BUSINESS HUBS ═══
-  'Noida':        'https://images.unsplash.com/photo-1622451208812-e98312ce5d94?w=400&h=250&fit=crop', // Noida Expressway
-  'Greater Noida': 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&h=250&fit=crop', // Modern towers
-  'Gurugram':     'https://images.unsplash.com/photo-1614082242765-7c98ca0f3df3?w=400&h=250&fit=crop', // Cyber Hub skyline
-  'Gurgaon':      'https://images.unsplash.com/photo-1545127398-14699f92334b?w=400&h=250&fit=crop', // DLF Cyber City
-  'Faridabad':    'https://images.unsplash.com/photo-1555952517-2e8e729e0b44?w=400&h=250&fit=crop', // Surajkund Lake
-  'Ghaziabad':    'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=400&h=250&fit=crop', // City skyline
-  // ═══ PUNJAB / HARYANA / CHANDIGARH ═══
-  'Chandigarh':  'https://images.unsplash.com/photo-1590077428593-a55bb07c4665?w=400&h=250&fit=crop', // Open Hand / Rock Garden
-  'Amritsar':    'https://images.unsplash.com/photo-1514222134-b57cbb8ce073?w=400&h=250&fit=crop', // Golden Temple
-  'Mohali':      'https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=400&h=250&fit=crop', // PCA Cricket Stadium
-  'Jalandhar':   'https://images.unsplash.com/photo-1609947017136-9daf32a76cbe?w=400&h=250&fit=crop', // Devi Talab Mandir
-  'Zirakpur':    'https://images.unsplash.com/photo-1504015930-2f1a9e9e7e10?w=400&h=250&fit=crop', // Highway corridor
-  // ═══ RAJASTHAN ═══
-  'Udaipur':         'https://images.unsplash.com/photo-1597574422609-a36d85b8ccc2?w=400&h=250&fit=crop', // Lake Pichola / City Palace
-  'Kota':            'https://images.unsplash.com/photo-1599661046289-e31897846e41?w=400&h=250&fit=crop', // Chambal riverside
-  'Bhilwara':        'https://images.unsplash.com/photo-1524230572899-a752b3835840?w=400&h=250&fit=crop', // Rajasthan architecture
-  'Sri Ganganagar':  'https://images.unsplash.com/photo-1506461883276-594a12b11cf3?w=400&h=250&fit=crop', // Rajasthan landscape
-  // ═══ GUJARAT ═══
-  'Vadodara':  'https://images.unsplash.com/photo-1609948543911-e36aea54885c?w=400&h=250&fit=crop', // Laxmi Vilas Palace
-  'Surat':     'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=400&h=250&fit=crop', // Surat Diamond Bourse
-  'Rajkot':    'https://images.unsplash.com/photo-1623682242137-ef0e2a2bad1d?w=400&h=250&fit=crop', // Watson Museum
-  'Anand':     'https://images.unsplash.com/photo-1585464231875-d9ef1f5ad396?w=400&h=250&fit=crop', // Amul Dairy / Gujarat campus
-  // ═══ GOA ═══
-  'Panjim':    'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=400&h=250&fit=crop', // Panjim / Goa beach
-  'Provorim':  'https://images.unsplash.com/photo-1587922546307-776227941871?w=400&h=250&fit=crop', // Goa scenery
-  // ═══ MADHYA PRADESH ═══
-  'Bhopal':   'https://images.unsplash.com/photo-1600011689032-8b628b8a8747?w=400&h=250&fit=crop', // Taj-ul-Masajid
-  'Indore':   'https://images.unsplash.com/photo-1609766857041-ed402ea8069a?w=400&h=250&fit=crop', // Rajwada Palace / 56 Dukan
-  'Gwalior':  'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400&h=250&fit=crop', // Gwalior Fort
-  // ═══ MAHARASHTRA (non-Mumbai) ═══
-  'Nagpur':  'https://images.unsplash.com/photo-1625731226721-b4d51ae70e20?w=400&h=250&fit=crop', // Deekshabhoomi
-  // ═══ UTTAR PRADESH ═══
-  'Agra':      'https://images.unsplash.com/photo-1564507592333-c60657eea523?w=400&h=250&fit=crop', // Taj Mahal
-  'Varanasi':  'https://images.unsplash.com/photo-1561361513-2d000a50f0dc?w=400&h=250&fit=crop', // Dashashwamedh Ghat
-  'Kanpur':    'https://images.unsplash.com/photo-1580894894513-541e068a3e2b?w=400&h=250&fit=crop', // Kanpur riverside / Memorial Church
-  'Meerut':    'https://images.unsplash.com/photo-1566552881560-0be862a7c445?w=400&h=250&fit=crop', // Augarnath Temple
-  'Gorakhpur': 'https://images.unsplash.com/photo-1544735716-ea3d59d8c3b7?w=400&h=250&fit=crop', // Gorakhnath Temple
-  // ═══ UTTARAKHAND ═══
-  'Dehradun':  'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=400&h=250&fit=crop', // Mussoorie / Doon Valley
-  // ═══ BIHAR / JHARKHAND ═══
-  'Patna':    'https://images.unsplash.com/photo-1623682687826-fe07e1e76e50?w=400&h=250&fit=crop', // Golghar / Mahatma Gandhi Setu
-  'Ranchi':   'https://images.unsplash.com/photo-1559494007-9f5847c49d94?w=400&h=250&fit=crop', // Hundru Falls / Jagannath Temple
-  'Dhanbad':  'https://images.unsplash.com/photo-1533577116850-9cc66cad8a9b?w=400&h=250&fit=crop', // Industrial cityscape
-  // ═══ SOUTH INDIA — Kerala ═══
-  'Kochi':               'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&h=250&fit=crop', // Chinese Fishing Nets
-  'Thiruvananthapuram':  'https://images.unsplash.com/photo-1593693411515-c20261bcad6e?w=400&h=250&fit=crop', // Padmanabhaswamy Temple
-  'Thrissur':            'https://images.unsplash.com/photo-1602158123557-f8a95428b294?w=400&h=250&fit=crop', // Vadakkunnathan / Thrissur Pooram
-  // ═══ SOUTH INDIA — Tamil Nadu ═══
-  'Coimbatore':  'https://images.unsplash.com/photo-1621425116131-b27cafec5c32?w=400&h=250&fit=crop', // Adiyogi Shiva Statue / Isha
-  'Salem':       'https://images.unsplash.com/photo-1605649487212-47bdab064df7?w=400&h=250&fit=crop', // Yercaud Hills
-  'Puducherry':  'https://images.unsplash.com/photo-1580977276076-ae4b8c219b8e?w=400&h=250&fit=crop', // French Quarter
-  // ═══ SOUTH INDIA — Karnataka ═══
-  'Mysuru':    'https://images.unsplash.com/photo-1600112356915-089ee07e1062?w=400&h=250&fit=crop', // Mysore Palace (Amba Vilas)
-  'Dharwad':   'https://images.unsplash.com/photo-1615827053503-532af8e3d8a4?w=400&h=250&fit=crop', // Karnataka hills
-  'Tumakuru':  'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=400&h=250&fit=crop', // Devarayanadurga
-  'Gulbarga':  'https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=400&h=250&fit=crop', // Gulbarga Fort
-  // ═══ SOUTH INDIA — Andhra Pradesh / Telangana ═══
-  'Visakhapatnam':  'https://images.unsplash.com/photo-1589553416260-f586c8f1514f?w=400&h=250&fit=crop', // Kailasagiri
-  'Vijaywada':      'https://images.unsplash.com/photo-1582979512210-99b6a53386f9?w=400&h=250&fit=crop', // Kanaka Durga Temple / Krishna River
-  'Kakinada':       'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&h=250&fit=crop', // Kakinada Beach
-  'Nizamabad':      'https://images.unsplash.com/photo-1517427294546-5aa44f7a5e46?w=400&h=250&fit=crop', // Nizamabad Fort
-  'Warangal':       'https://images.unsplash.com/photo-1626714388485-0c610567fb23?w=400&h=250&fit=crop', // Thousand Pillar Temple / Kakatiya Kala Thoranam
-  // ═══ NORTH EAST ═══
-  'Guwahati':  'https://images.unsplash.com/photo-1574104252742-42da03e6c196?w=400&h=250&fit=crop', // Kamakhya Temple / Umananda Island
-  // ═══ ODISHA ═══
-  'Bhubaneswar':  'https://images.unsplash.com/photo-1583309219338-a582f1f9ca6b?w=400&h=250&fit=crop', // Lingaraj Temple / Dhauli Giri
-  'Cuttack':      'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&h=250&fit=crop', // Barabati Fort
-  // ═══ J&K ═══
-  'Srinagar':  'https://images.unsplash.com/photo-1596402184320-417e7178b2cd?w=400&h=250&fit=crop', // Dal Lake (Shikaras)
-  // ═══ WEST BENGAL ═══
-  'Howrah':  'https://images.unsplash.com/photo-1536421469767-80559bb6f5e1?w=400&h=250&fit=crop', // Howrah Bridge
-};
-
-// Generate consistent pastel gradient colors for cities based on city name
-const getCityGradient = (cityName: string): string => {
-  // Hash the city name to get a consistent number
-  let hash = 0;
-  for (let i = 0; i < cityName.length; i++) {
-    hash = cityName.charCodeAt(i) + ((hash << 5) - hash);
+// ──────────────────────────────────────────────────────────
+// FAQ Data
+// ──────────────────────────────────────────────────────────
+const FAQ_ITEMS = [
+  {
+    question: "What is Connect by PixelSpot?",
+    answer: "Connect is a digital out-of-home (DOOH) advertising marketplace that helps businesses discover, compare and book digital advertising screens across India, all from one platform."
+  },
+  {
+    question: "What types of digital screens are available?",
+    answer: "Our network includes digital billboards, shopping malls, cinemas, corporate offices, cafés, restaurants, residential communities, airports, hospitals, retail stores, gyms and many other premium locations."
+  },
+  {
+    question: "Can I advertise only around my business?",
+    answer: "Yes. Connect specializes in hyperlocal advertising, allowing you to target digital screens within your preferred locality, radius or city so your campaigns reach nearby customers."
+  },
+  {
+    question: "What is the minimum campaign budget?",
+    answer: "Campaign budgets vary depending on screen type, location and duration. You can discover available screens and build a campaign that fits your marketing budget."
+  },
+  {
+    question: "Which cities do you operate in?",
+    answer: "Connect provides access to digital advertising screens across 70+ cities in India, with new locations being added regularly."
+  },
+  {
+    question: "How do I book a campaign?",
+    answer: "Simply search for screens, add them to your campaign, choose your campaign duration, upload your creative and complete your booking through the platform."
+  },
+  {
+    question: "Can I advertise on malls and cinemas?",
+    answer: "Yes. You can discover available inventory across shopping malls, cinemas, corporate campuses, cafés, restaurants and many other premium venues."
+  },
+  {
+    question: "Can I choose multiple locations?",
+    answer: "Absolutely. You can build campaigns across multiple screens, locations and cities from a single campaign."
+  },
+  {
+    question: "Who can advertise on Connect?",
+    answer: "Our platform is designed for local businesses, startups, restaurants, hospitals, real estate developers, educational institutions, retail brands, agencies and national advertisers looking to reach customers through digital screens."
+  },
+  {
+    question: "Why should I choose DOOH advertising?",
+    answer: "Digital Out-of-Home advertising increases visibility by reaching customers where they live, work, shop and travel. Multiple daily touchpoints improve brand recall and help businesses stay top of mind."
   }
-  
-  // Generate hue from hash (0-360)
-  const hue = Math.abs(hash % 360);
-  
-  // Create two complementary hues for gradient (pastel colors: low saturation, high lightness)
-  const hue1 = hue;
-  const hue2 = (hue + 40) % 360;
-  
-  return `linear-gradient(135deg, hsl(${hue1}, 45%, 70%) 0%, hsl(${hue2}, 50%, 65%) 100%)`;
-};
+];
 
-export default function PublicHome() {
-  const [selectedCity, setSelectedCity] = useState<string>('all');
-  const [selectedState, setSelectedState] = useState<string>('all');
-  const [selectedCountry, setSelectedCountry] = useState<string>('India');
-  const [selectedVenue, setSelectedVenue] = useState<string>('All Venues');
-  const [budgetRange, setBudgetRange] = useState<number[]>([0, 50000]);
-  const [hoveredScreen, setHoveredScreen] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
-  const [showCities, setShowCities] = useState(true);
+// ──────────────────────────────────────────────────────────
+// Location suggestions (city + landmark types)
+// ──────────────────────────────────────────────────────────
+const LOCATION_SUGGESTIONS = [
+  { label: 'Bengaluru', type: 'City', icon: '🏙️' },
+  { label: 'Mumbai', type: 'City', icon: '🏙️' },
+  { label: 'Delhi', type: 'City', icon: '🏙️' },
+  { label: 'Hyderabad', type: 'City', icon: '🏙️' },
+  { label: 'Pune', type: 'City', icon: '🏙️' },
+  { label: 'Chennai', type: 'City', icon: '🏙️' },
+  { label: 'Ahmedabad', type: 'City', icon: '🏙️' },
+  { label: 'Kolkata', type: 'City', icon: '🏙️' },
+  { label: 'Whitefield', type: 'Locality', icon: '📍' },
+  { label: 'Koramangala', type: 'Locality', icon: '📍' },
+  { label: 'Indiranagar', type: 'Locality', icon: '📍' },
+  { label: 'Bandra', type: 'Locality', icon: '📍' },
+  { label: 'Andheri', type: 'Locality', icon: '📍' },
+  { label: 'MG Road', type: 'Landmark', icon: '🗺️' },
+  { label: 'Phoenix Mall', type: 'Mall', icon: '🛍️' },
+  { label: 'DLF Mall', type: 'Mall', icon: '🛍️' },
+  { label: 'Nexus Mall', type: 'Mall', icon: '🛍️' },
+  { label: 'Airport Screens', type: 'Category', icon: '✈️', venueValue: 'Airport' },
+  { label: 'Mall Screens', type: 'Category', icon: '🛍️', venueValue: 'Mall' },
+  { label: 'Corporate Screens', type: 'Category', icon: '🏢', venueValue: 'Corporate Park' },
+  { label: 'Gym Screens', type: 'Category', icon: '💪', venueValue: 'Gym' },
+];
 
-  // Get current user from AuthContext (safe for unauthenticated users — returns null)
-  const { user: currentUser } = useAuth();
+// ──────────────────────────────────────────────────────────
+// Section 2 — Screen venue cards
+// ──────────────────────────────────────────────────────────
+const VENUE_CARDS = [
+  {
+    label: 'Shopping Malls',
+    description: "Reach shoppers while they're discovering, comparing and buying.",
+    audience: 'Shoppers & Families',
+    footfall: '50,000+ daily visitors',
+    image: newMallImg,
+    venueValue: 'Mall',
+    color: '#6366f1',
+  },
+  {
+    label: 'Cinema Hall',
+    description: 'Engage audiences before the movie starts in premium INOX theaters.',
+    audience: 'Moviegoers & Families',
+    footfall: '15,000+ daily visitors',
+    image: newCinemaImg,
+    venueValue: 'Cinema',
+    color: '#e11d48',
+  },
+  {
+    label: 'Tech Parks',
+    description: 'Engage professionals during their daily work hours in premium tech parks.',
+    audience: 'Working Professionals',
+    footfall: '10,000–50,000 employees',
+    image: newTechParkImg,
+    venueValue: 'Corporate Park',
+    color: '#0ea5e9',
+  },
+  {
+    label: 'Digital Billboards',
+    description: 'Maximum visibility on high-traffic roads and highways.',
+    audience: 'Commuters & Drivers',
+    footfall: '80,000+ daily impressions',
+    image: newBillboardImg,
+    venueValue: 'Highway',
+    color: '#f59e0b',
+  },
+  {
+    label: 'Cinema Hall',
+    description: 'High-visibility 4DX displays in VIP cinema lounges.',
+    audience: 'Premium Moviegoers',
+    footfall: '10,000+ daily visitors',
+    image: newCinemaImgAlt,
+    venueValue: 'Cinema',
+    color: '#9333ea',
+  },
+  {
+    label: 'Cafés & Restaurants',
+    description: 'Captive audiences during dining and leisure moments.',
+    audience: 'Young Adults & Families',
+    footfall: '500–5,000 per day',
+    image: newCafeImg,
+    venueValue: 'Café',
+    color: '#ec4899',
+  },
+  {
+    label: 'Supermarkets',
+    description: 'Influence purchase decisions right at the point of sale.',
+    audience: 'Daily Shoppers',
+    footfall: '2,000–8,000 per day',
+    image: newSupermarketImg,
+    venueValue: 'Retail Store',
+    color: '#14b8a6',
+  },
+  {
+    label: 'Gyms & Fitness Centers',
+    description: 'Health-conscious audiences with high disposable income.',
+    audience: 'Fitness Enthusiasts',
+    footfall: '500–2,000 per day',
+    image: newGymImg,
+    venueValue: 'Gym',
+    color: '#ef4444',
+  },
+  {
+    label: 'Residential Apartments',
+    description: 'Reach local residents near your business every day.',
+    audience: 'Local Residents',
+    footfall: '1,000–10,000 residents',
+    image: residentialImg,
+    venueValue: 'Apartment',
+    color: '#10b981',
+  },
+  {
+    label: 'Salons & Spas',
+    description: 'High engagement screen placements in premium salons.',
+    audience: 'Beauty & Lifestyle Consumers',
+    footfall: '100–500 per day',
+    image: newSalonImg,
+    venueValue: 'Salon',
+    color: '#d946ef',
+  },
+  {
+    label: 'Bus Stops & Transit',
+    description: 'High-frequency exposure during daily commutes.',
+    audience: 'Daily Commuters',
+    footfall: '20,000+ daily commuters',
+    image: newBusStopImg,
+    venueValue: 'Transit',
+    color: '#06b6d4',
+  },
+];
 
-  // Single combined fetch — screens + cities + cityStats + platformStats in ONE round-trip
-  const { data: homeData, isLoading: screensLoading } = useQuery<HomeDataResponse>({
-    queryKey: ['/api/public/home-data'],
-    staleTime: 5 * 60 * 1000, // 5 min — matches server-side cache TTL
-  });
+// ──────────────────────────────────────────────────────────
+// Shared Search Autocomplete (used in header + hero)
+// ──────────────────────────────────────────────────────────
+function LocationSearchBar({
+  onSearch,
+  placeholder = 'Search by city, locality, mall, airport or landmark...',
+  variant = 'hero',
+}: {
+  onSearch: (query: string, type: string, venueValue?: string) => void;
+  placeholder?: string;
+  variant?: 'hero' | 'header';
+}) {
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<typeof LOCATION_SUGGESTIONS>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const screens = homeData?.screens ?? [];
-  const cities = homeData?.cities ?? [];
-  const cityCount = homeData?.platformStats?.totalCities ?? homeData?.cities?.length ?? 0;
-  const platformStats = homeData?.platformStats;
-  const cityCounts = (homeData?.cityStats ?? []).reduce((acc, cs) => {
-    acc[cs.city] = cs.screenCount;
-    return acc;
-  }, {} as Record<string, number>);
+  // Typewriter effect state
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [animatedText, setAnimatedText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Get unique states from screens
-  const states = Array.from(new Set(screens.map(s => s.state).filter((state): state is string => Boolean(state))));
+  // Use default or passed placeholder for static text, but use typewriter effect for the animated part
+  const animatedWords = ['Delhi', 'Jayanagar Bangalore', 'Phoenix Mall', 'Koramangala', 'Mumbai'];
 
-  // Calculate total impressions
-  const totalImpressions = screens.reduce((sum, screen) => sum + (screen.avgDailyFootfall || 0), 0);
+  useEffect(() => {
+    if (focused) return;
 
-  // Filter screens
-  const filteredScreens = screens.filter((screen) => {
-    if (selectedCountry !== 'India') return false; // Only India for now
-    if (selectedState !== 'all' && screen.state !== selectedState) return false;
-    if (selectedCity !== 'all' && screen.city !== selectedCity) return false;
-    if (selectedVenue !== 'All Venues' && screen.venueCategory !== selectedVenue) return false;
-    if (screen.pricePerDay < budgetRange[0] || screen.pricePerDay > budgetRange[1]) return false;
-    return true;
-  });
-
-  // Limit markers on map for performance (top 200 by footfall)
-  const MAX_MAP_MARKERS = 200;
-  const mapMarkers = useMemo(() => {
-    if (filteredScreens.length <= MAX_MAP_MARKERS) return filteredScreens;
-    return [...filteredScreens]
-      .sort((a, b) => (b.avgDailyFootfall || 0) - (a.avgDailyFootfall || 0))
-      .slice(0, MAX_MAP_MARKERS);
-  }, [filteredScreens]);
-
-  const handleMarkerClick = (screenId: string) => {
-    const element = document.getElementById(`screen-${screenId}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    let timer: NodeJS.Timeout;
+    const currentWord = animatedWords[placeholderIndex];
+    
+    if (isDeleting) {
+      timer = setTimeout(() => {
+        setAnimatedText(currentWord.substring(0, animatedText.length - 1));
+        if (animatedText.length === 0) {
+          setIsDeleting(false);
+          setPlaceholderIndex((prev) => (prev + 1) % animatedWords.length);
+        }
+      }, 50);
+    } else {
+      timer = setTimeout(() => {
+        setAnimatedText(currentWord.substring(0, animatedText.length + 1));
+        if (animatedText.length === currentWord.length) {
+          setTimeout(() => setIsDeleting(true), 2000); // Wait 2s before deleting
+        }
+      }, 100);
     }
+    
+    return () => clearTimeout(timer);
+  }, [animatedText, isDeleting, placeholderIndex, focused]);
+
+  const displayPlaceholder = focused ? placeholder : `Digital hoarding in ${animatedText}|`;
+
+  useEffect(() => {
+    if (query.length === 0 && focused) {
+      setSuggestions(LOCATION_SUGGESTIONS.slice(0, 8));
+      setIsOpen(true);
+    } else if (query.length > 0) {
+      const filtered = LOCATION_SUGGESTIONS.filter(s =>
+        s.label.toLowerCase().includes(query.toLowerCase())
+      );
+      setSuggestions(filtered);
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  }, [query, focused]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+        setFocused(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelect = (s: typeof LOCATION_SUGGESTIONS[0]) => {
+    setQuery(s.label);
+    setIsOpen(false);
+    onSearch(s.label, s.type, s.venueValue);
   };
 
-  const handleCityClick = (city: string) => {
-    setSelectedCity(city);
-    setShowCities(false);
-    // Scroll to screens section
-    const screensSection = document.getElementById('screens-section');
-    if (screensSection) {
-      screensSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
-  const scrollToScreens = () => {
-    const screensSection = document.getElementById('screens-section');
-    if (screensSection) {
-      screensSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (query.trim()) {
+      onSearch(query, 'search');
     }
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4">
-          <div className="flex h-16 items-center justify-between">
-            <Link href="/">
-              <img 
-                src={logo} 
-                alt="Pixelspot" 
-                className="h-8 sm:h-10 w-auto cursor-pointer"
-                data-testid="img-logo"
-              />
-            </Link>
+    <div ref={containerRef} className="relative w-full">
+      <form onSubmit={handleSubmit}>
+        <div className={`flex items-center bg-white rounded-full shadow-lg border-2 transition-all duration-200 ${
+          variant === 'hero'
+            ? focused ? 'border-blue-500 shadow-indigo-100 shadow-xl' : 'border-gray-200'
+            : focused ? 'border-blue-400' : 'border-gray-200'
+        }`}>
+          <div className="flex items-center gap-3 flex-1 px-5 py-3">
+            <button type="submit" className="shrink-0 flex items-center justify-center">
+              <Search className={`${variant === 'hero' ? 'w-5 h-5 text-gray-400 hover:text-blue-500 transition-colors' : 'w-4 h-4 text-gray-400 hover:text-blue-500 transition-colors'}`} />
+            </button>
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              placeholder={displayPlaceholder}
+              className={`flex-1 bg-transparent outline-none text-gray-900 placeholder:text-gray-400 font-medium ${
+                variant === 'hero' ? 'text-base' : 'text-sm'
+              }`}
+              data-testid="input-hero-search"
+            />
+            {query && (
+              <button type="button" onClick={() => setQuery('')} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
+
+      {/* Dropdown */}
+      {isOpen && suggestions.length > 0 && (
+        <div className={`absolute left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-[9999] ${variant === 'header' ? 'top-full' : 'top-full'}`}>
+          {!query && <div className="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">Popular Searches</div>}
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => handleSelect(s)}
+              className="flex items-center gap-3 w-full px-4 py-3 hover:bg-gray-50 transition-colors text-left group"
+            >
+              <span className="text-xl">{s.icon}</span>
+              <div className="flex-1 min-w-0">
+                <span className="font-medium text-gray-900 text-sm">{s.label}</span>
+              </div>
+              <Badge variant="secondary" className="text-xs shrink-0 bg-gray-100 text-gray-500 group-hover:bg-indigo-50 group-hover:text-blue-600">
+                {s.type}
+              </Badge>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Venue Card
+// ──────────────────────────────────────────────────────────
+function VenueCard({ card, onSelect }: { card: typeof VENUE_CARDS[0]; onSelect: (venue: string) => void }) {
+  return (
+    <div
+      className="group relative flex-shrink-0 w-72 sm:w-[320px] h-[400px] cursor-pointer overflow-hidden rounded-3xl bg-white shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-2 transition-all duration-300"
+      onClick={() => onSelect(card.venueValue)}
+    >
+      {/* 80% Image */}
+      <div className="relative h-[80%] w-full overflow-hidden">
+        <img
+          src={card.image}
+          alt={card.label}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+        <div
+          className="absolute top-4 left-4 w-2.5 h-2.5 rounded-full shadow-sm"
+          style={{ backgroundColor: card.color }}
+        />
+      </div>
+
+      {/* 20% Content */}
+      <div className="h-[20%] w-full px-5 flex items-center justify-between bg-white">
+        <h3 className="font-bold text-gray-900 text-lg pr-3 leading-tight">{card.label}</h3>
+        <div
+          className="inline-flex items-center gap-1 shrink-0 text-xs font-bold px-3 py-1.5 rounded-full"
+          style={{ backgroundColor: `${card.color}15`, color: card.color }}
+        >
+          <TrendingUp className="w-3.5 h-3.5" />
+          {card.footfall}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Animated Network Stats (Scroll-Linked Dial)
+// ──────────────────────────────────────────────────────────
+function AnimatedNetworkStats({ platformStats }: { platformStats: any }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end end"]
+  });
+
+  // Dial Animation Mappings for 3 items
+  // Item 0
+  const y0 = useTransform(scrollYProgress, [0, 0.5, 1], ["0%", "-80%", "-160%"]);
+  const op0 = useTransform(scrollYProgress, [0, 0.25, 0.5], [1, 0.3, 0]);
+  const scale0 = useTransform(scrollYProgress, [0, 0.25, 0.5], [1, 0.9, 0.8]);
+
+  // Item 1
+  const y1 = useTransform(scrollYProgress, [0, 0.5, 1], ["80%", "0%", "-80%"]);
+  const op1 = useTransform(scrollYProgress, [0, 0.25, 0.5, 0.75, 1], [0, 0.3, 1, 0.3, 0]);
+  const scale1 = useTransform(scrollYProgress, [0, 0.25, 0.5, 0.75, 1], [0.8, 0.9, 1, 0.9, 0.8]);
+
+  // Item 2
+  const y2 = useTransform(scrollYProgress, [0, 0.5, 1], ["160%", "80%", "0%"]);
+  const op2 = useTransform(scrollYProgress, [0.5, 0.75, 1], [0, 0.3, 1]);
+  const scale2 = useTransform(scrollYProgress, [0.5, 0.75, 1], [0.8, 0.9, 1]);
+
+  const stats = [
+    { text: `${platformStats?.totalPhysicalScreens?.toLocaleString() || '3,192'}+ DIGITAL SCREENS`, y: y0, op: op0, scale: scale0 },
+    { text: `${platformStats?.totalCities || '78'}+ CITIES ACROSS INDIA`, y: y1, op: op1, scale: scale1 },
+    { text: `100M+ IMPRESSIONS`, y: y2, op: op2, scale: scale2 }
+  ];
+
+  return (
+    <section ref={containerRef} className="relative h-[300vh] bg-white">
+      <div className="sticky top-0 h-screen w-full flex items-center justify-center p-3 sm:p-4 md:p-6 lg:p-8 xl:p-12">
+        
+        {/* Premium Black Container */}
+        <div className="relative w-full h-[85vh] md:h-[80vh] min-h-[600px] bg-black rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row border border-gray-900">
+          
+          {/* Left Side Title */}
+          <div className="md:w-[320px] lg:w-[400px] xl:w-[450px] p-8 md:p-16 flex flex-col justify-center relative z-20 bg-black/80 backdrop-blur-md">
+            <p className="text-gray-400 font-bold uppercase tracking-widest text-xs mb-3 md:mb-4">
+              Our Network
+            </p>
+            <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] tracking-tight shrink-0">
+              Scale That<br />Delivers
+            </h2>
+          </div>
+
+          {/* Right Side Dial Typography */}
+          <div className="relative h-full flex-1 flex items-center justify-center md:justify-end min-w-0">
             
-            <div className="flex items-center gap-2 sm:gap-3">
+            {/* Gradient Fades for Smooth Entry/Exit */}
+            <div className="absolute top-0 left-0 right-0 h-32 md:h-40 bg-gradient-to-b from-black to-transparent z-10 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 h-32 md:h-40 bg-gradient-to-t from-black to-transparent z-10 pointer-events-none" />
+
+            <div className="relative w-full h-full flex items-center justify-center md:justify-end pr-0 md:pr-16">
+              {stats.map((stat, i) => (
+                <motion.div 
+                  key={i}
+                  style={{ y: stat.y, opacity: stat.op, scale: stat.scale }}
+                  className="absolute w-full px-6 md:px-0 text-center md:text-right origin-center md:origin-right"
+                >
+                  <h3 className="text-6xl sm:text-7xl md:text-8xl lg:text-[110px] xl:text-[130px] 2xl:text-[150px] font-black text-white leading-[0.85] tracking-[-0.04em] uppercase flex flex-col md:inline-block">
+                    {stat.text.split('+').map((part, idx, arr) => (
+                      <span key={idx}>
+                        {part}
+                        {idx < arr.length - 1 && <span className="text-gray-600">+</span>}
+                      </span>
+                    ))}
+                  </h3>
+                </motion.div>
+              ))}
+            </div>
+
+          </div>
+          
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Stats Counter (Legacy, to be removed if unused)
+// ──────────────────────────────────────────────────────────
+function StatItem({ value, label, icon }: { value: string; label: string; icon: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-4">
+      <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
+        {icon}
+      </div>
+      <div>
+        <div className="text-2xl font-bold text-gray-900 leading-tight">{value}</div>
+        <div className="text-sm text-gray-500">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Destination Brands (Curated Partner Venues)
+// ──────────────────────────────────────────────────────────
+const DESTINATION_BRANDS = [
+  { name: 'PVR', color: '#dc2626', type: 'Cinema' },
+  { name: 'INOX', color: '#1e3a8a', type: 'Cinema' },
+  { name: 'Cinepolis', color: '#0369a1', type: 'Cinema' },
+  { name: 'Phoenix Marketcity', color: '#b91c1c', type: 'Mall' },
+  { name: 'Prestige Group', color: '#1f2937', type: 'Corporate' },
+  { name: 'Brigade Group', color: '#4338ca', type: 'Corporate' },
+  { name: 'Nexus Malls', color: '#ea580c', type: 'Mall' },
+  { name: 'Lulu Mall', color: '#047857', type: 'Mall' },
+  { name: 'Starbucks', color: '#15803d', type: 'Cafe' },
+  { name: 'Café Coffee Day', color: '#be123c', type: 'Cafe' },
+  { name: 'WeWork', color: '#000000', type: 'Workspace' },
+  { name: 'Embassy Tech Village', color: '#0f766e', type: 'Corporate' },
+  { name: 'RMZ', color: '#111827', type: 'Corporate' },
+  { name: 'Manyata Tech Park', color: '#4f46e5', type: 'Corporate' },
+  { name: 'Miraj Cinemas', color: '#e11d48', type: 'Cinema' },
+  { name: 'Lakme Salon', color: '#db2777', type: 'Salon' },
+  { name: 'Vande Bharat Trains', color: '#ea580c', type: 'Transit' },
+  { name: 'Royal Meenakshi Mall', color: '#9333ea', type: 'Mall' },
+  { name: 'WTF Gyms', color: '#000000', type: 'Gym' },
+];
+
+function BrandLogo({ brand }: { brand: typeof DESTINATION_BRANDS[0] }) {
+  const [, navigate] = useLocation();
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <div 
+      className="flex flex-col items-center justify-center px-10 py-8 mx-3 bg-white rounded-2xl shadow-[0_2px_8px_rgb(0,0,0,0.04)] border border-gray-100 cursor-pointer transition-all duration-300 transform hover:-translate-y-1 hover:shadow-[0_8px_24px_rgb(0,0,0,0.08)] min-w-[240px]"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={() => navigate(`/advertiser/discover?q=${encodeURIComponent(brand.name)}`)}
+    >
+      <span 
+        className="text-2xl md:text-3xl font-black tracking-tight transition-colors duration-500 text-center"
+        style={{ color: isHovered ? brand.color : '#9ca3af' }}
+      >
+        {brand.name}
+      </span>
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mt-2 opacity-60">
+        {brand.type}
+      </span>
+    </div>
+  );
+}
+
+function DestinationBrandsSection() {
+  // Split into 3 staggered rows for depth (19 items total)
+  const row1 = [DESTINATION_BRANDS[0], DESTINATION_BRANDS[3], DESTINATION_BRANDS[6], DESTINATION_BRANDS[9], DESTINATION_BRANDS[12], DESTINATION_BRANDS[15], DESTINATION_BRANDS[18]];
+  const row2 = [DESTINATION_BRANDS[1], DESTINATION_BRANDS[4], DESTINATION_BRANDS[7], DESTINATION_BRANDS[10], DESTINATION_BRANDS[13], DESTINATION_BRANDS[16]];
+  const row3 = [DESTINATION_BRANDS[2], DESTINATION_BRANDS[5], DESTINATION_BRANDS[8], DESTINATION_BRANDS[11], DESTINATION_BRANDS[14], DESTINATION_BRANDS[17]];
+
+  return (
+    <section className="py-24 bg-white overflow-hidden border-t border-gray-100">
+      <style>{`
+        @keyframes scroll-left {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        @keyframes scroll-right {
+          0% { transform: translateX(-50%); }
+          100% { transform: translateX(0); }
+        }
+        .animate-scroll-left {
+          animation: scroll-left var(--speed, 40s) linear infinite;
+          display: flex;
+          width: max-content;
+        }
+        .animate-scroll-right {
+          animation: scroll-right var(--speed, 40s) linear infinite;
+          display: flex;
+          width: max-content;
+        }
+        .pause-on-hover:hover .animate-scroll-left,
+        .pause-on-hover:hover .animate-scroll-right {
+          animation-play-state: paused;
+        }
+      `}</style>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mb-16 text-center">
+        <p className="text-sm font-semibold text-blue-600 uppercase tracking-wider mb-3">Premium Destinations</p>
+        <h2 className="text-4xl md:text-5xl font-bold text-gray-900 tracking-tight leading-tight mb-4">
+          Advertise at India's Most Visited Destinations.
+        </h2>
+        <p className="text-lg text-gray-500 leading-relaxed max-w-3xl mx-auto">
+          Reach audiences at leading malls, cinemas, cafés, corporate campuses and other premium venues across your city.
+        </p>
+      </div>
+
+      <div className="max-w-[95%] xl:max-w-[90%] mx-auto bg-gray-50 rounded-[32px] md:rounded-[48px] py-16 md:py-20 border border-gray-100 shadow-inner relative overflow-hidden pause-on-hover">
+        
+        {/* Gradients to fade edges */}
+        <div className="absolute top-0 bottom-0 left-0 w-16 md:w-32 bg-gradient-to-r from-gray-50 to-transparent z-10 pointer-events-none" />
+        <div className="absolute top-0 bottom-0 right-0 w-16 md:w-32 bg-gradient-to-l from-gray-50 to-transparent z-10 pointer-events-none" />
+
+        {/* Row 1 - Left - Fast */}
+        <div className="w-full overflow-hidden mb-6 md:mb-8" style={{ '--speed': '45s' } as any}>
+          <div className="animate-scroll-left">
+            {[...row1, ...row1, ...row1, ...row1].map((brand, i) => (
+              <BrandLogo key={`r1-${i}`} brand={brand} />
+            ))}
+          </div>
+        </div>
+
+        {/* Row 2 - Right - Medium */}
+        <div className="w-full overflow-hidden mb-6 md:mb-8" style={{ '--speed': '55s' } as any}>
+          <div className="animate-scroll-right -ml-[50%]">
+            {[...row2, ...row2, ...row2, ...row2].map((brand, i) => (
+              <BrandLogo key={`r2-${i}`} brand={brand} />
+            ))}
+          </div>
+        </div>
+
+        {/* Row 3 - Left - Slow */}
+        <div className="w-full overflow-hidden" style={{ '--speed': '65s' } as any}>
+          <div className="animate-scroll-left -ml-24">
+            {[...row3, ...row3, ...row3, ...row3].map((brand, i) => (
+              <BrandLogo key={`r3-${i}`} brand={brand} />
+            ))}
+          </div>
+        </div>
+        
+      </div>
+    </section>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Main Component
+// ──────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────
+// Customer Journey Animation
+// ──────────────────────────────────────────────────────────
+function CustomerJourneySection() {
+  const [hoveredNode, setHoveredNode] = useState<number | null>(null);
+
+  const nodes = [
+    { id: 0, label: 'Home', desc: 'Build awareness before customers leave home.', icon: Home },
+    { id: 1, label: 'Bus Stop', desc: 'Capture attention during the daily commute.', icon: BusFront },
+    { id: 2, label: 'Billboard', desc: 'Reinforce your message on the move.', icon: Monitor },
+    { id: 3, label: 'Office', desc: 'Stay visible during the workday.', icon: Building2 },
+    { id: 4, label: 'Café', desc: 'Reach customers during leisure breaks.', icon: Coffee },
+    { id: 5, label: 'Shopping Mall', desc: 'Influence purchase decisions while shopping.', icon: ShoppingBag },
+    { id: 6, label: 'Cinema', desc: 'Engage audiences in a premium environment.', icon: Film },
+    { id: 7, label: 'Gym', desc: 'Connect with health-conscious consumers.', icon: Dumbbell },
+  ];
+
+  return (
+    <section className="py-24 bg-white overflow-hidden border-t border-gray-100">
+      <style>{`
+        @keyframes spin-orbit {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin-orbit {
+          animation: spin-orbit 16s linear infinite;
+          transform-origin: 250px 250px;
+        }
+        @keyframes node-pulse {
+          0%, 15% { 
+            transform: scale(1.15); 
+            box-shadow: 0 10px 25px -5px rgba(59,130,246,0.3); 
+            border-color: #60a5fa; 
+          }
+          20%, 100% { 
+            transform: scale(1); 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); 
+            border-color: #f3f4f6; 
+          }
+        }
+        @keyframes icon-pulse {
+          0%, 15% { color: #2563eb; }
+          20%, 100% { color: #6b7280; }
+        }
+        .animate-node-pulse {
+          animation: node-pulse 16s ease-in-out infinite;
+        }
+        .animate-icon-pulse {
+          animation: icon-pulse 16s ease-in-out infinite;
+        }
+        .is-paused, .is-paused * {
+          animation-play-state: paused !important;
+        }
+      `}</style>
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 mb-20 text-center">
+        <h2 className="text-4xl md:text-5xl font-bold text-gray-900 tracking-tight leading-tight mb-4">
+          Reach Customers at Every Step of Their Day.
+        </h2>
+        <p className="text-lg text-gray-500 leading-relaxed max-w-3xl mx-auto">
+          One campaign can create multiple moments of visibility. From apartments and bus stops to offices, cafés, malls, gyms and cinemas, your brand stays with customers throughout their daily routine—building familiarity, trust and lasting brand recall.
+        </p>
+      </div>
+
+      <div className={`relative w-[300px] h-[300px] md:w-[460px] md:h-[460px] mx-auto mb-24 ${hoveredNode !== null ? 'is-paused' : ''}`}>
+        {/* SVG Circle Path & Glowing Dot */}
+        <div className="absolute inset-0 pointer-events-none">
+          <svg className="w-full h-full overflow-visible" viewBox="0 0 500 500">
+            <circle cx="250" cy="250" r="250" fill="none" stroke="#f3f4f6" strokeWidth="2" strokeDasharray="8 8" />
+            <g className="animate-spin-orbit">
+              <circle cx="250" cy="0" r="8" fill="#3b82f6" style={{ filter: 'drop-shadow(0 0 12px rgba(59,130,246,0.8))' }} />
+              <circle cx="250" cy="0" r="20" fill="#3b82f6" opacity="0.2" className="animate-pulse" />
+            </g>
+          </svg>
+        </div>
+
+        {/* Center Brand Badge */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-28 h-28 md:w-36 md:h-36 bg-white rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-gray-100 flex items-center justify-center">
+          <div className="w-20 h-20 md:w-28 md:h-28 rounded-full bg-gray-900 flex items-center justify-center relative overflow-hidden shadow-inner">
+             <div className="absolute inset-0 bg-blue-500/20 blur-xl"></div>
+             <span className="text-white font-bold text-xs md:text-sm tracking-widest text-center relative z-10 leading-tight">YOUR<br/>BRAND</span>
+          </div>
+        </div>
+
+        {/* Nodes */}
+        {nodes.map((node, i) => {
+          const htmlAngle = (i * 45) - 90;
+          const x = 50 * Math.cos((htmlAngle * Math.PI) / 180);
+          const y = 50 * Math.sin((htmlAngle * Math.PI) / 180);
+          const delay = i * 2;
+          const isHovered = hoveredNode === i;
+          
+          const Icon = node.icon;
+          
+          return (
+            <div
+              key={node.id}
+              className="absolute z-20"
+              style={{ left: `calc(50% + ${x}%)`, top: `calc(50% + ${y}%)`, transform: 'translate(-50%, -50%)' }}
+              onMouseEnter={() => setHoveredNode(i)}
+              onMouseLeave={() => setHoveredNode(null)}
+            >
+              <div className="relative flex items-center justify-center">
+                <div 
+                  className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-gray-100 cursor-pointer animate-node-pulse ${isHovered ? '!scale-125 !border-blue-400 !shadow-blue-500/20 z-30' : ''}`}
+                  style={{ animationDelay: `${delay}s` }}
+                >
+                  <Icon 
+                    className={`w-6 h-6 text-gray-500 animate-icon-pulse ${isHovered ? '!text-blue-600' : ''}`} 
+                    style={{ animationDelay: `${delay}s` }} 
+                  />
+                </div>
+                
+                {/* Tooltip */}
+                <div 
+                  className={`absolute top-[calc(100%+16px)] left-1/2 -translate-x-1/2 bg-gray-900 text-white p-3 md:p-4 rounded-2xl shadow-xl w-48 md:w-56 text-center transition-all duration-300 pointer-events-none z-50 ${isHovered ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-2 scale-95'}`}
+                >
+                  <p className="text-xs md:text-sm font-bold mb-1 md:mb-1.5">{node.label}</p>
+                  <p className="text-[10px] md:text-xs text-gray-300 leading-relaxed">{node.desc}</p>
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-gray-900 rotate-45 rounded-sm"></div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Value Cards */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            { title: 'Multiple Touchpoints', desc: 'Reach the same audience across multiple locations throughout their day.', icon: '🎯' },
+            { title: 'Stronger Brand Recall', desc: 'Repeated exposure increases familiarity and keeps your business top of mind.', icon: '🧠' },
+            { title: 'Better Performance', desc: 'More visibility across everyday moments leads to higher awareness and stronger marketing results.', icon: '📈' },
+          ].map(card => (
+            <div key={card.title} className="bg-gray-50/80 rounded-3xl p-8 border border-gray-100 hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center mb-6 shadow-sm border border-gray-100 text-2xl">
+                {card.icon}
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{card.title}</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">{card.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default function PublicHome() {
+  const { user: currentUser } = useAuth();
+  const [, navigate] = useLocation();
+  const [activeVenueChip, setActiveVenueChip] = useState('');
+  const venueScrollRef = useRef<HTMLDivElement>(null);
+  const venueCardsScrollRef = useRef<HTMLDivElement>(null);
+
+  const { data: homeData } = useQuery<HomeDataResponse>({
+    queryKey: ['/api/public/home-data'],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const platformStats = homeData?.platformStats;
+
+  const handleSearchSelect = (query: string, type: string, venueValue?: string) => {
+    if (venueValue) {
+      navigate(`/advertiser/discover?venue=${encodeURIComponent(venueValue)}`);
+    } else {
+      navigate(`/advertiser/discover?q=${encodeURIComponent(query)}`);
+    }
+  };
+
+  const handleVenueCardSelect = (venue: string) => {
+    navigate(`/advertiser/discover?venue=${encodeURIComponent(venue)}`);
+  };
+
+  const handleVenueChip = (value: string) => {
+    setActiveVenueChip(value);
+    if (venueCardsScrollRef.current) {
+      venueCardsScrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+    }
+    if (value) {
+      navigate(`/advertiser/discover?venue=${encodeURIComponent(value)}`);
+    } else {
+      navigate('/advertiser/discover');
+    }
+  };
+
+  const getDashboardLink = () => {
+    if (!currentUser) return '/login';
+    if (currentUser.role === 'admin') return '/admin';
+    if (currentUser.role === 'screen_owner') return '/owner';
+    return '/advertiser';
+  };
+
+  return (
+    <div className="min-h-screen bg-white" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+
+      {/* ─────────────────── HEADER ─────────────────── */}
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center h-16 gap-4">
+
+            {/* Left: Logo */}
+            <div className="flex-1 basis-0">
+              <Link href="/" className="shrink-0 inline-block">
+                <img src={logo} alt="Pixelspot" className="h-8 w-auto" data-testid="img-logo" />
+              </Link>
+            </div>
+
+            {/* Center: Functional Search perfectly centered */}
+            <div className="flex-[2] max-w-2xl hidden md:flex justify-center">
+              <div className="w-full">
+                <LocationSearchBar onSearch={handleSearchSelect} variant="header" placeholder="Search by city, locality, mall or landmark..." />
+              </div>
+            </div>
+
+            {/* Right: Auth */}
+            <div className="flex-1 basis-0 flex justify-end items-center gap-2">
               {currentUser ? (
-                <Link href={
-                  currentUser.role === 'admin' ? '/admin' :
-                  currentUser.role === 'screen_owner' ? '/owner' :
-                  '/advertiser'
-                }>
-                  <Button size="sm" className="sm:size-default" data-testid="button-header-dashboard">
-                    <LayoutDashboard className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Go to Dashboard</span>
-                    <span className="sm:hidden">Dashboard</span>
+                <Link href={getDashboardLink()}>
+                  <Button size="sm" variant="outline" className="rounded-xl gap-2 font-medium border-gray-200 hover:border-indigo-300 hover:text-blue-600 transition-all" data-testid="button-header-dashboard">
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span className="hidden sm:inline">Dashboard</span>
                   </Button>
                 </Link>
               ) : (
                 <>
                   <Link href="/login">
-                    <Button variant="ghost" size="sm" className="sm:size-default" data-testid="button-header-login">
-                      <span className="hidden sm:inline">Login</span>
-                      <span className="sm:hidden">Log in</span>
+                    <Button variant="ghost" size="sm" className="rounded-xl font-medium text-gray-700 hover:text-blue-600" data-testid="button-header-login">
+                      Login
                     </Button>
                   </Link>
                   <Link href="/register?role=advertiser">
-                    <Button size="sm" className="sm:size-default" data-testid="button-header-signup">
-                      <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
-                      <span className="hidden sm:inline">Sign Up Free</span>
-                      <span className="sm:hidden">Sign Up</span>
+                    <Button size="sm" className="hidden sm:flex rounded-xl font-semibold bg-blue-600 hover:bg-blue-700 text-white px-5" data-testid="button-header-signup">
+                      Get Started
                     </Button>
                   </Link>
                 </>
               )}
             </div>
           </div>
+          {/* Mobile Search - Render below on small screens */}
+          <div className="md:hidden pb-3">
+            <LocationSearchBar onSearch={handleSearchSelect} variant="header" placeholder="Search by city, locality or mall..." />
+          </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative pt-20 pb-24 overflow-hidden bg-background">
-        <div className="container mx-auto px-4 relative z-10 text-center">
-          <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom duration-1000">
-            <div className="space-y-6">
-              <Badge variant="outline" className="px-4 py-1.5 border-primary/30 text-primary font-medium bg-primary/5 mx-auto">
-                Digital Outdoor Advertising Platform
-              </Badge>
-              <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black tracking-tighter text-foreground leading-[1.1]">
-                Run Ads Across <br />
-                <span className="text-primary italic">Real-World</span> Screens
-              </h1>
-              <p className="text-xl sm:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-                Launch outdoor ad campaigns across digital screens in your city — all from one platform. Google Ads, but for the physical world.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-6 justify-center">
-              <Link href="/register?role=advertiser">
-                <Button size="lg" className="h-16 px-10 text-xl font-bold shadow-2xl shadow-primary/20 hover:scale-[1.02] transition-transform">
-                  Start Campaign
-                </Button>
-              </Link>
-              <Button 
-                size="lg" 
-                variant="outline" 
-                className="h-16 px-10 text-xl font-bold border-2"
-                onClick={scrollToScreens}
+      {/* ─────────────── Secondary nav: Venue filter chips ─────────────── */}
+      <div className="border-b border-gray-100 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div
+            ref={venueScrollRef}
+            className="flex items-center gap-2 py-3 overflow-x-auto no-scrollbar scroll-smooth"
+          >
+            {VENUE_CHIPS.map(chip => (
+              <button
+                key={chip.value}
+                onClick={() => handleVenueChip(chip.value)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border whitespace-nowrap ${
+                  activeVenueChip === chip.value
+                    ? 'bg-gray-900 text-white border-gray-900'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-gray-900 hover:bg-gray-900 hover:text-white'
+                }`}
               >
-                Explore Screens
-              </Button>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-8 text-sm sm:text-base text-muted-foreground font-semibold pt-4">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-primary" />
-                No agencies
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-primary" />
-                No long contracts
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-primary" />
-                Go live in minutes
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Real-time Stats Section */}
-      <section className="-mt-12 mb-12 relative z-20 px-4">
-        <div className="container mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {/* Screens Stats */}
-            <Card className="border-2 shadow-xl hover:scale-[1.02] transition-transform duration-300">
-              <CardContent className="p-8 flex items-center gap-6">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                  <Monitor className="w-8 h-8 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-4xl font-black tracking-tight">{platformStats?.totalPhysicalScreens?.toLocaleString() || "2,400"}+</h3>
-                  <p className="text-muted-foreground font-semibold">Screens Live</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Cities Stats */}
-            <Card className="border-2 shadow-xl hover:scale-[1.02] transition-transform duration-300">
-              <CardContent className="p-8 flex items-center gap-6">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                  <MapPin className="w-8 h-8 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-4xl font-black tracking-tight">{platformStats?.totalCities || "120"}+</h3>
-                  <p className="text-muted-foreground font-semibold">Cities We Are Live</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Campaigns Stats */}
-            <Card className="border-2 shadow-xl hover:scale-[1.02] transition-transform duration-300">
-              <CardContent className="p-8 flex items-center gap-6">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                  <Sparkles className="w-8 h-8 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-4xl font-black tracking-tight">267+</h3>
-                  <p className="text-muted-foreground font-semibold">Campaigns Executed</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION 2 — SCREENS NEAR YOU */}
-      <section className="py-32 bg-muted/30" id="screens-section">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">Screens Near You</h2>
-            <p className="text-lg text-muted-foreground">
-              Search your city and discover digital advertising screens available around you. 
-              Browse screen locations, view venue types, and check pricing before launching your campaign.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Filters Sidebar */}
-            <div className="lg:col-span-1 space-y-6">
-              <Card className="bg-background border-2 sticky top-24">
-                <CardContent className="p-6 space-y-6">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                       <label className="text-sm font-bold flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-primary" />
-                        Location
-                      </label>
-                      <Select value={selectedCity} onValueChange={setSelectedCity}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select City" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Cities</SelectItem>
-                          {cities.map(city => <SelectItem key={city} value={city}>{city}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                       <label className="text-sm font-bold flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-primary" />
-                        Venue Type
-                      </label>
-                      <Select value={selectedVenue} onValueChange={setSelectedVenue}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {VENUE_TYPES.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="flex justify-between">
-                        <label className="text-sm font-bold">Daily Price</label>
-                        <span className="text-sm font-medium text-primary">₹{budgetRange[1].toLocaleString()}</span>
-                      </div>
-                      <Slider 
-                        value={budgetRange} 
-                        onValueChange={setBudgetRange}
-                        min={0}
-                        max={50000}
-                        step={500}
-                      />
-                    </div>
-                  </div>
-
-                  <Button className="w-full" onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}>
-                    {viewMode === 'map' ? 'Switch to List View' : 'Switch to Map View'}
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Results Display */}
-            <div className="lg:col-span-3 space-y-6">
-              {viewMode === 'map' ? (
-                <Card className="h-[600px] overflow-hidden border-2 rounded-2xl">
-                  {filteredScreens.length > MAX_MAP_MARKERS && (
-                    <div className="bg-muted/80 text-center py-1 text-xs text-muted-foreground">
-                      Showing top {MAX_MAP_MARKERS} of {filteredScreens.length} screens on map
-                    </div>
-                  )}
-                  <Map
-                    style={{ width: '100%', height: '100%' }}
-                    defaultCenter={defaultCenter}
-                    defaultZoom={5}
-                    gestureHandling="greedy"
-                    disableDefaultUI
-                    zoomControl
-                    mapId="discovery-map"
-                  >
-                    {mapMarkers.map((screen) => (
-                      <AdvancedMarker
-                        key={screen.id}
-                        position={{
-                          lat: parseFloat(screen.latitude as string),
-                          lng: parseFloat(screen.longitude as string),
-                        }}
-                        onClick={() => handleMarkerClick(screen.id)}
-                      >
-                        <div className="flex flex-col items-center">
-                          <div className="px-2 py-1 bg-primary text-white text-[10px] font-bold rounded shadow-lg mb-1">
-                            ₹{screen.pricePerDay}
-                          </div>
-                          <div className="w-5 h-5 rounded-full bg-white border-4 border-primary shadow-xl" />
-                        </div>
-                      </AdvancedMarker>
-                    ))}
-                  </Map>
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {filteredScreens.slice(0, 9).map((screen) => (
-                    <ScreenCard key={screen.id} screen={screen} />
-                  ))}
-                  {filteredScreens.length > 9 && (
-                    <Card className="flex flex-col items-center justify-center p-8 border-dashed border-2">
-                      <p className="text-muted-foreground font-medium mb-4">{filteredScreens.length - 9} more screens available</p>
-                      <Link href="/register">
-                        <Button variant="outline">Sign up to explore all</Button>
-                      </Link>
-                    </Card>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-
-      {/* SECTION 5 — SCREEN NETWORK */}
-      <section className="py-24 bg-background">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col lg:flex-row gap-16 items-center">
-            <div className="flex-1 grid grid-cols-2 gap-4">
-              <div className="space-y-4">
-                <div className="rounded-3xl overflow-hidden aspect-[4/5] relative group">
-                  <img src={railwayImg} alt="Metro Station" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
-                    <p className="text-white font-bold text-lg">Metro Stations</p>
-                  </div>
-                </div>
-                <div className="rounded-3xl overflow-hidden aspect-square relative group">
-                  <img src={cafeImg} alt="Cafes" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
-                    <p className="text-white font-bold text-lg">Cafes</p>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-4 pt-12">
-                <div className="rounded-3xl overflow-hidden aspect-square relative group">
-                  <img src={discoverHeroImg} alt="Malls" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
-                    <p className="text-white font-bold text-lg">Malls</p>
-                  </div>
-                </div>
-                <div className="rounded-3xl overflow-hidden aspect-[4/5] relative group">
-                  <img src={residentialImg} alt="Residential" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
-                    <p className="text-white font-bold text-lg">Residential Communities</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex-1 space-y-8">
-              <div className="space-y-4">
-                <h2 className="text-4xl md:text-5xl font-bold tracking-tight">A Growing Network of Digital Screens</h2>
-                <p className="text-xl text-muted-foreground leading-relaxed">
-                  Our network includes digital screens located in malls, metro stations, cafes, residential communities, highways, and tech parks.
-                </p>
-                <p className="text-lg font-medium text-foreground italic">
-                  Reach people where attention actually exists — in the real world.
-                </p>
-              </div>
-
-              <ul className="space-y-4">
-                 {[
-                   'Airports & Travel Hubs',
-                   'Corporate & Tech Parks',
-                   'High-Traffic Junctions',
-                   'Luxury Malls & Retail',
-                   'Premium Cafes & Gyms'
-                 ].map(item => (
-                   <li key={item} className="flex items-center gap-3 text-lg font-medium">
-                     <div className="w-2 h-2 rounded-full bg-primary" />
-                     {item}
-                   </li>
-                 ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION 6 — FOR SCREEN OWNERS */}
-      <section className="py-24 bg-primary text-white rounded-[60px] mx-4 my-24 overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-white/5 blur-[150px] rounded-full translate-x-1/2 -translate-y-1/2" />
-        <div className="container mx-auto px-8 relative z-10 text-center space-y-12">
-          <div className="max-w-3xl mx-auto space-y-6">
-            <Badge variant="outline" className="border-white/20 text-white bg-white/10 px-4 py-1.5 backdrop-blur-sm">
-              Partnership Opportunities
-            </Badge>
-            <h2 className="text-4xl md:text-6xl font-bold tracking-tight">Monetize Your Digital Screens</h2>
-            <p className="text-xl text-white/80 leading-relaxed">
-              Own a digital display or LED screen? Join the PixelSpot network and start earning by running advertiser campaigns on your screens.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
-            {[
-              { title: "List Your Screens", desc: "Add your screen details, location, and metadata in minutes." },
-              { title: "Receive Demand", desc: "Get booking requests from verified brands across India." },
-              { title: "Manage Ads", desc: "Upload and schedule creative from one smart dashboard." },
-            ].map((f) => (
-              <div key={f.title} className="p-8 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 space-y-4">
-                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
-                   <Monitor className="w-6 h-6 text-white" />
-                </div>
-                <h4 className="text-2xl font-bold">{f.title}</h4>
-                <p className="text-white/70 leading-relaxed">{f.desc}</p>
-              </div>
+                {chip.label}
+              </button>
             ))}
           </div>
-
-          <Link href="/register?role=screen_owner" className="inline-block mt-4">
-            <Button size="lg" variant="secondary" className="h-16 px-12 text-xl font-bold bg-white text-primary hover:bg-white/90">
-              List Your Screen
-            </Button>
-          </Link>
-        </div>
-      </section>
-
-      {/* SECTION 7 — FINAL CALL TO ACTION */}
-      <section className="py-24 bg-background">
-        <div className="container mx-auto px-4 text-center space-y-12">
-          <div className="max-w-3xl mx-auto space-y-6">
-             <h2 className="text-4xl md:text-7xl font-bold tracking-tight leading-tight">Your Audience Is <br /><span className="text-primary italic">Already</span> Outside</h2>
-             <p className="text-xl text-muted-foreground leading-relaxed">
-                Put your brand where people actually see it. Launch your outdoor campaign today and reach thousands of people daily.
-             </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <Link href="/register?role=advertiser">
-              <Button size="lg" className="h-16 px-10 text-xl font-bold shadow-2xl shadow-primary/20">
-                Start Campaign
-              </Button>
-            </Link>
-             <Button size="lg" variant="outline" className="h-16 px-10 text-xl font-bold border-2" onClick={scrollToScreens}>
-                Explore Screens
-             </Button>
-          </div>
-        </div>
-      </section>
-
-
-
-      {/* SECTION 3 — HOW IT WORKS */}
-      <section className="py-40 bg-background" id="how-it-works">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">Launch Outdoor Ads in Minutes</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 relative">
-            {[
-              { step: "01", title: "Discover Screens", desc: "Explore advertising screens near your business." },
-              { step: "02", title: "Create Campaign", desc: "Choose screens, campaign duration, and budget." },
-              { step: "03", title: "Upload Your Ad", desc: "Add your creative and preview your campaign." },
-              { step: "04", title: "Go Live", desc: "Your ads start playing across selected screens." },
-            ].map((s, i) => (
-              <div key={s.step} className="relative space-y-4">
-                <div className="text-6xl font-black text-primary/10 absolute -top-10 -left-4 select-none">
-                  {s.step}
-                </div>
-                <div className="bg-primary/5 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-                  {i === 0 && <Search className="text-primary w-8 h-8" />}
-                  {i === 1 && <Sparkles className="text-primary w-8 h-8" />}
-                  {i === 2 && <Monitor className="text-primary w-8 h-8" />}
-                  {i === 3 && <Zap className="text-primary w-8 h-8" />}
-                </div>
-                <h3 className="text-2xl font-bold">{s.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION 4 — WHY PIXELSPOT */}
-      <section className="py-40 bg-muted/30 overflow-hidden relative">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col lg:flex-row gap-16 items-center">
-            <div className="flex-1 space-y-8">
-              <div className="space-y-4">
-                <h2 className="text-4xl md:text-5xl font-bold tracking-tight">Outdoor Advertising, Simplified</h2>
-                <p className="text-xl text-muted-foreground leading-relaxed">
-                  Traditional outdoor advertising requires agencies, negotiations, and large budgets. PixelSpot makes outdoor advertising accessible for everyone.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {[
-                  { title: "Transparent Pricing", desc: "See exact daily rates before you book." },
-                  { title: "Hyperlocal Targeting", desc: "Target by city, area, or even specific zip codes." },
-                  { title: "Flexible Durations", desc: "Run ads for a day, a week, or months." },
-                  { title: "Real Inventory", desc: "Direct access to verified screen networks." },
-                  { title: "Smart Analytics", desc: "Track impressions and campaign reach." },
-                ].map((f) => (
-                  <div key={f.title} className="flex gap-4 p-4 rounded-xl bg-background border shadow-sm">
-                    <div className="mt-1 bg-primary/10 rounded-full p-1 h-fit">
-                      <Zap className="w-4 h-4 text-primary" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-lg">{f.title}</h4>
-                      <p className="text-sm text-muted-foreground">{f.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex-1 relative w-full h-[500px]">
-               <div className="absolute inset-x-0 inset-y-0 bg-primary/10 blur-[100px] rounded-full scale-150 rotate-45" />
-               <div className="relative h-full w-full bg-background rounded-[40px] border-8 border-muted shadow-2xl overflow-hidden p-8 flex flex-col justify-center gap-8">
-                  <div className="flex justify-between items-end border-b pb-6">
-                    <div>
-                      <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest mb-1">Live Campaign</p>
-                      <h4 className="text-3xl font-bold">Urban Reach Pro</h4>
-                    </div>
-                    <Badge className="bg-green-500 text-white animate-pulse">Running</Badge>
-                  </div>
-                  <div className="space-y-6">
-                    <div className="h-4 w-full bg-muted rounded-full overflow-hidden">
-                      <div className="h-full w-[75%] bg-primary" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-8">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1 uppercase font-bold tracking-wider">Impressions</p>
-                        <p className="text-4xl font-black">12.4K</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1 uppercase font-bold tracking-wider">Screens</p>
-                        <p className="text-4xl font-black">42</p>
-                      </div>
-                    </div>
-                    <div className="bg-muted p-4 rounded-2xl">
-                       <p className="text-sm font-medium">Hyperlocal focus: Mumbai West & South</p>
-                    </div>
-                  </div>
-               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-
-      {/* Bottom CTA */}
-      <div className="bg-gradient-to-br from-primary/10 to-background border-t">
-        <div className="container mx-auto px-4 py-12 sm:py-14 md:py-16 text-center">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4">Ready to Reach Millions?</h2>
-          <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-            Join hundreds of brands using Pixelspot to create impactful DOOH campaigns across India's top locations.
-          </p>
-          <Link href="/register?role=advertiser" className="inline-block w-full sm:w-auto px-4">
-            <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-14" data-testid="button-bottom-cta">
-              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-              Start Your Campaign - Free
-              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2" />
-            </Button>
-          </Link>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-3 sm:mt-4">
-            No credit card required • Launch in minutes
-          </p>
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="border-t bg-muted/30">
-        <div className="container mx-auto px-4 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
-            {/* Brand */}
-            <div className="md:col-span-1">
-              <div className="flex items-center gap-2 mb-3">
-                <img src={logo} alt="Pixelspot" className="h-8 w-auto" />
-              </div>
-              <p className="text-sm text-muted-foreground">India's digital out-of-home advertising marketplace. Connect brands with screens across the country.</p>
-              <p className="text-sm text-muted-foreground mt-3">PIXELSPOT SOLUTIONS PVT LTD</p>
-              <p className="text-xs text-muted-foreground">CIN: U26103KA2025PTC201293</p>
-              <p className="text-xs text-muted-foreground">GSTIN: 29AAPCP6653G1ZT</p>
-              {platformStats && (
-                <p className="text-xs text-primary font-medium mt-3">{platformStats.totalScreens?.toLocaleString()}+ screens across {platformStats.totalCities}+ cities</p>
-              )}
-            </div>
-            
-            {/* Quick Links */}
-            <div>
-              <h4 className="font-semibold text-sm mb-4">Quick Links</h4>
-              <div className="flex flex-col gap-2">
-                <Link href="/register?role=screen_owner"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">List Your Screen</span></Link>
-                <Link href="/register?role=advertiser"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Start Advertising</span></Link>
-                <Link href="/login"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Sign In</span></Link>
-                <Link href="/about"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">About Us</span></Link>
-              </div>
-            </div>
+      {/* ─────────────────── HERO ─────────────────── */}
+      <section className="relative bg-white pt-16 pb-24 overflow-hidden">
+        {/* Subtle gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-b from-indigo-50/40 via-white to-white pointer-events-none" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-gradient-radial from-indigo-100/50 to-transparent pointer-events-none" />
 
-            {/* Popular Cities */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 text-center">
+          {/* Eyebrow badge */}
+          <div className="inline-flex items-center gap-2 bg-indigo-50 text-blue-700 text-sm font-semibold px-4 py-2 rounded-full mb-8 border border-indigo-100">
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+            Hyperlocal Digital Screen Advertising
+          </div>
+
+          {/* Headline */}
+          <h1 className="text-5xl md:text-6xl lg:text-7xl xl:text-[6.2rem] font-extrabold text-gray-900 leading-[1.05] tracking-tighter mb-6">
+            <span className="whitespace-nowrap">Advertise Where Your</span><br />
+            <span className="text-blue-600">Customers Live,</span>{' '}
+            <span className="text-gray-900">Work</span>{' '}
+            <span className="text-gray-400">&</span>{' '}
+            <span className="text-gray-900">Shop.</span>
+          </h1>
+
+          {/* Sub-headline */}
+          <p className="text-xl text-gray-500 max-w-2xl mx-auto leading-relaxed mb-10 font-normal">
+            Launch hyperlocal campaigns on nearby digital screens and reach customers where they live, work, shop and make buying decisions.
+          </p>
+
+          {/* CTAs */}
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <Link href="/advertiser/discover">
+              <Button size="lg" className="px-8 rounded-full font-semibold bg-blue-600 hover:bg-blue-700 text-white text-base shadow-lg hover:shadow-xl transition-all">
+                <MapPin className="w-4 h-4 mr-2" />
+                Find Nearby Screens
+              </Button>
+            </Link>
+            <Link href="/register?role=advertiser">
+              <Button size="lg" variant="outline" className="px-8 rounded-full font-semibold text-base border-gray-300 text-gray-700 hover:border-gray-900 hover:bg-gray-900 hover:text-white transition-all">
+                Plan My Campaign
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </Link>
+          </div>
+
+          {/* Trust signals */}
+          <div className="flex flex-wrap items-center justify-center gap-6 mt-10 text-sm text-gray-400">
+            {['Go live in minutes', 'Flexible budgets', 'Local targeting'].map(t => (
+              <span key={t} className="flex items-center gap-1.5">
+                <Star className="w-3.5 h-3.5 text-gray-400 fill-gray-300" />
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────── SECTION 2: VENUE TYPES ─────────────────── */}
+      <section className="py-24 bg-white overflow-hidden border-t border-gray-100" id="venue-types">
+        <style>{`
+          @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+          .animate-marquee {
+            animation: marquee 40s linear infinite;
+            display: flex;
+            width: max-content;
+          }
+          .animate-marquee:hover {
+            animation-play-state: paused;
+          }
+        `}</style>
+        
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          {/* Heading */}
+          <div className="max-w-3xl mx-auto text-center mb-16">
+            <p className="text-sm font-semibold text-blue-600 uppercase tracking-wider mb-3">
+              Screen Locations
+            </p>
+            <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 leading-tight tracking-tight mb-4">
+              Reach Customers Across Their Everyday Journey.
+            </h2>
+            <p className="text-lg text-gray-500 leading-relaxed">
+              Choose from premium digital screens in the places your customers visit every day.
+            </p>
+          </div>
+        </div>
+
+        {/* Auto-scrolling horizontally scrollable cards */}
+        <div className="w-full overflow-hidden pb-8">
+          <div className="animate-marquee gap-5 px-4 sm:px-6">
+            {[...VENUE_CARDS, ...VENUE_CARDS].map((card, i) => (
+              <VenueCard key={`${card.label}-${i}`} card={card} onSelect={handleVenueCardSelect} />
+            ))}
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="mt-8 flex justify-center">
+            <Link href="/advertiser/discover">
+              <Button variant="outline" size="lg" className="rounded-xl font-semibold border-gray-200 text-gray-700 hover:border-blue-300 hover:text-blue-600 transition-all px-8">
+                Browse All Screen Locations
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────── ANIMATED STATS STRIP ─────────────────── */}
+      <AnimatedNetworkStats platformStats={platformStats} />
+
+      {/* ─────────────────── DESTINATION BRANDS ─────────────────── */}
+      <DestinationBrandsSection />
+
+      {/* ─────────────────── HOW IT WORKS ─────────────────── */}
+      <section className="py-24 bg-gray-50" id="how-it-works">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-16">
+            <p className="text-sm font-semibold text-blue-600 uppercase tracking-wider mb-3">Simple Process</p>
+            <h2 className="text-4xl font-bold text-gray-900 tracking-tight mb-4">Launch in 4 Easy Steps</h2>
+            <p className="text-lg text-gray-500">No agencies. No long contracts. Just results.</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {[
+              {
+                step: '01',
+                title: 'Find Nearby Screens',
+                desc: 'Search screens by city, locality, or venue type near your business.',
+                icon: <Search className="w-6 h-6 text-blue-600" />,
+              },
+              {
+                step: '02',
+                title: 'Choose Your Locations',
+                desc: 'Pick the screens that reach your customers — with full pricing transparency.',
+                icon: <MapPin className="w-6 h-6 text-blue-600" />,
+              },
+              {
+                step: '03',
+                title: 'Upload Your Creative',
+                desc: 'Add your ad, set dates and budget. Preview before going live.',
+                icon: <Monitor className="w-6 h-6 text-blue-600" />,
+              },
+              {
+                step: '04',
+                title: 'Go Live & Get Noticed',
+                desc: 'Your ad starts playing. More visibility, more walk-ins, more customers.',
+                icon: <Zap className="w-6 h-6 text-blue-600" />,
+              },
+            ].map((s, i) => (
+              <div key={s.step} className="relative">
+                {i < 3 && (
+                  <div className="hidden lg:block absolute top-10 left-full w-full h-px border-t-2 border-dashed border-gray-200 z-0 -translate-x-4" />
+                )}
+                <div className="relative z-10 bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="text-xs font-bold text-gray-300 mb-4 font-mono">{s.step}</div>
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-4">
+                    {s.icon}
+                  </div>
+                  <h3 className="font-semibold text-gray-900 text-base mb-2">{s.title}</h3>
+                  <p className="text-gray-500 text-sm leading-relaxed">{s.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────── CUSTOMER JOURNEY (SECTION 5) ─────────────────── */}
+      <CustomerJourneySection />
+
+      {/* ─────────────────── WHY CONNECT ─────────────────── */}
+      <section className="py-24 bg-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div>
-              <h4 className="font-semibold text-sm mb-4">Top Cities</h4>
-              <div className="flex flex-col gap-2">
-                {["Bengaluru", "Mumbai", "Delhi", "Ahmedabad", "Hyderabad", "Pune", "Chennai", "Surat"].map(city => (
-                  <button key={city} className="text-sm text-muted-foreground hover:text-foreground text-left" onClick={() => handleCityClick(city)}>{city}</button>
+              <p className="text-sm font-semibold text-blue-600 uppercase tracking-wider mb-3">Built for Local Businesses</p>
+              <h2 className="text-4xl font-bold text-gray-900 tracking-tight leading-tight mb-6">
+                Built for Restaurants, Clinics, Gyms, Salons & More.
+              </h2>
+              <p className="text-lg text-gray-500 leading-relaxed mb-8">
+                Whether you run a restaurant, a clinic, a gym, a retail store or a real estate project — Connect helps you run digital screen ads near your business without the complexity or cost of traditional advertising.
+              </p>
+
+              <div className="space-y-4">
+                {[
+                  { title: 'Hyperlocal Targeting', desc: 'Reach customers within 1–10 km of your business location.', icon: <MapPin className="w-4 h-4 text-blue-600" /> },
+                  { title: 'Transparent Pricing', desc: 'See exact daily rates upfront. No hidden fees or surprise bills.', icon: <Star className="w-4 h-4 text-blue-600" /> },
+                  { title: 'Flexible Campaigns', desc: 'Run ads for a day, a week, or longer. Pause anytime.', icon: <Zap className="w-4 h-4 text-blue-600" /> },
+                  { title: 'Real Results', desc: 'More visibility, more walk-ins, more customers.', icon: <TrendingUp className="w-4 h-4 text-blue-600" /> },
+                ].map(f => (
+                  <div key={f.title} className="flex items-start gap-4 p-4 rounded-2xl bg-gray-50 hover:bg-indigo-50/50 transition-colors">
+                    <div className="w-9 h-9 rounded-xl bg-white border border-gray-100 shadow-sm flex items-center justify-center shrink-0 mt-0.5">
+                      {f.icon}
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 text-sm">{f.title}</h4>
+                      <p className="text-gray-500 text-sm mt-0.5">{f.desc}</p>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* Legal */}
-            <div>
-              <h4 className="font-semibold text-sm mb-4">Legal</h4>
-              <div className="flex flex-col gap-2">
-                <Link href="/privacy"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Privacy Policy</span></Link>
-                <Link href="/terms"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Terms of Service</span></Link>
-                <Link href="/refund"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Refund Policy</span></Link>
-                <Link href="/contact"><span className="text-sm text-muted-foreground hover:text-foreground cursor-pointer">Contact Us</span></Link>
-              </div>
-            </div>
+            {/* Mockup card */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-indigo-100 rounded-3xl rotate-2 scale-95 opacity-50" />
+              <div className="relative bg-white rounded-3xl border border-gray-100 shadow-2xl overflow-hidden">
+                <div className="bg-gray-900 px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-400 font-medium uppercase tracking-widest mb-1">Live Campaign</p>
+                    <h4 className="text-white font-bold text-lg">Dr. Sharma's Clinic</h4>
+                  </div>
+                  <span className="flex items-center gap-1.5 bg-green-500 text-white text-xs font-semibold px-2.5 py-1 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    Live
+                  </span>
+                </div>
+                <div className="p-6 space-y-5">
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-gray-500 font-medium">Campaign Reach</span>
+                      <span className="text-blue-600 font-semibold">74%</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-500 rounded-full" style={{ width: '74%' }} />
+                    </div>
+                  </div>
 
-            {/* Contact */}
-            <div>
-              <h4 className="font-semibold text-sm mb-4">Contact</h4>
-              <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-                <p>contact@pixelspot.in</p>
-                <p>+91 72048 08334</p>
-                <p>Bengaluru, Karnataka, India</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { label: 'Impressions', value: '18,400' },
+                      { label: 'Screens Active', value: '12' },
+                      { label: 'Daily Budget', value: '₹2,400' },
+                      { label: 'Locality', value: 'Koramangala' },
+                    ].map(s => (
+                      <div key={s.label} className="bg-gray-50 rounded-2xl p-4">
+                        <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-1">{s.label}</p>
+                        <p className="text-xl font-bold text-gray-900">{s.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-indigo-50 rounded-2xl p-4 flex items-center gap-3">
+                    <MapPin className="w-5 h-5 text-indigo-500 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Hyperlocal Focus</p>
+                      <p className="text-xs text-gray-500">Bengaluru — 3 km radius from clinic</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          
-          <div className="border-t mt-8 pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-muted-foreground">© 2025 PIXELSPOT SOLUTIONS PRIVATE LIMITED. All rights reserved.</p>
-            <div className="flex items-center gap-4">
-              <Link href="/privacy"><span className="text-xs text-muted-foreground hover:text-foreground cursor-pointer">Privacy</span></Link>
-              <Link href="/terms"><span className="text-xs text-muted-foreground hover:text-foreground cursor-pointer">Terms</span></Link>
-              <Link href="/refund"><span className="text-xs text-muted-foreground hover:text-foreground cursor-pointer">Refunds</span></Link>
             </div>
           </div>
         </div>
-      </footer>
+      </section>
+
+      {/* ─────────────────── WHO IS THIS FOR ─────────────────── */}
+      <section className="py-24 bg-gray-50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center">
+          <p className="text-sm font-semibold text-blue-600 uppercase tracking-wider mb-3">Perfect For</p>
+          <h2 className="text-4xl font-bold text-gray-900 tracking-tight mb-4">Made for Every Business</h2>
+          <p className="text-lg text-gray-500 mb-12 max-w-2xl mx-auto">Connect is built for businesses that want to grow locally — not just nationwide brands with massive budgets.</p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {[
+              { label: 'Restaurants', icon: <Utensils className="w-7 h-7 text-blue-600" /> },
+              { label: 'Clinics', icon: <Stethoscope className="w-7 h-7 text-blue-600" /> },
+              { label: 'Gyms', icon: <Dumbbell className="w-7 h-7 text-blue-600" /> },
+              { label: 'Salons', icon: <Scissors className="w-7 h-7 text-blue-600" /> },
+              { label: 'Retail Stores', icon: <ShoppingBag className="w-7 h-7 text-blue-600" /> },
+              { label: 'Real Estate', icon: <Home className="w-7 h-7 text-blue-600" /> },
+              { label: 'Schools & Colleges', icon: <GraduationCap className="w-7 h-7 text-blue-600" /> },
+              { label: 'Cafés', icon: <Coffee className="w-7 h-7 text-blue-600" /> },
+              { label: 'Pharmacies', icon: <Pill className="w-7 h-7 text-blue-600" /> },
+              { label: 'Auto Showrooms', icon: <Car className="w-7 h-7 text-blue-600" /> },
+            ].map(b => (
+              <div key={b.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-start">
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center mb-3">
+                  {b.icon}
+                </div>
+                <p className="text-sm font-semibold text-gray-700">{b.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────── SCREEN OWNERS CTA ─────────────────── */}
+      <section className="py-24 bg-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="bg-gray-900 rounded-3xl p-12 text-center relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-64 h-64 bg-blue-600/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute bottom-0 right-0 w-64 h-64 bg-indigo-400/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+            <div className="relative z-10">
+              <div className="inline-flex items-center gap-2 bg-white/10 text-white text-sm font-semibold px-4 py-2 rounded-full mb-6 border border-white/10">
+                <Monitor className="w-4 h-4" />
+                For Screen Owners
+              </div>
+              <h2 className="text-4xl font-bold text-white mb-4">Monetize Your Digital Screens</h2>
+              <p className="text-lg text-gray-400 max-w-xl mx-auto mb-8">
+                Own a digital display or LED screen? Join the Connect network and start earning by running advertiser campaigns on your screens.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-4">
+                <Link href="/register?role=screen_owner">
+                  <Button size="lg" className="bg-white text-gray-900 hover:bg-gray-100 font-semibold rounded-xl px-8">
+                    List Your Screen
+                  </Button>
+                </Link>
+                <Link href="/login">
+                  <Button size="lg" variant="ghost" className="text-white hover:text-white hover:bg-white/10 rounded-xl font-semibold px-8 border border-white/20">
+                    Already Listed? Sign In
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────── FAQ SECTION ─────────────────── */}
+      <section className="py-24 bg-gray-50 border-t border-gray-100" id="faq">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4 tracking-tight">Frequently Asked Questions</h2>
+            <p className="text-lg text-gray-500 max-w-2xl mx-auto">
+              Everything you need to know before launching your outdoor advertising campaign with Connect.
+            </p>
+          </div>
+          
+          <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-gray-100">
+            <Accordion type="single" collapsible defaultValue="faq-0" className="w-full">
+              {FAQ_ITEMS.map((item, index) => (
+                <AccordionItem key={index} value={`faq-${index}`} className="border-b-gray-100 last:border-0 py-1">
+                  <AccordionTrigger className="text-left font-semibold text-gray-900 hover:text-blue-600 text-lg hover:no-underline py-4">
+                    {item.question}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-gray-500 text-base leading-relaxed pb-4 pr-6">
+                    {item.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </div>
+        </div>
+        
+        {/* SEO FAQ Schema */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              "mainEntity": FAQ_ITEMS.map((item) => ({
+                "@type": "Question",
+                "name": item.question,
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": item.answer
+                }
+              }))
+            })
+          }}
+        />
+      </section>
+
+      {/* ─────────────────── FINAL CTA ─────────────────── */}
+      <section className="py-24 bg-blue-600">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
+          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4 tracking-tight">
+            Your Customers Are<br />Already Outside.
+          </h2>
+          <p className="text-xl text-indigo-200 mb-10 leading-relaxed">
+            Put your brand where people see it. Launch your local screen campaign today and start getting noticed.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <Link href="/register?role=advertiser">
+              <Button size="lg" className="bg-white text-blue-700 hover:bg-gray-100 font-semibold rounded-xl px-8 text-base h-12">
+                Start Your Campaign — Free
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </Link>
+            <Link href="/advertiser/discover">
+              <Button size="lg" variant="ghost" className="text-white border border-white/30 hover:bg-white/10 font-semibold rounded-xl px-8 text-base h-12">
+                Browse Screens
+              </Button>
+            </Link>
+          </div>
+          <p className="text-indigo-300 text-sm mt-6">No credit card required · Launch in minutes</p>
+        </div>
+      </section>
+
+      <PublicFooter platformStats={platformStats} />
     </div>
   );
 }
