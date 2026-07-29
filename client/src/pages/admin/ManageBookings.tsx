@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, DollarSign, Check, X, Monitor, AlertCircle, CheckCircle, Edit, Eye, User, Building, Phone, Mail } from "lucide-react";
+import { Calendar, DollarSign, Check, X, Monitor, AlertCircle, CheckCircle, Edit, Eye, User, Building, Phone, Mail, ChevronLeft, ChevronRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -65,6 +65,8 @@ export default function ManageBookings() {
   const [editStartDate, setEditStartDate] = useState("");
   const [editEndDate, setEditEndDate] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [page, setPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
 
   const { data: bookings = [], isLoading } = useQuery<BookingWithDetails[]>({
     queryKey: ["/api/admin/bookings"],
@@ -328,6 +330,53 @@ export default function ManageBookings() {
     </Card>
   );
 
+  const renderPaginatedList = (list: BookingWithDetails[], showApprovalActions = false) => {
+    const totalPages = Math.ceil(list.length / ITEMS_PER_PAGE);
+    const paginatedList = list.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
+    if (list.length === 0) {
+      return (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            No bookings found
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="grid gap-4">
+        {paginatedList.map(booking => renderBookingCard(booking, showApprovalActions))}
+        
+        {list.length > ITEMS_PER_PAGE && (
+          <div className="flex items-center justify-between mt-6 pt-4 border-t">
+            <span className="text-sm text-muted-foreground">
+              Showing {(page - 1) * ITEMS_PER_PAGE + 1} to {Math.min(page * ITEMS_PER_PAGE, list.length)} of {list.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="p-8 space-y-6">
       <div>
@@ -344,7 +393,7 @@ export default function ManageBookings() {
           </CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="pending-owner" className="space-y-6">
+        <Tabs defaultValue="pending-owner" className="space-y-6" onValueChange={() => setPage(1)}>
           <TabsList>
             <TabsTrigger value="pending-owner" data-testid="tab-pending-owner">
               Awaiting Owner Approval ({pendingOwnerApproval.length})
@@ -364,65 +413,23 @@ export default function ManageBookings() {
           </TabsList>
 
           <TabsContent value="pending-owner">
-            {pendingOwnerApproval.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  No bookings awaiting screen owner approval
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4">
-                {pendingOwnerApproval.map(booking => renderBookingCard(booking, true))}
-              </div>
-            )}
+            {renderPaginatedList(pendingOwnerApproval, true)}
           </TabsContent>
 
           <TabsContent value="pending-admin">
-            {pendingAdminApproval.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  No bookings awaiting admin approval
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4">
-                {pendingAdminApproval.map(booking => renderBookingCard(booking, true))}
-              </div>
-            )}
+            {renderPaginatedList(pendingAdminApproval, true)}
           </TabsContent>
 
           <TabsContent value="approved">
-            {approvedBookings.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  No approved bookings
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4">
-                {approvedBookings.map(booking => renderBookingCard(booking))}
-              </div>
-            )}
+            {renderPaginatedList(approvedBookings, false)}
           </TabsContent>
 
           <TabsContent value="rejected">
-            {rejectedBookings.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  No rejected bookings
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4">
-                {rejectedBookings.map(booking => renderBookingCard(booking))}
-              </div>
-            )}
+            {renderPaginatedList(rejectedBookings, false)}
           </TabsContent>
 
           <TabsContent value="all">
-            <div className="grid gap-4">
-              {bookings.map(booking => renderBookingCard(booking, booking.status === "owner_approved"))}
-            </div>
+            {renderPaginatedList(bookings, false)}
           </TabsContent>
         </Tabs>
       )}

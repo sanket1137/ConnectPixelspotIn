@@ -1,22 +1,11 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocation } from "wouter";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarHeader,
-  SidebarFooter,
-} from "@/components/ui/sidebar";
-import { 
-  LayoutDashboard, 
-  Monitor, 
-  Users, 
-  FileText, 
+  LayoutDashboard,
+  Monitor,
+  Users,
+  FileText,
   Settings,
   MapPin,
   PlusCircle,
@@ -29,21 +18,26 @@ import {
   UserCircle,
   MessageSquare,
   Shield,
-  RefreshCw,
   Briefcase,
   ClipboardList,
+  Menu,
+  LifeBuoy,
 } from "lucide-react";
-import { useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+
 import logo from "@assets/pixelspot-logo.png";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 export function AppSidebar() {
   const { user, signOut, isAdmin, isScreenOwner, isAdvertiser, isAgency } = useAuth();
   const [location, setLocation] = useLocation();
-  const { toast } = useToast();
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
@@ -56,6 +50,7 @@ export function AppSidebar() {
     { title: "AI Security", url: "/admin/ai-security", icon: Shield },
     { title: "Analytics", url: "/admin/analytics", icon: TrendingUp },
     { title: "Settings", url: "/admin/settings", icon: Settings },
+    { title: "Support Tickets", url: "/admin/support", icon: LifeBuoy },
     { title: "Profile", url: "/admin/profile", icon: UserCircle },
   ];
 
@@ -65,6 +60,7 @@ export function AppSidebar() {
     { title: "Add Screen", url: "/owner/screens/new", icon: PlusCircle },
     { title: "Booking Requests", url: "/owner/requests", icon: Calendar },
     { title: "Earnings", url: "/owner/earnings", icon: DollarSign },
+    { title: "Support", url: "/tickets", icon: LifeBuoy },
     { title: "Profile", url: "/owner/profile", icon: UserCircle },
   ];
 
@@ -75,6 +71,7 @@ export function AppSidebar() {
     { title: "Create Campaign", url: "/advertiser/campaigns/new", icon: PlusCircle },
     { title: "AI Campaign Advisor", url: "/advertiser/ai-advisor", icon: Sparkles },
     { title: "Payments", url: "/advertiser/payments", icon: CreditCard },
+    { title: "Support", url: "/tickets", icon: LifeBuoy },
     { title: "Profile", url: "/advertiser/profile", icon: UserCircle },
   ];
 
@@ -85,92 +82,97 @@ export function AppSidebar() {
     { title: "My Campaigns", url: "/agency/campaigns", icon: Briefcase },
     { title: "AI Campaign Advisor", url: "/agency/ai-advisor", icon: Sparkles },
     { title: "Payments", url: "/agency/payments", icon: CreditCard },
+    { title: "Support", url: "/tickets", icon: LifeBuoy },
     { title: "Profile", url: "/agency/profile", icon: UserCircle },
   ];
 
   const items = isAdmin ? adminItems : isScreenOwner ? ownerItems : isAgency ? agencyItems : advertiserItems;
+  const portalName = isAdmin ? "Admin Portal" : isScreenOwner ? "Owner Portal" : isAgency ? "Agency Portal" : "Advertiser Portal";
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    
-    // Invalidate all queries to refetch fresh data
-    await queryClient.invalidateQueries();
-    
-    // Brief delay to show the animation
-    setTimeout(() => {
-      setIsRefreshing(false);
-      toast({
-        title: "Refreshed",
-        description: "All data has been updated",
-      });
-    }, 500);
+  const handleNavigation = (url: string) => {
+    setLocation(url);
+    setIsMobileOpen(false);
   };
 
-  return (
-    <Sidebar>
-      <SidebarHeader className="p-6 border-b border-sidebar-border">
-        <div className="flex items-start gap-2 mb-2">
-          <img 
-            src={logo} 
-            alt="PixelSpot" 
-            className="w-40 h-auto"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            data-testid="button-refresh-sidebar"
-            className="h-8 w-8 -mt-1 ml-auto"
-          >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          {isAdmin ? "Admin Portal" : isScreenOwner ? "Screen Owner Portal" : isAgency ? "Agency Portal" : "Advertiser Portal"}
-        </p>
-      </SidebarHeader>
-      
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Menu</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    onClick={() => setLocation(item.url)}
-                    isActive={location === item.url}
-                    data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
-                    data-tour={`sidebar-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
-                  >
-                    <item.icon className="w-4 h-4" />
-                    <span>{item.title}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
-        <div className="space-y-3">
-          <div className="px-3 py-2 bg-sidebar-accent rounded-lg">
-            <p className="text-xs font-medium text-sidebar-accent-foreground">{user?.name}</p>
-            <p className="text-xs text-muted-foreground">{user?.email}</p>
-          </div>
-          <Button
-            variant="ghost"
-            className="w-full justify-start"
-            onClick={() => signOut()}
-            data-testid="button-signout"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
+  const NavContent = () => (
+    <div className="flex flex-col h-full py-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 space-y-1">
+        {items.map((item) => {
+          const isActive = location === item.url;
+          return (
+            <Button
+              key={item.title}
+              variant={isActive ? "secondary" : "ghost"}
+              className={`w-full justify-start overflow-hidden group/item h-11 ${
+                isActive ? "bg-slate-100 text-primary" : "text-slate-600 hover:text-slate-900"
+              }`}
+              onClick={() => handleNavigation(item.url)}
+            >
+              <item.icon className={`h-5 w-5 shrink-0 ${isActive ? "text-primary" : "text-slate-400 group-hover/item:text-slate-600"}`} />
+              {/* Opacity zero when collapsed (md only), shown on hover. On mobile sheet, always full width so opacity-100 */}
+              <span className="ml-3 font-medium truncate md:opacity-0 md:w-0 md:group-hover/sidebar:opacity-100 md:group-hover/sidebar:w-auto transition-all duration-300 md:-translate-x-4 md:group-hover/sidebar:translate-x-0">
+                {item.title}
+              </span>
+            </Button>
+          );
+        })}
+      </div>
+      <div className="px-2 pt-4 border-t mt-4">
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 overflow-hidden group/item h-11"
+          onClick={() => signOut()}
+        >
+          <LogOut className="h-5 w-5 shrink-0" />
+          <span className="ml-3 font-medium truncate md:opacity-0 md:w-0 md:group-hover/sidebar:opacity-100 md:group-hover/sidebar:w-auto transition-all duration-300 md:-translate-x-4 md:group-hover/sidebar:translate-x-0">
             Sign Out
-          </Button>
+          </span>
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Mobile Sidebar (Sheet) */}
+      <div className="md:hidden">
+        <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-10 w-10 fixed top-2 left-4 z-[60]">
+              <Menu className="h-5 w-5 text-slate-700" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 p-0 flex flex-col">
+            <SheetHeader className="p-4 border-b text-left">
+              <div className="flex items-center mb-2">
+                <img src={logo} alt="Pixelspot" className="h-8 w-auto" />
+              </div>
+              <SheetTitle className="text-lg font-bold">{portalName}</SheetTitle>
+              <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
+            </SheetHeader>
+            <NavContent />
+          </SheetContent>
+        </Sheet>
+      </div>
+
+      {/* Desktop Persistent Mini-Sidebar */}
+      <aside 
+        className="hidden md:flex flex-col group/sidebar fixed inset-y-0 left-0 z-50 h-screen w-16 hover:w-64 border-r bg-background shadow-[4px_0_24px_rgba(0,0,0,0.02)] transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)]"
+      >
+        <div className="flex h-16 items-center justify-start border-b px-4 overflow-hidden shrink-0">
+          <div className="flex flex-col">
+            <div className="w-8 group-hover/sidebar:w-32 transition-all duration-300 overflow-hidden flex items-center">
+              <img src={logo} alt="Pixelspot" className="h-7 w-auto max-w-none" />
+            </div>
+            <div className="opacity-0 h-0 group-hover/sidebar:opacity-100 group-hover/sidebar:h-auto transition-all duration-300 whitespace-nowrap overflow-hidden">
+              <span className="text-[10px] uppercase font-bold text-slate-500 mt-1 inline-block">{portalName}</span>
+            </div>
+          </div>
         </div>
-      </SidebarFooter>
-    </Sidebar>
+        <div className="flex-1 overflow-hidden hover:overflow-y-auto custom-scrollbar">
+          <NavContent />
+        </div>
+      </aside>
+    </>
   );
 }

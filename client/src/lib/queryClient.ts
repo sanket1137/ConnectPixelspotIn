@@ -8,7 +8,7 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-async function getAuthHeaders(): Promise<HeadersInit> {
+export async function getAuthHeaders(): Promise<HeadersInit> {
   const user = auth.currentUser;
   if (user) {
     const token = await user.getIdToken();
@@ -48,8 +48,24 @@ export const getQueryFn: <T>(options: {
     const authHeaders = await getAuthHeaders();
     
     // First element is always the URL string, rest are cache segments
-    const url = queryKey[0] as string;
+    let url = queryKey[0] as string;
     
+    // Serialize params if they exist in queryKey[1] (just in case they still use it)
+    if (queryKey.length > 1 && typeof queryKey[1] === 'object' && queryKey[1] !== null) {
+      const params = new URLSearchParams();
+      Object.entries(queryKey[1] as Record<string, any>).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, value.toString());
+        }
+      });
+      const qs = params.toString();
+      if (qs) {
+        url += (url.includes('?') ? '&' : '?') + qs;
+      }
+    }
+
+    console.log("🚀 FETCHING URL:", url);
+
     const res = await fetch(url, {
       headers: authHeaders,
       credentials: "include",

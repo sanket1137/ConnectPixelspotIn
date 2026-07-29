@@ -186,14 +186,22 @@ export const campaigns = pgTable("campaigns", {
   name: text("name").notNull(),
   objective: text("objective").notNull(), // brand_awareness, product_launch, event_promotion, etc.
   
-  // New: Area-based targeting (map + radius OR city)
+  // New: Area-based targeting (map + radius OR city OR multiple locations)
   targetArea: jsonb("target_area").$type<{
-    type: 'map' | 'city' | 'india' | 'none';
-    // For map type:
+    type: 'map' | 'city' | 'india' | 'none' | 'multiple';
+    // For multiple type:
+    locations?: Array<{
+      type: 'city' | 'map';
+      label: string; // The display name
+      lat?: number;
+      lng?: number;
+      radiusKm?: number;
+      city?: string;
+    }>;
+    // Legacy single-item fields (kept for backward compatibility):
     latitude?: number;
     longitude?: number;
     radiusKm?: number;
-    // For city type:
     city?: string;
     state?: string;
   }>(),
@@ -834,3 +842,61 @@ export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 
 export type ProofOfPlay = typeof proofOfPlay.$inferSelect;
 export type InsertProofOfPlay = z.infer<typeof insertProofOfPlaySchema>;
+
+// ========== SUPPORT TICKETS ==========
+
+export const supportTickets = pgTable("support_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  subject: text("subject").notNull(),
+  category: text("category"),
+  status: text("status").notNull().default("open"), // open, in_progress, closed
+  priority: text("priority").notNull().default("medium"), // low, medium, high
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const ticketMessages = pgTable("ticket_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").notNull(),
+  senderId: varchar("sender_id").notNull(),
+  message: text("message").notNull(),
+  attachments: jsonb("attachments").default([]), // Array of { url: string, name: string, type: string }
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const supportTicketsRelations = relations(supportTickets, ({ one, many }) => ({
+  user: one(users, {
+    fields: [supportTickets.userId],
+    references: [users.id],
+  }),
+  messages: many(ticketMessages),
+}));
+
+export const ticketMessagesRelations = relations(ticketMessages, ({ one }) => ({
+  ticket: one(supportTickets, {
+    fields: [ticketMessages.ticketId],
+    references: [supportTickets.id],
+  }),
+  sender: one(users, {
+    fields: [ticketMessages.senderId],
+    references: [users.id],
+  }),
+}));
+
+export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTicketMessageSchema = createInsertSchema(ticketMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type SupportTicket = typeof supportTickets.$inferSelect;
+export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
+
+export type TicketMessage = typeof ticketMessages.$inferSelect;
+export type InsertTicketMessage = z.infer<typeof insertTicketMessageSchema>;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,11 +18,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Save, Send, Play, Download, Trash2, Plus, ArrowLeft, Percent,
-  MapPin, Building2, Eye, EyeOff, X, RefreshCw, SlidersHorizontal, Check,
+  MapPin, Building2, Eye, EyeOff, X, RefreshCw, SlidersHorizontal, Check, Search, Monitor
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Map, AdvancedMarker, InfoWindow } from "@vis.gl/react-google-maps";
+import { Map, AdvancedMarker, InfoWindow, useMap } from "@vis.gl/react-google-maps";
 import { VENUE_CATEGORIES } from "@shared/constants";
+import { SearchAutocomplete } from "@/components/map/SearchAutocomplete";
+import { Slider } from "@/components/ui/slider";
+import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -42,214 +45,329 @@ function ScreenPickerModal({
   onAdd: (screen: any) => void;
   existingIds: Set<string>;
 }) {
-  const [search, setSearch] = useState("");
-  const [city, setCity] = useState("all");
   const [venueCategory, setVenueCategory] = useState("all");
   const [envType, setEnvType] = useState("all");
-  const [selected, setSelected] = useState<any>(null);
+  const [genderOrientation, setGenderOrientation] = useState("all");
+  const [lat, setLat] = useState<number | undefined>();
+  const [lng, setLng] = useState<number | undefined>();
+  const [locationName, setLocationName] = useState("");
+  const [radiusKm, setRadiusKm] = useState(15);
+  
+  const [detailModalScreen, setDetailModalScreen] = useState<any>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const { data: screens = [] } = useQuery<any[]>({
-    queryKey: ["/api/agency/screens"],
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (lat !== undefined && lng !== undefined) {
+      params.append("lat", lat.toString());
+      params.append("lng", lng.toString());
+      params.append("radiusKm", radiusKm.toString());
+    }
+    return params.toString();
+  }, [lat, lng, radiusKm]);
+
+  const { data: screensData = [] } = useQuery<any>({
+    queryKey: [`/api/screens?${queryString}`],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/agency/screens");
+      const endpoint = (lat !== undefined && lng !== undefined) ? `/api/screens?${queryString}` : "/api/agency/screens";
+      const res = await apiRequest("GET", endpoint);
       return res.json();
     },
     enabled: open,
   });
 
-  const cities = ["all", ...Array.from(new Set(screens.map((s: any) => s.city).filter(Boolean))).sort()];
+  const screens = Array.isArray(screensData) ? screensData : (screensData.screens || []);
+
   const envTypes = ["all", ...Array.from(new Set(screens.map((s: any) => s.environmentType).filter(Boolean))).sort()];
+  // Extract unique gender orientations from userIntents
+  const genderOrientations = ["all", ...Array.from(new Set(screens.flatMap((s: any) => s.userIntents || []))).sort()];
 
   const filtered = screens.filter((s: any) => {
-    const q = search.toLowerCase();
-    if (q && !s.name?.toLowerCase().includes(q) && !s.city?.toLowerCase().includes(q) &&
-        !s.venueName?.toLowerCase().includes(q) && !s.pincode?.includes(q)) return false;
-    if (city !== "all" && s.city !== city) return false;
     if (venueCategory !== "all" && s.venueCategory !== venueCategory) return false;
     if (envType !== "all" && s.environmentType !== envType) return false;
+    if (genderOrientation !== "all" && !(s.userIntents || []).includes(genderOrientation) && !(s.lifestyleTags || []).includes(genderOrientation)) return false;
     return true;
   });
 
   const mapScreens = filtered.filter((s: any) => s.latitude && s.longitude);
-  const defaultCenter = mapScreens.length > 0
-    ? { lat: parseFloat(mapScreens[0].latitude), lng: parseFloat(mapScreens[0].longitude) }
-    : { lat: 20.5937, lng: 78.9629 };
+  const defaultCenter = (lat !== undefined && lng !== undefined) 
+    ? { lat, lng } 
+    : (mapScreens.length > 0
+        ? { lat: parseFloat(mapScreens[0].latitude), lng: parseFloat(mapScreens[0].longitude) }
+        : { lat: 20.5937, lng: 78.9629 });
+
+  const [panTarget, setPanTarget] = useState<{ lat: number; lng: number; zoom?: number } | null>(null);
+
+  useEffect(() => {
+    if (lat !== undefined && lng !== undefined) {
+      setPanTarget({ lat, lng, zoom: radiusKm <= 5 ? 13 : radiusKm <= 15 ? 11 : 9 });
+    }
+  }, [lat, lng, radiusKm]);
+
+  function MapController() {
+    const map = useMap("agency-screen-picker-map");
+    useEffect(() => {
+      if (!map || !panTarget) return;
+      map.panTo({ lat: panTarget.lat, lng: panTarget.lng });
+      if (panTarget.zoom !== undefined) map.setZoom(panTarget.zoom);
+      setPanTarget(null);
+    }, [map, panTarget]);
+    return null;
+  }
 
   if (!open) return null;
 
+  const PriceBubble = ({ screen }: { screen: any }) => {
+    const isSelected = existingIds.has(screen.id);
+    const isHovered = highlightedId === screen.id;
+    const price = screen.pricePerDay >= 1000
+      ? `₹${(screen.pricePerDay / 1000).toFixed(0)}k`
+      : `₹${screen.pricePerDay}`;
+    return (
+      <div className="relative">
+        <div className={`
+          px-2.5 py-1 rounded-full font-bold text-[12px] shadow-md border-2 whitespace-nowrap cursor-pointer transition-all duration-150
+          ${isSelected ? 'bg-violet-600 text-white border-white scale-110' : 'bg-white text-slate-800 border-white hover:scale-110'}
+          ${isHovered && !isSelected ? 'shadow-xl scale-110 ring-2 ring-violet-400' : ''}
+        `}
+        onClick={() => setDetailModalScreen(screen)}
+        >{price}</div>
+        <div className={`absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0
+          border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px]
+          ${isSelected ? 'border-t-violet-600' : 'border-t-white'}
+        `} />
+      </div>
+    );
+  };
+
+  const handleCardClick = (screen: any) => {
+     setDetailModalScreen(screen);
+  };
+
+  const handleAddScreen = (screen: any) => {
+    onAdd(screen);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex flex-col">
+    <div className="absolute inset-0 bg-background flex flex-col overflow-hidden z-40 rounded-lg">
       {/* Header */}
-      <div className="bg-background border-b px-4 py-3 flex items-center gap-3 flex-wrap">
-        <Button variant="ghost" size="icon" onClick={onClose}><X className="w-4 h-4" /></Button>
-        <h2 className="font-semibold text-base flex-1">Add Screens — Map View</h2>
-        <span className="text-xs text-muted-foreground">{filtered.length} screens shown</span>
+      <div className="bg-white border-b px-6 py-4 flex items-center justify-between shrink-0 shadow-sm z-10">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-slate-100">
+            <X className="w-5 h-5 text-slate-600" />
+          </Button>
+          <div>
+            <h2 className="font-semibold text-lg text-slate-900">Add Screens to Plan</h2>
+            <p className="text-xs text-slate-500">{filtered.length} screens match your criteria</p>
+          </div>
+        </div>
       </div>
 
       {/* Filters bar */}
-      <div className="bg-background border-b px-4 py-2 flex flex-wrap gap-2 items-center">
-        <div className="relative">
-          <MapPin className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            className="h-8 pl-8 pr-3 text-xs rounded-md border bg-background w-44 focus:outline-none focus:ring-1 focus:ring-violet-500"
-            placeholder="Search name / pincode / area…"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setSelected(null); }}
+      <div className="bg-white border-b px-6 py-3 flex flex-wrap gap-3 items-center shrink-0 z-10">
+        <div className="w-full md:w-[320px] bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5 focus-within:ring-2 focus-within:ring-violet-500/20 focus-within:border-violet-500 transition-all flex items-center">
+          <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+          <SearchAutocomplete 
+            onPlaceSelect={(place, inputValue) => {
+              if (place?.geometry?.location) {
+                setLat(place.geometry.location.lat());
+                setLng(place.geometry.location.lng());
+                setLocationName(inputValue);
+              } else {
+                setLat(undefined);
+                setLng(undefined);
+                setLocationName("");
+              }
+            }}
+            placeholder="Search area, city or state..."
           />
         </div>
 
-        <Select value={city} onValueChange={(v) => { setCity(v); setSelected(null); }}>
-          <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="All Cities" /></SelectTrigger>
+        {lat !== undefined && (
+          <div className="flex items-center gap-3 w-full md:w-[150px] mr-2">
+            <span className="text-xs text-slate-500 font-medium whitespace-nowrap">{radiusKm} km</span>
+            <Slider
+              value={[radiusKm]}
+              min={1} max={100} step={1}
+              onValueChange={([val]) => setRadiusKm(val)}
+              className="flex-1"
+            />
+          </div>
+        )}
+
+        <Select value={venueCategory} onValueChange={setVenueCategory}>
+          <SelectTrigger className="h-10 text-sm w-[180px] rounded-full border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors shadow-sm">
+            <SelectValue placeholder="Venue Category" />
+          </SelectTrigger>
           <SelectContent>
-            {cities.map((c) => <SelectItem key={c} value={c} className="text-xs">{c === "all" ? "All Cities" : c}</SelectItem>)}
+            <SelectItem value="all">All Venues</SelectItem>
+            {VENUE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
 
-        <Select value={venueCategory} onValueChange={(v) => { setVenueCategory(v); setSelected(null); }}>
-          <SelectTrigger className="h-8 text-xs w-40"><SelectValue placeholder="All Venues" /></SelectTrigger>
+        <Select value={envType} onValueChange={setEnvType}>
+          <SelectTrigger className="h-10 text-sm w-[180px] rounded-full border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors shadow-sm">
+            <SelectValue placeholder="Environment" />
+          </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all" className="text-xs">All Venues</SelectItem>
-            {VENUE_CATEGORIES.map((c) => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}
+            {envTypes.map((t) => <SelectItem key={t} value={t as string}>{t === "all" ? "All Environments" : t as string}</SelectItem>)}
           </SelectContent>
         </Select>
 
-        <Select value={envType} onValueChange={(v) => { setEnvType(v); setSelected(null); }}>
-          <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Environment" /></SelectTrigger>
+        <Select value={genderOrientation} onValueChange={setGenderOrientation}>
+          <SelectTrigger className="h-10 text-sm w-[180px] rounded-full border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors shadow-sm">
+            <SelectValue placeholder="Gender Orientation" />
+          </SelectTrigger>
           <SelectContent>
-            {envTypes.map((t) => <SelectItem key={t} value={t} className="text-xs">{t === "all" ? "All Environments" : t}</SelectItem>)}
+            {genderOrientations.map((t) => <SelectItem key={t} value={t as string}>{t === "all" ? "All Genders" : t as string}</SelectItem>)}
           </SelectContent>
         </Select>
 
-        {(search || city !== "all" || venueCategory !== "all" || envType !== "all") && (
-          <button
-            className="text-xs text-muted-foreground hover:text-foreground underline"
-            onClick={() => { setSearch(""); setCity("all"); setVenueCategory("all"); setEnvType("all"); setSelected(null); }}
+        {(lat !== undefined || locationName || venueCategory !== "all" || envType !== "all" || genderOrientation !== "all") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-slate-500 hover:text-slate-900 rounded-full h-10 px-4"
+            onClick={() => { 
+              setLat(undefined); setLng(undefined); setLocationName("");
+              setVenueCategory("all"); setEnvType("all"); setGenderOrientation("all"); 
+            }}
           >
             Clear filters
-          </button>
+          </Button>
         )}
       </div>
 
-      {/* Map */}
-      <div className="flex-1 relative">
-        <Map
-          id="agency-screen-picker-map"
-          style={{ width: "100%", height: "100%" }}
-          defaultCenter={defaultCenter}
-          defaultZoom={mapScreens.length === 1 ? 13 : 6}
-          gestureHandling="greedy"
-          disableDefaultUI
-          zoomControl
-          mapId="agency-screen-picker-map"
-        >
-          {mapScreens.map((s: any) => {
-            const isAlreadyAdded = existingIds.has(s.id);
-            const isInfoOpen = selected?.id === s.id;
+      {/* Split view body */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left List */}
+        <div className="w-full md:w-[480px] shrink-0 border-r bg-slate-50/50 overflow-y-auto p-4 flex flex-col gap-4">
+          {filtered.map(screen => {
+            const isSelected = existingIds.has(screen.id);
+            const isHovered = highlightedId === screen.id;
             return (
-              <AdvancedMarker
-                key={s.id}
-                position={{ lat: parseFloat(s.latitude), lng: parseFloat(s.longitude) }}
-                onClick={() => setSelected(isInfoOpen ? null : s)}
+              <div
+                key={screen.id}
+                ref={(el) => { cardRefs.current[screen.id] = el; }}
+                className={`bg-white rounded-xl border p-3 flex gap-4 cursor-pointer transition-all hover:shadow-md ${isHovered ? 'border-violet-400 shadow-md ring-1 ring-violet-400' : 'border-slate-200'} ${isSelected ? 'border-violet-600 bg-violet-50/30' : ''}`}
+                onMouseEnter={() => setHighlightedId(screen.id)}
+                onMouseLeave={() => setHighlightedId(null)}
+                onClick={() => handleCardClick(screen)}
               >
-                <div style={{ cursor: "pointer" }}>
-                  <svg width="40" height="40" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="8" y="10" width="32" height="22" rx="2"
-                      fill={isAlreadyAdded ? "#10b981" : "#7c3aed"} stroke="white" strokeWidth="2" />
-                    <rect x="10" y="12" width="28" height="18"
-                      fill={isAlreadyAdded ? "#059669" : "#6d28d9"} rx="1" />
-                    <rect x="20" y="32" width="8" height="2" fill={isAlreadyAdded ? "#10b981" : "#7c3aed"} />
-                    <rect x="16" y="34" width="16" height="3" rx="1" fill={isAlreadyAdded ? "#10b981" : "#7c3aed"} />
-                  </svg>
-                </div>
-              </AdvancedMarker>
-            );
-          })}
-
-          {selected && selected.latitude && selected.longitude && (
-            <InfoWindow
-              position={{ lat: parseFloat(selected.latitude), lng: parseFloat(selected.longitude) }}
-              onCloseClick={() => setSelected(null)}
-              maxWidth={300}
-              pixelOffset={[0, -12]}
-            >
-              <div style={{ width: 280 }}>
-                {/* Screen image */}
-                <div style={{ height: 140, background: "#e5e7eb", borderRadius: 6, overflow: "hidden", marginBottom: 10 }}>
-                  {(selected.screenImages?.[0] || selected.images?.[0]) ? (
-                    <img src={selected.screenImages?.[0] ?? selected.images?.[0]}
-                      alt={selected.name}
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                {/* Image */}
+                <div className="w-32 h-24 rounded-lg bg-slate-100 overflow-hidden shrink-0 relative">
+                  {screen.screenImages?.[0] || screen.images?.[0] ? (
+                    <img 
+                      src={screen.screenImages?.[0] || screen.images?.[0]} 
+                      alt={screen.name} 
+                      className="w-full h-full object-cover" 
                       onError={(e) => { e.currentTarget.src = "https://placehold.co/600x400/1a1a1a/666?text=No+Image"; }}
                     />
                   ) : (
-                    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <MapPin style={{ width: 36, height: 36, color: "#9ca3af" }} />
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Monitor className="h-8 w-8 text-slate-300" />
+                    </div>
+                  )}
+                  {isSelected && (
+                    <div className="absolute top-1.5 left-1.5 bg-violet-600 text-white p-1 rounded-full shadow-sm">
+                      <Check className="w-3 h-3" />
                     </div>
                   )}
                 </div>
 
-                <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: "#111827" }}>{selected.name}</p>
-                <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
-                  {selected.city}{selected.venueName ? ` – ${selected.venueName}` : ""}
-                </p>
-
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
-                  {selected.venueCategory && (
-                    <span style={{ fontSize: 10, border: "1px solid #d1d5db", borderRadius: 4, padding: "2px 6px", color: "#374151" }}>
-                      {selected.venueCategory}
-                    </span>
-                  )}
-                  {selected.environmentType && (
-                    <span style={{ fontSize: 10, border: "1px solid #d1d5db", borderRadius: 4, padding: "2px 6px", color: "#374151" }}>
-                      {selected.environmentType}
-                    </span>
-                  )}
-                  {(selected.lifestyleTags || []).slice(0, 2).map((t: string) => (
-                    <span key={t} style={{ fontSize: 10, background: "#f3f4f6", borderRadius: 4, padding: "2px 6px", color: "#374151" }}>
-                      {t}
-                    </span>
-                  ))}
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8, borderTop: "1px solid #e5e7eb" }}>
-                  <div>
-                    <p style={{ fontSize: 10, color: "#6b7280" }}>Per day</p>
-                    <p style={{ fontWeight: 700, fontSize: 16, color: "#7c3aed" }}>₹{selected.pricePerDay?.toLocaleString("en-IN")}</p>
+                {/* Details */}
+                <div className="flex-1 min-w-0 py-1 flex flex-col">
+                  <div className="flex justify-between items-start gap-2 mb-1">
+                    <h3 className="font-semibold text-slate-900 text-sm line-clamp-1">{screen.name}</h3>
+                    <div className="font-bold text-slate-900 text-sm shrink-0">₹{(screen.pricePerDay || 0).toLocaleString()} <span className="text-xs font-normal text-slate-500">/day</span></div>
                   </div>
-                  {existingIds.has(selected.id) ? (
-                    <span style={{ fontSize: 12, color: "#10b981", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                      <Check style={{ width: 14, height: 14 }} /> Added
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => { onAdd(selected); setSelected(null); }}
-                      style={{
-                        background: "#7c3aed", color: "white", border: "none",
-                        borderRadius: 6, padding: "7px 14px", fontSize: 12,
-                        fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                  <p className="text-xs text-slate-500 line-clamp-1 mb-2">{screen.city}{screen.venueName ? ` • ${screen.venueName}` : ''}</p>
+                  
+                  <div className="flex gap-1.5 flex-wrap mt-auto">
+                    {screen.venueCategory && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-slate-100 text-slate-600 hover:bg-slate-200">{screen.venueCategory}</Badge>
+                    )}
+                    {screen.environmentType && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-slate-100 text-slate-600 hover:bg-slate-200">{screen.environmentType.split(' ')[0]}</Badge>
+                    )}
+                  </div>
+                  
+                  <div className="mt-3">
+                    <Button 
+                      size="sm" 
+                      variant={isSelected ? "outline" : "default"} 
+                      className={`w-full h-8 text-xs ${isSelected ? 'text-violet-700 border-violet-200 hover:bg-violet-50' : 'bg-violet-600 hover:bg-violet-700'}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isSelected) {
+                          handleAddScreen(screen);
+                        }
                       }}
+                      disabled={isSelected}
                     >
-                      + Add to Plan
-                    </button>
-                  )}
+                      {isSelected ? (
+                        <><Check className="w-3.5 h-3.5 mr-1.5" /> Added to Plan</>
+                      ) : (
+                        <><Plus className="w-3.5 h-3.5 mr-1.5" /> Add to Plan</>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </InfoWindow>
-          )}
-        </Map>
-
-        {mapScreens.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center bg-muted/50 text-center">
-            <div>
-              <MapPin className="w-10 h-10 mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground font-medium">No screens with location data match your filters.</p>
-              <button className="text-xs text-violet-600 mt-1 underline" onClick={() => { setSearch(""); setCity("all"); setVenueCategory("all"); setEnvType("all"); }}>
-                Clear filters
-              </button>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div className="text-center py-12 px-4">
+              <div className="bg-slate-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Search className="w-5 h-5 text-slate-400" />
+              </div>
+              <h3 className="font-medium text-slate-900 mb-1">No screens found</h3>
+              <p className="text-sm text-slate-500">Try adjusting your filters or search query.</p>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Right Map */}
+        <div className="hidden md:block flex-1 relative bg-slate-100">
+          <Map
+            id="agency-screen-picker-map"
+            style={{ width: "100%", height: "100%" }}
+            defaultCenter={defaultCenter}
+            defaultZoom={mapScreens.length === 1 ? 13 : 6}
+            gestureHandling="greedy"
+            disableDefaultUI
+            zoomControl
+            mapId="agency-screen-picker-map"
+          >
+            <MapController />
+            {mapScreens.map((s: any) => (
+              <AdvancedMarker
+                key={s.id}
+                position={{ lat: parseFloat(s.latitude), lng: parseFloat(s.longitude) }}
+                onClick={() => setDetailModalScreen(s)}
+                onMouseEnter={() => setHighlightedId(s.id)}
+                onMouseLeave={() => setHighlightedId(null)}
+              >
+                <PriceBubble screen={s} />
+              </AdvancedMarker>
+            ))}
+          </Map>
+        </div>
       </div>
+
+      <ScreenDetailsModal
+        isOpen={!!detailModalScreen}
+        onClose={() => setDetailModalScreen(null)}
+        screen={detailModalScreen}
+        onAdd={() => {
+          if (detailModalScreen && !existingIds.has(detailModalScreen.id)) {
+            handleAddScreen(detailModalScreen);
+          }
+          setDetailModalScreen(null);
+        }}
+        isAdded={detailModalScreen ? existingIds.has(detailModalScreen.id) : false}
+      />
     </div>
   );
 }
@@ -464,6 +582,19 @@ export default function MediaPlanBuilder() {
       <div className="p-6 space-y-4">
         <div className="h-8 w-48 bg-muted rounded animate-pulse" />
         <div className="h-48 bg-muted rounded-xl animate-pulse" />
+      </div>
+    );
+  }
+
+  if (pickerOpen) {
+    return (
+      <div className="h-[calc(100vh-64px)] w-full relative bg-slate-50 p-2 md:p-4">
+        <ScreenPickerModal
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onAdd={addScreen}
+          existingIds={existingIds}
+        />
       </div>
     );
   }

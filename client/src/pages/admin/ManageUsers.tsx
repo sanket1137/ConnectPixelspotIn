@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   Users, Mail, Search, CheckCircle2, XCircle, Calendar, Clock,
-  MapPin, Globe, Phone, Building2, Eye, Shield, CreditCard, FileText,
+  MapPin, Globe, Phone, Building2, Eye, Shield, CreditCard, FileText, ChevronLeft, ChevronRight
 } from "lucide-react";
 import type { User } from "@shared/schema";
 import {
@@ -220,6 +220,8 @@ export default function ManageUsers() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [page, setPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
   
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
@@ -272,7 +274,7 @@ export default function ManageUsers() {
           type="text"
           placeholder="Search by name, email, role, company, or phone..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
           className="pl-10"
           data-testid="input-search-users"
         />
@@ -287,7 +289,7 @@ export default function ManageUsers() {
         <div className="text-center py-12">Loading users...</div>
       ) : (
         <div className="grid gap-4">
-          {filteredUsers.map((user) => (
+          {filteredUsers.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE).map((user) => (
             <Card key={user.id} data-testid={`card-user-${user.id}`}>
               <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0 pb-2">
                 <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -374,6 +376,32 @@ export default function ManageUsers() {
           {filteredUsers.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               No users found matching "{searchQuery}"
+            </div>
+          )}
+          
+          {filteredUsers.length > ITEMS_PER_PAGE && (
+            <div className="flex items-center justify-between mt-6 pt-4">
+              <span className="text-sm text-muted-foreground">
+                Showing {(page - 1) * ITEMS_PER_PAGE + 1} to {Math.min(page * ITEMS_PER_PAGE, filteredUsers.length)} of {filteredUsers.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(Math.ceil(filteredUsers.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={page >= Math.ceil(filteredUsers.length / ITEMS_PER_PAGE)}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
             </div>
           )}
         </div>

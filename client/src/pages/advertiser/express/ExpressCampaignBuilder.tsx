@@ -28,13 +28,11 @@ const STEPS = [
 
 const LS_KEY = "express_draft";
 
+import { LocationItem } from "@/components/map/MultiLocationSearch";
+
 interface ExpressState {
   campaignName: string;
-  locationMode: "city" | "pin";
-  targetCity: string;
-  pinLat: number;
-  pinLng: number;
-  radiusKm: number;
+  locations: LocationItem[];
   selectedScreenIds: string[];
   screensData: Screen[];
   campaignDays: number;
@@ -44,11 +42,7 @@ interface ExpressState {
 
 const DEFAULT_STATE: ExpressState = {
   campaignName: "",
-  locationMode: "city",
-  targetCity: "",
-  pinLat: 0,
-  pinLng: 0,
-  radiusKm: 5,
+  locations: [],
   selectedScreenIds: [],
   screensData: [],
   campaignDays: 7,
@@ -127,20 +121,14 @@ export default function ExpressCampaignBuilder() {
         draftId: existingDraftId || undefined,
         name: currentState.campaignName || "Untitled Campaign",
         _step: currentStep,
-        locationMode: currentState.locationMode,
-        targetCity: currentState.targetCity,
-        pinLat: currentState.pinLat,
-        pinLng: currentState.pinLng,
-        radiusKm: currentState.radiusKm,
+        locations: currentState.locations,
         selectedScreenIds: currentState.selectedScreenIds,
         campaignDays: currentState.campaignDays,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         budget: 0,
         creativeUrl: currentState.creativeUrl || null,
-        targetArea: currentState.locationMode === "city"
-          ? { type: "city", city: currentState.targetCity }
-          : { type: "map", latitude: currentState.pinLat, longitude: currentState.pinLng, radiusKm: currentState.radiusKm },
+        targetArea: { type: "multiple", locations: currentState.locations },
       });
       const draft = await res.json();
       if (draft?.id) setSavedDraftId(draft.id);
@@ -203,10 +191,8 @@ export default function ExpressCampaignBuilder() {
         errs.campaignName = "Name must be at least 3 characters";
     }
     if (step === 2) {
-      if (state.locationMode === "city" && !state.targetCity)
-        errs.location = "Please select a city";
-      if (state.locationMode === "pin" && state.pinLat === 0)
-        errs.location = "Please drop a pin on the map";
+      if (state.locations.length === 0)
+        errs.location = "Please select at least one location";
     }
     if (step === 3) {
       if (state.selectedScreenIds.length === 0)
@@ -276,10 +262,7 @@ export default function ExpressCampaignBuilder() {
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + state.campaignDays);
 
-      const targetArea =
-        state.locationMode === "city"
-          ? { type: "city" as const, city: state.targetCity }
-          : { type: "map" as const, latitude: state.pinLat, longitude: state.pinLng, radiusKm: state.radiusKm };
+      const targetArea = { type: "multiple" as const, locations: state.locations };
 
       const totalCost = state.screensData
         .filter((s) => state.selectedScreenIds.includes(s.id))
@@ -293,8 +276,8 @@ export default function ExpressCampaignBuilder() {
         name: state.campaignName,
         objective: "brand_awareness",
         targetArea,
-        targetLocationType: state.locationMode === "city" ? "city" : "india",
-        targetCities: state.locationMode === "city" ? [state.targetCity] : [],
+        targetLocationType: "india", // Legacy
+        targetCities: state.locations.filter(l => l.type === 'city').map(l => l.city).filter(Boolean) as string[],
         targetState: null,
         targetPincodes: [],
         targetAgeGroups: [],
@@ -426,10 +409,30 @@ export default function ExpressCampaignBuilder() {
         </div>
       )}
 
-      {/* Step content */}
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        {step === 1 && (
-          <Step1_CampaignName
+      {/* Step content — Step 3 is full-bleed, all others are boxed */}
+      {step === 3 ? (
+        <Step3_ScreenDiscovery
+          locations={state.locations}
+          selectedScreenIds={state.selectedScreenIds}
+          screensData={state.screensData}
+          onScreensLoaded={(screens) => {
+            update({ screensData: screens, selectedScreenIds: screens.map((s) => s.id) });
+          }}
+          onToggleScreen={(id) => {
+            const ids = state.selectedScreenIds.includes(id)
+              ? state.selectedScreenIds.filter((x) => x !== id)
+              : [...state.selectedScreenIds, id];
+            update({ selectedScreenIds: ids });
+            clearError("screens");
+          }}
+          onSelectAll={() => update({ selectedScreenIds: state.screensData.map((s) => s.id) })}
+          onClearAll={() => update({ selectedScreenIds: [] })}
+          error={errors.screens}
+        />
+      ) : (
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          {step === 1 && (
+            <Step1_CampaignName
             campaignName={state.campaignName}
             onChange={(v) => { update({ campaignName: v }); clearError("campaignName"); }}
             error={errors.campaignName}
@@ -437,40 +440,9 @@ export default function ExpressCampaignBuilder() {
         )}
         {step === 2 && (
           <Step2_LocationSelect
-            locationMode={state.locationMode}
-            targetCity={state.targetCity}
-            pinLat={state.pinLat}
-            pinLng={state.pinLng}
-            radiusKm={state.radiusKm}
-            onLocationModeChange={(mode) => update({ locationMode: mode, screensData: [], selectedScreenIds: [] })}
-            onCityChange={(city) => { update({ targetCity: city, screensData: [], selectedScreenIds: [] }); clearError("location"); }}
-            onPinChange={(lat, lng) => { update({ pinLat: lat, pinLng: lng, screensData: [], selectedScreenIds: [] }); clearError("location"); }}
-            onRadiusChange={(km) => update({ radiusKm: km, screensData: [], selectedScreenIds: [] })}
+            locations={state.locations}
+            onChange={(locs) => { update({ locations: locs, screensData: [], selectedScreenIds: [] }); clearError("location"); }}
             error={errors.location}
-          />
-        )}
-        {step === 3 && (
-          <Step3_ScreenDiscovery
-            locationMode={state.locationMode}
-            targetCity={state.targetCity}
-            pinLat={state.pinLat}
-            pinLng={state.pinLng}
-            radiusKm={state.radiusKm}
-            selectedScreenIds={state.selectedScreenIds}
-            screensData={state.screensData}
-            onScreensLoaded={(screens) => {
-              update({ screensData: screens, selectedScreenIds: screens.map((s) => s.id) });
-            }}
-            onToggleScreen={(id) => {
-              const ids = state.selectedScreenIds.includes(id)
-                ? state.selectedScreenIds.filter((x) => x !== id)
-                : [...state.selectedScreenIds, id];
-              update({ selectedScreenIds: ids });
-              clearError("screens");
-            }}
-            onSelectAll={() => update({ selectedScreenIds: state.screensData.map((s) => s.id) })}
-            onClearAll={() => update({ selectedScreenIds: [] })}
-            error={errors.screens}
           />
         )}
         {step === 4 && (
@@ -510,11 +482,7 @@ export default function ExpressCampaignBuilder() {
         {step === 7 && (
           <Step7_ReviewCampaign
             campaignName={state.campaignName}
-            locationMode={state.locationMode}
-            targetCity={state.targetCity}
-            pinLat={state.pinLat}
-            pinLng={state.pinLng}
-            radiusKm={state.radiusKm}
+            locations={state.locations}
             campaignDays={state.campaignDays}
             startDate={state.startDate}
             creativeUrl={state.creativeUrl}
@@ -526,6 +494,10 @@ export default function ExpressCampaignBuilder() {
           />
         )}
 
+        </div>
+      )}
+
+      <div className="max-w-4xl mx-auto px-6 pb-8">
         {/* Validation error */}
         {errors.validation && (
           <p className="mt-4 text-sm text-destructive text-center">{errors.validation}</p>
@@ -533,7 +505,7 @@ export default function ExpressCampaignBuilder() {
 
         {/* Navigation */}
         {step < 7 && (
-          <div className="flex justify-between mt-10">
+          <div className="flex justify-between mt-6">
             <Button
               variant="outline"
               onClick={handleBack}

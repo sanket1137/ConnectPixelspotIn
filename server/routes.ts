@@ -18,8 +18,9 @@ import { emailService } from "./email";
 import { generateTagsForScreen, generateTagsForAllScreens } from "./services/screen-tagging";
 import { registerFlowRoutes } from "./routes-flow";
 import { registerAgencyRoutes } from "./routes-agency";
+import { registerSupportRoutes } from "./routes-support";
 import { geolocationService } from "./services/geolocation";
-import { serveSitemap, serveRobotsTxt } from "./sitemap";
+// import { serveSitemap, serveRobotsTxt } from "./sitemap";
 import { fromCitySlug, fromVenueSlug, toSlug, normalizeCityName } from "@shared/constants";
 
 // Extend Express Request to include user
@@ -167,8 +168,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== DYNAMIC SITEMAP & ROBOTS ==========
-  app.get("/sitemap.xml", serveSitemap);
-  app.get("/robots.txt", serveRobotsTxt);
+  // app.get("/sitemap.xml", serveSitemap);
+  // app.get("/robots.txt", serveRobotsTxt);
 
   // ========== SEO PUBLIC API ENDPOINTS ==========
   
@@ -2391,9 +2392,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all approved screens (for discovery) with SQL-level filtering & pagination
-  app.get("/api/screens", authenticate, requireVerified, async (req, res) => {
+  app.get("/api/screens", async (req, res) => {
     try {
-      const { city, type, minPrice, maxPrice, pincode, limit, offset, search, page, pageSize, venueCategories, environmentTypes, environmentTags, minBookingDays } = req.query;
+      const { city, type, minPrice, maxPrice, pincode, limit, offset, search, page, pageSize, venueCategories, environmentTypes, environmentTags, minBookingDays, lat, lng, radiusKm, sortBy, sortOrder, userIntents, locationTags, locations, types, occupationMixes, userMoods, genderOrientations, incomeLevels } = req.query;
       
       const result = await storage.getFilteredScreens({
         city: city as string | undefined,
@@ -2405,11 +2406,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         venueCategories: venueCategories ? (Array.isArray(venueCategories) ? venueCategories : [venueCategories]) as string[] : undefined,
         environmentTypes: environmentTypes ? (Array.isArray(environmentTypes) ? environmentTypes : [environmentTypes]) as string[] : undefined,
         environmentTags: environmentTags ? (Array.isArray(environmentTags) ? environmentTags : [environmentTags]) as string[] : undefined,
+        userIntents: userIntents ? (Array.isArray(userIntents) ? userIntents : [userIntents]) as string[] : undefined,
+        types: types ? (Array.isArray(types) ? types : [types]) as string[] : undefined,
+        occupationMixes: occupationMixes ? (Array.isArray(occupationMixes) ? occupationMixes : [occupationMixes]) as string[] : undefined,
+        userMoods: userMoods ? (Array.isArray(userMoods) ? userMoods : [userMoods]) as string[] : undefined,
+        genderOrientations: genderOrientations ? (Array.isArray(genderOrientations) ? genderOrientations : [genderOrientations]) as string[] : undefined,
+        incomeLevels: incomeLevels ? (Array.isArray(incomeLevels) ? incomeLevels : [incomeLevels]) as string[] : undefined,
+        locationTags: locationTags ? (Array.isArray(locationTags) ? locationTags : [locationTags]) as string[] : undefined,
         minBookingDays: minBookingDays ? parseInt(minBookingDays as string) : undefined,
         limit: limit ? parseInt(limit as string) : undefined,
         offset: offset ? parseInt(offset as string) : undefined,
         page: page ? Math.max(1, parseInt(page as string)) : undefined,
         pageSize: pageSize ? Math.min(100, Math.max(1, parseInt(pageSize as string))) : undefined,
+        lat: lat ? parseFloat(lat as string) : undefined,
+        lng: lng ? parseFloat(lng as string) : undefined,
+        radiusKm: radiusKm ? parseFloat(radiusKm as string) : undefined,
+        locations: locations ? JSON.parse(locations as string) : undefined,
+        sortBy: sortBy as 'distance' | 'price' | 'popularity' | 'newest' | undefined,
+        sortOrder: sortOrder as 'asc' | 'desc' | undefined,
       });
       
       res.json(result);
@@ -2420,7 +2434,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get available locations (optimized: SQL DISTINCT instead of full table scan)
-  app.get("/api/screens/locations", authenticate, requireVerified, async (req, res) => {
+  app.get("/api/screens/locations", async (req, res) => {
     try {
       const locations = await storage.getScreenLocations();
       res.json({
@@ -2435,7 +2449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get advanced dynamic filters for the Advanced Campaign Builder
-  app.get("/api/screens/filters", authenticate, requireVerified, async (req, res) => {
+  app.get("/api/screens/filters", async (req, res) => {
     try {
       const filters = await storage.getScreenFilters();
       res.json(filters);
@@ -2522,11 +2536,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get screens in area (map + radius OR city search) — optimized: SQL filtering
-  app.get("/api/screens/in-area", authenticate, requireVerified, async (req, res) => {
+  app.get("/api/screens/in-area", async (req, res) => {
     try {
       const { 
         lat, lng, radiusKm, city, budget, duration,
-        venueCategories, environmentTypes, environmentTags, minBookingDays 
+        venueCategories, environmentTypes, environmentTags, minBookingDays, locations
       } = req.query;
 
       let screens: any[];
@@ -2538,7 +2552,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         minBookingDays: minBookingDays ? parseInt(minBookingDays as string) : undefined,
       };
 
-      if (lat && lng && radiusKm) {
+      if (locations) {
+        const parsedLocations = JSON.parse(locations as string);
+        const result = await storage.getFilteredScreens({
+          locations: parsedLocations,
+          ...filterParams
+        });
+        screens = Array.isArray(result) ? result : result.screens;
+      } else if (lat && lng && radiusKm) {
         // Map-based + Haversine filtering done in SQL
         const result = await storage.getFilteredScreens({
           lat: parseFloat(lat as string),
@@ -2592,7 +2613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get screens by IDs (for cart pre-selection)
-  app.get("/api/screens/by-ids", authenticate, requireVerified, async (req, res) => {
+  app.get("/api/screens/by-ids", async (req, res) => {
     try {
       const { ids } = req.query;
       
@@ -3836,6 +3857,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========== AGENCY ROUTES (Media Planning) ==========
   registerAgencyRoutes(app, authenticate, requireRole);
+
+  // ========== SUPPORT ROUTES ==========
+  registerSupportRoutes(app, authenticate, requireRole, requireVerified);
 
   const httpServer = createServer(app);
   return httpServer;

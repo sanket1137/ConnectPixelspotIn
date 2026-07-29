@@ -1,96 +1,171 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Map, AdvancedMarker, InfoWindow, useMap } from "@vis.gl/react-google-maps";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Map, AdvancedMarker, useMap } from "@vis.gl/react-google-maps";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Search, Plus, Check, ShoppingCart, Trash2, List, Map as MapIcon, X, AlertTriangle, SlidersHorizontal } from "lucide-react";
+import { MapPin, ShoppingCart, List, Map as MapIcon, SlidersHorizontal, Check, Loader2, Star, Menu, Users, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { Screen } from "@shared/schema";
 import { VENUE_CATEGORIES } from "@shared/constants";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { useLocationAutocomplete } from "@/hooks/use-location-autocomplete";
+import { SearchAutocomplete } from "@/components/map/SearchAutocomplete";
+import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Slider } from "@/components/ui/slider";
+import { useAuth } from "@/contexts/AuthContext";
+import { DiscoverAuthModal } from "@/components/DiscoverAuthModal";
 
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
-const VIEW_PREFERENCE_KEY = "screenViewPreference";
 
-const mapContainerStyle: React.CSSProperties = {
-  width: '100%',
-  height: '100%'
-};
-
-const defaultCenter = {
-  lat: 12.9716,
-  lng: 77.5946
-};
-
-type ViewMode = "list" | "map";
+type ViewMode = "desktop" | "mobile_list" | "mobile_map";
 
 export default function DiscoverScreens() {
   const map = useMap("discover-screens-map");
-
-  const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
-  const [detailDialogScreen, setDetailDialogScreen] = useState<Screen | null>(null);
-  const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [showCart, setShowCart] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [itemsPerPage, setItemsPerPage] = useState(12);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+
+  const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set());
+  const [hoveredScreenId, setHoveredScreenId] = useState<string | null>(null);
+  const [detailModalScreen, setDetailModalScreen] = useState<Screen | null>(null);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   
-  const [filters, setFilters] = useState({
-    state: "",
-    city: "",
-    venueCategory: "",
-    screenCategory: "",
-    environmentType: "",
-    trafficType: "",
-    minPrice: "",
-    maxPrice: "",
+  // Search State
+  const [lat, setLat] = useState<number | undefined>();
+  const [lng, setLng] = useState<number | undefined>();
+  const [radiusKm, setRadiusKm] = useState<number>(15);
+  const [locationName, setLocationName] = useState<string>("");
+
+  // Filters State
+  const [filters, setFilters] = useState<{
+    state: string;
+    city: string;
+    venueCategories: string[];
+    screenCategories: string[];
+    environmentTypes: string[];
+    trafficTypes: string[];
+    userIntents: string[];
+    locationTags: string[];
+    minPrice: string;
+    maxPrice: string;
+    search: string;
+  }>(() => {
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    const q = params.get("q");
+    const venue = params.get("venue");
+    
+    return {
+      state: "",
+      city: "",
+      venueCategories: venue ? [venue] : [],
+      screenCategories: [],
+      environmentTypes: [],
+      trafficTypes: [],
+      userIntents: [],
+      locationTags: [],
+      minPrice: "",
+      maxPrice: "",
+      search: q || "",
+    };
   });
 
-  // Load selected screens and view preference from localStorage
+  const [sortBy, setSortBy] = useState<string>("popularity");
+  const [sortOrder, setSortOrder] = useState<string>("desc");
+  const [viewMode, setViewMode] = useState<ViewMode>("desktop");
+  const [isMobile, setIsMobile] = useState(false);
+  const [page, setPage] = useState(1);
+  
+  // Ref for map circle
+  const circleRef = useRef<google.maps.Circle | null>(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (!mobile) setViewMode("desktop");
+      else if (viewMode === "desktop") setViewMode("mobile_map");
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [viewMode]);
+
   useEffect(() => {
     const saved = localStorage.getItem(SELECTED_SCREENS_KEY);
     if (saved) {
-      setSelectedScreenIds(new Set(JSON.parse(saved)));
-    }
-
-    const savedView = localStorage.getItem(VIEW_PREFERENCE_KEY);
-    if (savedView === "map" || savedView === "list") {
-      setViewMode(savedView);
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setSelectedScreenIds(new Set(parsed));
+        }
+      } catch (e) {
+        console.error("Failed to parse selected screens from localStorage", e);
+      }
     }
   }, []);
 
-  // Save view preference
-  const handleViewModeChange = (mode: ViewMode) => {
-    setViewMode(mode);
-    localStorage.setItem(VIEW_PREFERENCE_KEY, mode);
-  };
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (lat !== undefined && lng !== undefined) {
+      params.append("lat", lat.toString());
+      params.append("lng", lng.toString());
+      params.append("radiusKm", radiusKm.toString());
+      params.append("sortBy", sortBy);
+      params.append("sortOrder", sortOrder);
+    } else {
+      params.append("sortBy", sortBy === 'distance' ? 'popularity' : sortBy);
+      params.append("sortOrder", sortOrder);
+    }
 
-  const { data: screens = [] } = useQuery<Screen[]>({
-    queryKey: ["/api/screens", filters],
+    if (filters.state) params.append("state", filters.state);
+    if (filters.city) params.append("city", filters.city);
+    if (filters.minPrice) params.append("minPrice", filters.minPrice);
+    if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
+    
+    if (filters.venueCategories.length > 0) {
+      filters.venueCategories.forEach(v => params.append("venueCategories", v));
+    }
+    if (filters.screenCategories.length > 0) {
+      filters.screenCategories.forEach(s => params.append("screenCategories", s));
+    }
+    if (filters.environmentTypes.length > 0) {
+      filters.environmentTypes.forEach(e => params.append("environmentTypes", e));
+    }
+    if (filters.trafficTypes.length > 0) {
+      filters.trafficTypes.forEach(t => params.append("trafficTypes", t));
+    }
+    if (filters.userIntents.length > 0) {
+      filters.userIntents.forEach(i => params.append("userIntents", i));
+    }
+    if (filters.locationTags.length > 0) {
+      filters.locationTags.forEach(t => params.append("locationTags", t));
+    }
+    if (filters.search) {
+      params.append("search", filters.search);
+    }
+    
+    return params.toString();
+  }, [filters, lat, lng, radiusKm, sortBy, sortOrder]);
+
+  const { data: result, isLoading } = useQuery<{ screens: (Screen & { distanceKm?: number })[], total?: number } | Screen[]>({
+    queryKey: [`/api/screens?${queryString}`],
   });
 
-  // Fetch location options (states and cities)
+  const screens = Array.isArray(result) ? result : (result?.screens || []);
+
+  const totalPhysicalScreensCount = useMemo(() => {
+    return screens.reduce((acc, s) => {
+      return acc + (s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1);
+    }, 0);
+  }, [screens]);
+
   const { data: locations } = useQuery<{
     states: string[];
     cities: { [state: string]: string[] };
@@ -99,99 +174,122 @@ export default function DiscoverScreens() {
     queryKey: ["/api/screens/locations"],
   });
 
-  // All possible venue categories from shared constants (single source of truth)
-  const venueCategoryOptions = [...VENUE_CATEGORIES];
-  
-  // Extract unique values from screens for other dropdowns
-  const screenCategoryOptions = Array.from(new Set(screens.map(s => s.category).filter(Boolean))).sort();
-  const environmentTypeOptions = Array.from(new Set(screens.map(s => s.environmentType).filter(Boolean))).sort();
-  const trafficTypeOptions = Array.from(new Set(screens.map(s => s.trafficType).filter(Boolean))).sort();
+  const { data: advancedFilters } = useQuery<{
+    cities: string[];
+    venueTypes: string[];
+    environmentTypes: string[];
+    tags: any[];
+    userIntents: string[];
+    locationTags: string[];
+  }>({
+    queryKey: ["/api/screens/filters"],
+  });
 
-  // Get cities for selected state
+  const screenCategoryOptions = Array.from(new Set(screens.map(s => s.category).filter(Boolean))).sort();
   const availableCities = filters.state && locations?.cities[filters.state] 
     ? locations.cities[filters.state] 
     : locations?.allCities || [];
 
-  // Strict filtering: show only screens that match ALL selected filters
-  const getFilteredScreens = () => {
-    const results = screens.filter((screen) => {
-      if (filters.state && screen.state !== filters.state) return false;
-      if (filters.city && screen.city !== filters.city) return false;
-      if (filters.venueCategory && screen.venueCategory !== filters.venueCategory) return false;
-      if (filters.screenCategory && screen.category !== filters.screenCategory) return false;
-      if (filters.environmentType && screen.environmentType !== filters.environmentType) return false;
-      if (filters.trafficType && screen.trafficType !== filters.trafficType) return false;
-      if (filters.minPrice && screen.pricePerDay < parseInt(filters.minPrice)) return false;
-      if (filters.maxPrice && screen.pricePerDay > parseInt(filters.maxPrice)) return false;
-      return true;
-    });
-    
-    return { results, relaxedFilters: [] };
-  };
-  
-  const { results: filteredScreens, relaxedFilters } = getFilteredScreens();
-
-  const selectedScreens = screens.filter(s => selectedScreenIds.has(s.id));
-
-  // Auto-fit map bounds when filtered screens change
+  // Update Map Circle
   useEffect(() => {
-    if (!map || viewMode !== "map" || filteredScreens.length === 0) {
-      return;
-    }
+    if (!map || !window.google) return;
 
-    const bounds = new google.maps.LatLngBounds();
-    
-    filteredScreens.forEach((screen) => {
-      if (screen.latitude && screen.longitude) {
-        bounds.extend({
-          lat: parseFloat(String(screen.latitude)), 
-          lng: parseFloat(String(screen.longitude))
+    if (lat !== undefined && lng !== undefined) {
+      if (!circleRef.current) {
+        circleRef.current = new window.google.maps.Circle({
+          strokeColor: "#0f766e",
+          strokeOpacity: 0.3,
+          strokeWeight: 2,
+          fillColor: "#0f766e",
+          fillOpacity: 0.1,
+          map,
         });
+      }
+      circleRef.current.setCenter({ lat, lng });
+      circleRef.current.setRadius(radiusKm * 1000);
+
+      // Fit map to circle bounds
+      map.fitBounds(circleRef.current.getBounds()!);
+    } else if (circleRef.current) {
+      circleRef.current.setMap(null);
+      circleRef.current = null;
+    }
+  }, [map, lat, lng, radiusKm]);
+
+  // Fallback map bounds if no lat/lng but screens exist
+  useEffect(() => {
+    if (!map || !window.google || (lat !== undefined && lng !== undefined) || screens.length === 0) return;
+
+    const bounds = new window.google.maps.LatLngBounds();
+    let hasCoords = false;
+    screens.forEach((screen) => {
+      const lat = parseFloat(String(screen.latitude));
+      const lng = parseFloat(String(screen.longitude));
+      if (!isNaN(lat) && !isNaN(lng)) {
+        bounds.extend({ lat, lng });
+        hasCoords = true;
       }
     });
 
-    map.fitBounds(bounds);
-
-    if (filteredScreens.length === 1) {
-      setTimeout(() => {
-        if (map) {
-          map.setZoom(13);
-        }
-      }, 100);
+    if (hasCoords) {
+      map.fitBounds(bounds);
+      if (screens.length === 1) map.setZoom(13);
     }
-  }, [filteredScreens, map, viewMode]);
+  }, [map, screens, lat, lng]);
 
-  // Pagination for list view
-  const totalPages = Math.ceil(filteredScreens.length / itemsPerPage);
-  const paginatedScreens = filteredScreens.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const handlePlaceSelect = (place: google.maps.places.PlaceResult | null, inputValue: string) => {
+    setLocationName(inputValue);
+    if (place?.geometry?.location) {
+      setLat(place.geometry.location.lat());
+      setLng(place.geometry.location.lng());
+      setFilters(prev => ({ ...prev, search: "" }));
+    } else if (inputValue) {
+      setLat(undefined);
+      setLng(undefined);
+      setFilters(prev => ({ ...prev, search: inputValue }));
+    } else {
+      setLat(undefined);
+      setLng(undefined);
+      setFilters(prev => ({ ...prev, search: "" }));
+    }
+  };
+
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) {
+      toast({ title: "Geolocation not supported", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Locating...", description: "Getting your current location." });
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocationName("Current Location");
+        setLat(position.coords.latitude);
+        setLng(position.coords.longitude);
+        setPage(1);
+      },
+      (error) => {
+        toast({ title: "Location Error", description: "Could not get your location.", variant: "destructive" });
+      }
+    );
+  };
 
   const toggleScreenSelection = (screen: Screen) => {
     const newSet = new Set(selectedScreenIds);
     if (newSet.has(screen.id)) {
       newSet.delete(screen.id);
-      toast({
-        title: "Screen Removed",
-        description: `${screen.name} removed from selection.`,
-      });
+      toast({ title: "Removed from Campaign", description: `${screen.name} removed.` });
     } else {
       newSet.add(screen.id);
-      toast({
-        title: "Screen Added",
-        description: `${screen.name} added to your campaign.`,
-      });
+      toast({ title: "Added to Campaign", description: `${screen.name} added.` });
     }
     setSelectedScreenIds(newSet);
     localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(Array.from(newSet)));
-  };
 
-  const removeScreen = (screenId: string) => {
-    const newSet = new Set(selectedScreenIds);
-    newSet.delete(screenId);
-    setSelectedScreenIds(newSet);
-    localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(Array.from(newSet)));
+    // Only prompt login if adding a screen
+    if (!user && !selectedScreenIds.has(screen.id)) {
+      setPendingAction(() => () => setLocation("/advertiser/quick-campaign"));
+      setShowAuthModal(true);
+    }
   };
 
   const proceedToCreateCampaign = () => {
@@ -203,760 +301,460 @@ export default function DiscoverScreens() {
       });
       return;
     }
+    if (!user) {
+      setPendingAction(() => () => setLocation("/advertiser/quick-campaign"));
+      setShowAuthModal(true);
+      return;
+    }
     setLocation("/advertiser/quick-campaign");
   };
 
-  // Filter panel component (reusable for both desktop and mobile)
-  const FilterPanel = () => (
-    <>
-      {/* Filter Row 1: Location and Categories */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-        {/* State Dropdown */}
-        <Select 
-          value={filters.state} 
-          onValueChange={(value) => setFilters({ ...filters, state: value === "all" ? "" : value, city: "" })}
-        >
-          <SelectTrigger data-testid="select-state">
-            <SelectValue placeholder="All States" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All States</SelectItem>
-            {locations?.states.map((state) => (
-              <SelectItem key={state} value={state}>{state}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+  // Custom Map Marker Content
+  const renderCustomMarker = (screen: Screen) => {
+    const isHovered = hoveredScreenId === screen.id;
+    const isSelected = selectedScreenIds.has(screen.id);
+    
+    const price = screen.pricePerDay || 0;
+    let priceDisplay = `₹${price}`;
+    if (price >= 1000) {
+      priceDisplay = `₹${(price / 1000).toFixed(1).replace('.0', '')}k`;
+    }
 
-        {/* City Dropdown */}
-        <Select 
-          value={filters.city} 
-          onValueChange={(value) => setFilters({ ...filters, city: value === "all" ? "" : value })}
-        >
-          <SelectTrigger data-testid="select-city">
-            <SelectValue placeholder="All Cities" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Cities</SelectItem>
-            {availableCities.map((city) => (
-              <SelectItem key={city} value={city}>{city}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Venue Category Dropdown */}
-        <Select 
-          value={filters.venueCategory} 
-          onValueChange={(value) => setFilters({ ...filters, venueCategory: value === "all" ? "" : value })}
-        >
-          <SelectTrigger data-testid="select-venue-category">
-            <SelectValue placeholder="All Venues" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Venues</SelectItem>
-            {venueCategoryOptions.map((category) => (
-              <SelectItem key={category} value={category}>{category}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Screen Category Dropdown */}
-        <Select 
-          value={filters.screenCategory} 
-          onValueChange={(value) => setFilters({ ...filters, screenCategory: value === "all" ? "" : value })}
-        >
-          <SelectTrigger data-testid="select-screen-category">
-            <SelectValue placeholder="All Screen Types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Screen Types</SelectItem>
-            {screenCategoryOptions.map((category) => (
-              <SelectItem key={category} value={category}>{category}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Environment Type Dropdown */}
-        <Select 
-          value={filters.environmentType} 
-          onValueChange={(value) => setFilters({ ...filters, environmentType: value === "all" ? "" : value })}
-        >
-          <SelectTrigger data-testid="select-environment-type">
-            <SelectValue placeholder="All Environments" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Environments</SelectItem>
-            {environmentTypeOptions.map((type) => (
-              <SelectItem key={type} value={type}>{type}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    return (
+      <div 
+        className={`relative flex items-center justify-center transition-all duration-300 cursor-pointer 
+          ${isHovered ? 'scale-125 z-50' : 'scale-100 z-10'}
+        `}
+        onMouseEnter={() => setHoveredScreenId(screen.id)}
+        onMouseLeave={() => setHoveredScreenId(null)}
+        onClick={() => setDetailModalScreen(screen)}
+      >
+        <div className={`
+          px-3 py-1.5 rounded-full font-bold text-[13px] shadow-lg border-2 whitespace-nowrap
+          ${isSelected 
+            ? 'bg-green-600 text-white border-white' 
+            : 'bg-white text-slate-800 border-white hover:bg-slate-50'
+          }
+          ${isHovered && !isSelected ? 'shadow-xl font-extrabold' : 'shadow-md'}
+        `}>
+          {priceDisplay}
+        </div>
+        <div className={`absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 
+          border-l-[6px] border-l-transparent 
+          border-r-[6px] border-r-transparent 
+          border-t-[6px] 
+          ${isSelected ? 'border-t-green-600' : 'border-t-white'}
+        `}></div>
       </div>
+    );
+  };
 
-      {/* Filter Row 2: Traffic Type, Price Range, and Clear */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-        {/* Traffic Type Dropdown */}
-        <Select 
-          value={filters.trafficType} 
-          onValueChange={(value) => setFilters({ ...filters, trafficType: value === "all" ? "" : value })}
-        >
-          <SelectTrigger data-testid="select-traffic-type">
-            <SelectValue placeholder="All Traffic Types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Traffic Types</SelectItem>
-            {trafficTypeOptions.map((type) => (
-              <SelectItem key={type} value={type}>{type}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Min Price Input */}
-        <Input
-          type="number"
-          placeholder="Min Price ₹"
-          value={filters.minPrice}
-          onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
-          data-testid="input-min-price"
-        />
-
-        {/* Max Price Input */}
-        <Input
-          type="number"
-          placeholder="Max Price ₹"
-          value={filters.maxPrice}
-          onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
-          data-testid="input-max-price"
-        />
-
-        {/* Clear Filters Button */}
-        <Button
-          variant="outline"
-          size="default"
-          onClick={() => setFilters({ 
-            state: "", 
-            city: "", 
-            venueCategory: "", 
-            screenCategory: "", 
-            environmentType: "", 
-            trafficType: "", 
-            minPrice: "", 
-            maxPrice: "" 
-          })}
-          data-testid="button-clear-filters"
-        >
-          <X className="h-4 w-4 mr-2" />
-          Clear All
-        </Button>
+  // Airbnb-style Screen Card Component
+  const ScreenListCard = ({ screen }: { screen: Screen & { distanceKm?: number } }) => {
+    const isAdded = selectedScreenIds.has(screen.id);
+    
+    return (
+      <div 
+        className="group cursor-pointer flex flex-col gap-3"
+        onMouseEnter={() => setHoveredScreenId(screen.id)}
+        onMouseLeave={() => setHoveredScreenId(null)}
+        onClick={() => setDetailModalScreen(screen)}
+      >
+        <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-slate-200">
+          <img 
+            src={screen.screenImages?.[0] || screen.images?.[0] || 'https://images.unsplash.com/photo-1542204165-65bf26472b9b?auto=format&fit=crop&q=80&w=600'} 
+            alt={screen.name}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+          {isAdded && (
+            <div className="absolute top-3 left-3 bg-green-500 text-white px-2 py-1 rounded-full shadow-sm text-xs font-semibold flex items-center">
+              <Check className="w-3 h-3 mr-1" /> Added
+            </div>
+          )}
+          <div className="absolute top-3 right-3">
+            <Button 
+              size="icon" 
+              variant="secondary" 
+              className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleScreenSelection(screen);
+              }}
+            >
+              {isAdded ? <Check className="w-4 h-4 text-green-600" /> : <ShoppingCart className="w-4 h-4" />}
+            </Button>
+          </div>
+        </div>
+        
+        <div className="flex flex-col">
+          <div className="flex justify-between items-start">
+            <h3 className="font-semibold text-slate-900 line-clamp-1">{screen.venueName}, {screen.city}</h3>
+            {screen.distanceKm !== undefined && (
+              <span className="text-sm text-slate-500 whitespace-nowrap ml-2">
+                {Number(screen.distanceKm).toFixed(1)} km
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-slate-500 line-clamp-1">{screen.name} • {screen.category}</p>
+          <div className="flex items-center text-sm text-slate-500 mt-0.5">
+            <Users className="w-3 h-3 mr-1" />
+            {((screen.avgDailyFootfall || 0) / 1000).toFixed(1)}k daily footfall
+          </div>
+          <div className="mt-1">
+            <span className="font-bold text-slate-900">₹{(screen.pricePerDay || 0).toLocaleString()}</span>
+            <span className="text-slate-500 text-sm"> / day</span>
+          </div>
+        </div>
       </div>
-    </>
-  );
+    );
+  };
+
+
 
   return (
-    <div className="h-screen flex flex-col">
-      {/* Top Header with Filters */}
-      <div className="border-b border-border bg-card">
-        <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
-          {/* View Toggle and Results Count Row */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            {/* Left side: View Toggle and Mobile Filters Button */}
-            <div className="flex items-center gap-2">
-              {/* View Toggle */}
-              <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
-                <Button
-                  variant={viewMode === "list" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => handleViewModeChange("list")}
-                  data-testid="button-list-view"
-                  className="gap-2"
-                >
-                  <List className="h-4 w-4" />
-                  <span className="hidden xs:inline">List</span>
-                </Button>
-                <Button
-                  variant={viewMode === "map" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => handleViewModeChange("map")}
-                  data-testid="button-map-view"
-                  className="gap-2"
-                >
-                  <MapIcon className="h-4 w-4" />
-                  <span className="hidden xs:inline">Map</span>
-                </Button>
-              </div>
+    <div className="flex flex-col h-[calc(100vh-64px)] w-full overflow-hidden bg-white">
+      
+      {/* Top Banner & Header */}
+      <div className="bg-white border-b border-slate-200 z-10 shadow-sm shrink-0">
+        <div className="px-6 py-4 flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-slate-900">Discover Screens</h1>
+          <div className="flex items-center gap-4">
+            <Button 
+              variant="outline" 
+              className="rounded-full shadow-sm"
+              onClick={proceedToCreateCampaign}
+            >
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              <span className="font-semibold">{selectedScreenIds.size} Screens</span>
+            </Button>
+            <Button 
+              className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+              onClick={proceedToCreateCampaign}
+              disabled={selectedScreenIds.size === 0}
+            >
+              Book Campaign
+            </Button>
+          </div>
+        </div>
+        
+        {/* Airbnb style Search & Quick Filters */}
+        <div className="px-6 pb-2 pt-4 flex flex-col gap-4 w-full max-w-[100vw] overflow-hidden">
+          
+          <div className="flex justify-center w-full">
+            <div className="flex flex-col sm:flex-row items-center w-full max-w-4xl bg-white rounded-2xl sm:rounded-full border border-slate-300 shadow-md hover:shadow-lg transition-shadow overflow-hidden">
+               {/* Location */}
+               <div className="flex-1 w-full sm:w-auto px-8 h-[68px] flex flex-col justify-center sm:border-r border-b sm:border-b-0 border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer relative group">
+                  <div className="text-[11px] uppercase tracking-wider font-bold text-slate-800 mb-0.5">Location</div>
+                  <SearchAutocomplete 
+                    onPlaceSelect={handlePlaceSelect} 
+                    className="w-full"
+                    initialValue={filters.search}
+                  />
+               </div>
 
-              {/* Mobile Filters Button */}
-              <Sheet open={showFilters} onOpenChange={setShowFilters}>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2 md:hidden" data-testid="button-mobile-filters">
-                    <SlidersHorizontal className="h-4 w-4" />
-                    <span>Filters</span>
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-full sm:w-[400px] overflow-y-auto">
-                  <SheetHeader>
-                    <SheetTitle>Filter Screens</SheetTitle>
-                  </SheetHeader>
-                  <div className="mt-6 space-y-4">
-                    <FilterPanel />
+               {/* Radius */}
+               <div className="px-8 h-[68px] w-full sm:w-64 flex flex-col justify-center hover:bg-slate-50 transition-colors group shrink-0">
+                  <div className="text-[11px] uppercase tracking-wider font-bold text-slate-800 flex justify-between mb-1.5">
+                    <span>Radius</span>
+                    <span className="text-slate-500 font-semibold">{radiusKm} km</span>
                   </div>
-                </SheetContent>
-              </Sheet>
-            </div>
+                  <div className="flex items-center h-8">
+                    <input 
+                      type="range" 
+                      min={1} 
+                      max={50} 
+                      value={radiusKm} 
+                      onChange={(e) => setRadiusKm(parseInt(e.target.value))}
+                      className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary" 
+                    />
+                  </div>
+               </div>
 
-            {/* Results Count and Cart */}
-            <div className="flex items-center justify-between sm:justify-end gap-3">
-              <p className="text-sm font-medium text-muted-foreground" data-testid="text-results-count">
-                {filteredScreens.length} screens
-              </p>
-
-              {/* Cart Button */}
-              {selectedScreenIds.size > 0 && (
-                <Sheet open={showCart} onOpenChange={setShowCart}>
-                  <SheetTrigger asChild>
-                    <Button variant="default" size="sm" className="gap-2" data-testid="button-cart">
-                      <ShoppingCart className="h-4 w-4" />
-                      Selected ({selectedScreenIds.size})
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent>
-                    <SheetHeader>
-                      <SheetTitle>Selected Screens</SheetTitle>
-                    </SheetHeader>
-                    <div className="mt-6 space-y-4">
-                      <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {selectedScreens.map((screen) => (
-                          <div key={screen.id} className="flex items-center justify-between p-3 rounded-md bg-muted/50">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium truncate">{screen.name}</p>
-                                {screen.isMultiScreen && screen.numberOfScreens && (
-                                  <Badge variant="default" className="text-xs bg-purple-600 hover:bg-purple-700">
-                                    🖥️ {screen.numberOfScreens}
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-xs text-muted-foreground">{screen.city}</p>
-                              <p className="text-xs font-semibold text-primary mt-1">
-                                {screen.isMultiScreen && screen.numberOfScreens ? (
-                                  <>₹{screen.pricePerDay.toLocaleString()}/day × {screen.numberOfScreens} screens</>
-                                ) : (
-                                  <>₹{screen.pricePerDay.toLocaleString()}/day</>
-                                )}
-                              </p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0"
-                              onClick={() => removeScreen(screen.id)}
-                              data-testid={`button-remove-screen-${screen.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-
-                      <Button
-                        className="w-full"
-                        onClick={proceedToCreateCampaign}
-                        data-testid="button-proceed-campaign"
-                      >
-                        Create Campaign
-                      </Button>
-                    </div>
-                  </SheetContent>
-                </Sheet>
-              )}
+               {/* Search Button */}
+               <div className="px-3 h-[68px] w-full sm:w-auto flex items-center justify-center shrink-0">
+                  <Button className="w-full sm:w-[52px] h-[52px] rounded-xl sm:rounded-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center shadow-sm">
+                     <Search className="w-5 h-5 text-current" />
+                     <span className="ml-2 font-medium text-current sm:hidden">Search</span>
+                  </Button>
+               </div>
             </div>
           </div>
 
-          {/* Desktop-only inline filters */}
-          <div className="hidden md:block space-y-3">
-            <FilterPanel />
+          {/* Quick Filter Chips */}
+          <div className="flex overflow-x-auto pb-2 w-full max-w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <div className="flex items-center gap-3 w-max mx-auto px-2 sm:px-0">
+            <Dialog open={showAdvancedFilters} onOpenChange={setShowAdvancedFilters}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="rounded-full border-slate-200 shadow-sm hover:bg-slate-50 text-slate-700 shrink-0 h-9 px-4">
+                  <SlidersHorizontal className="w-4 h-4 mr-2" />
+                  Filters
+                  {Object.values(filters).flat().some(Boolean) && (
+                    <Badge className="ml-2 bg-slate-900 text-white border-0 px-1.5 py-0 min-w-0">1</Badge>
+                  )}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>Advanced Filters</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-6 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">State</label>
+                      <SearchableSelect
+                        placeholder="All States"
+                        value={filters.state}
+                        onChange={(v) => setFilters({ ...filters, state: v, city: "" })}
+                        options={(locations?.states || []).map(s => ({ label: s, value: s }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">City</label>
+                      <SearchableSelect
+                        placeholder="All Cities"
+                        value={filters.city}
+                        onChange={(v) => setFilters({ ...filters, city: v })}
+                        options={(availableCities || []).map(c => ({ label: c, value: c }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Venue Type</label>
+                      <MultiSelect
+                        placeholder="All Venues"
+                        selected={filters.venueCategories}
+                        onChange={(v) => setFilters({ ...filters, venueCategories: v })}
+                        options={VENUE_CATEGORIES.map(c => ({ label: c, value: c }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Screen Format</label>
+                      <MultiSelect
+                        placeholder="All Formats"
+                        selected={filters.screenCategories}
+                        onChange={(v) => setFilters({ ...filters, screenCategories: v })}
+                        options={screenCategoryOptions.map(c => ({ label: c, value: c }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">User Intent</label>
+                      <MultiSelect
+                        placeholder="Select Intent"
+                        selected={filters.userIntents}
+                        onChange={(v) => setFilters({ ...filters, userIntents: v })}
+                        options={(advancedFilters?.userIntents || []).map(c => ({ label: c, value: c }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Surrounding (Tags)</label>
+                      <MultiSelect
+                        placeholder="Select Tags"
+                        selected={filters.locationTags}
+                        onChange={(v) => setFilters({ ...filters, locationTags: v })}
+                        options={(advancedFilters?.locationTags || []).map(c => ({ label: c, value: c }))}
+                      />
+                    </div>
+                  </div>
+                  <Button 
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white" 
+                    onClick={() => setShowAdvancedFilters(false)}
+                  >
+                    Show {screens.length} screens
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <div className="w-px h-6 bg-slate-200 mx-1 shrink-0"></div>
+
+            {[
+              { label: 'Indoor', value: 'Indoor', type: 'env' },
+              { label: 'Outdoor', value: 'Outdoor Digital', type: 'env' },
+              { label: 'Corporate Park', value: 'Corporate Park', type: 'venue' },
+              { label: 'Apartment', value: 'Apartment', type: 'venue' },
+              { label: 'Restaurant', value: 'Restaurant', type: 'venue' },
+              { label: 'Cafe', value: 'Café', type: 'venue' },
+              { label: 'Mall', value: 'Mall', type: 'venue' },
+              { label: 'Gym', value: 'Gym', type: 'venue' },
+              { label: 'Hospital', value: 'Hospital', type: 'venue' },
+              { label: 'Petrol Pump', value: 'Petrol Bunk', type: 'venue' }
+            ].map(({ label, value, type }) => {
+              const isActive = type === 'env' 
+                ? filters.environmentTypes.includes(value)
+                : filters.venueCategories.includes(value);
+
+              return (
+                <button
+                  key={label}
+                  onClick={() => {
+                    if (type === 'env') {
+                      const newEnvs = filters.environmentTypes.includes(value)
+                        ? filters.environmentTypes.filter(e => e !== value)
+                        : [...filters.environmentTypes, value];
+                      setFilters({ ...filters, environmentTypes: newEnvs });
+                    } else {
+                      const newVenues = filters.venueCategories.includes(value)
+                        ? filters.venueCategories.filter(v => v !== value)
+                        : [...filters.venueCategories, value];
+                      setFilters({ ...filters, venueCategories: newVenues });
+                    }
+                    setPage(1);
+                  }}
+                  className={`shrink-0 h-9 px-4 rounded-full text-sm font-medium border transition-colors ${
+                    isActive
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Relaxed Filters Alert */}
-      {relaxedFilters.length > 0 && (
-        <div className="px-3 sm:px-4 md:px-6 pt-3 sm:pt-4">
-          <Alert className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900" data-testid="alert-relaxed-filters">
-            <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
-            <AlertDescription className="text-xs sm:text-sm text-yellow-800 dark:text-yellow-200">
-              <strong>No exact matches found.</strong> Showing results without: <strong>{relaxedFilters.join(", ")}</strong> filter{relaxedFilters.length > 1 ? "s" : ""}.
-            </AlertDescription>
-          </Alert>
-        </div>
-      )}
-
-      {/* Content - List or Map View */}
-      <div className="flex-1 overflow-hidden">
-        {viewMode === "list" ? (
-          <div className="h-full overflow-y-auto p-3 sm:p-4 md:p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {paginatedScreens.map((screen) => (
-                <Card key={screen.id} className="hover-elevate overflow-hidden" data-testid={`card-screen-${screen.id}`}>
-                  {/* Screen Image - LARGE */}
-                  <div className="relative h-56 bg-muted overflow-hidden cursor-pointer" onClick={() => setDetailDialogScreen(screen)}>
-                    {(screen.screenImages && screen.screenImages.length > 0) || (screen.images && screen.images.length > 0) ? (
-                      <img
-                        src={(screen.screenImages?.[0] ?? screen.images?.[0]) || ''}
-                        alt={screen.name}
-                        className="w-full h-full object-cover transition-transform hover:scale-105"
-                        onError={(e) => {
-                          e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-muted">
-                        <MapPin className="w-16 h-16 text-muted-foreground/50" />
-                      </div>
-                    )}
-                    <Badge className="absolute top-3 right-3" variant="secondary">{screen.type}</Badge>
-                    {screen.isMultiScreen && screen.numberOfScreens && (
-                      <Badge className="absolute top-3 left-3 bg-purple-600 hover:bg-purple-700">
-                        {screen.numberOfScreens} Screens
-                      </Badge>
-                    )}
-                  </div>
-
-                  <CardContent className="p-5 space-y-3">
-                    <div>
-                      <h3 className="font-bold text-lg leading-tight mb-2">{screen.name}</h3>
-                      <p className="text-sm text-muted-foreground line-clamp-1">
-                        {screen.location}, {screen.city}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Badge variant="outline" className="text-xs">{screen.size}</Badge>
-                      <Badge variant="outline" className="text-xs">{screen.venueCategory || 'Standard'}</Badge>
-                      {/* Top tags from locationTags + lifestyleTags */}
-                      {[...(screen.locationTags || []), ...(screen.lifestyleTags || [])].slice(0, 3).map((tag: string) => (
-                        <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
-                      ))}
-                    </div>
-
-                    {/* Brand slot availability */}
-                    {screen.maxBrandsPerLoop && screen.maxBrandsPerLoop > 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        Slots per loop: <span className="font-medium text-foreground">{screen.maxBrandsPerLoop}</span>
-                        {screen.loopDuration && <> • Loop: {screen.loopDuration}s</>}
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between pt-2 border-t">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Price per day</p>
-                        <p className="font-bold text-lg text-primary">
-                          {screen.isMultiScreen && screen.numberOfScreens ? (
-                            <>₹{screen.pricePerDay.toLocaleString()}<span className="text-sm font-normal text-muted-foreground"> × {screen.numberOfScreens}</span></>
-                          ) : (
-                            <>₹{screen.pricePerDay.toLocaleString()}</>
-                          )}
-                        </p>
-                      </div>
-                      <Button
-                        variant={selectedScreenIds.has(screen.id) ? "secondary" : "default"}
-                        size="sm"
-                        onClick={() => toggleScreenSelection(screen)}
-                        data-testid={`button-toggle-screen-${screen.id}`}
-                      >
-                        {selectedScreenIds.has(screen.id) ? (
-                          <>
-                            <Check className="h-4 w-4 mr-1" />
-                            Selected
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="h-4 w-4 mr-1" />
-                            Add
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+      {/* Main Split View */}
+      <div className="flex flex-1 overflow-hidden relative">
+        
+        {/* Left List Area (Grid) */}
+        <div className={`
+          flex flex-col bg-white overflow-y-auto z-10 transition-all duration-300
+          ${isMobile ? (viewMode === 'mobile_list' ? 'absolute inset-0 w-full' : 'hidden') : 'w-[55%] relative'}
+        `}>
+          <div className="p-6">
+            <div className="flex justify-between items-end mb-6">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {isLoading ? 'Searching...' : `Over ${totalPhysicalScreensCount.toLocaleString()} screens`}
+                </h2>
+                {locationName && <p className="text-sm text-slate-500">{locationName}</p>}
+              </div>
+              
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-[140px] h-9 border-none bg-slate-100 text-sm font-medium rounded-full">
+                  <SelectValue placeholder="Sort By" />
+                </SelectTrigger>
+                <SelectContent>
+                  {lat !== undefined && <SelectItem value="distance">Distance</SelectItem>}
+                  <SelectItem value="popularity">Popularity</SelectItem>
+                  <SelectItem value="price">Price</SelectItem>
+                  <SelectItem value="newest">Newest</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-8">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  data-testid="button-prev-page"
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                <Loader2 className="h-8 w-8 animate-spin mb-4 text-slate-300" />
+              </div>
+            ) : screens.length === 0 ? (
+              <div className="text-center py-20">
+                <h3 className="text-lg font-medium text-slate-700">No exact matches</h3>
+                <p className="text-slate-500 text-sm mt-1">Try changing or removing some of your filters.</p>
+                <Button 
+                  variant="outline" 
+                  className="mt-4 rounded-full"
+                  onClick={() => setFilters({ state: "", city: "", venueCategories: [], screenCategories: [], environmentTypes: [], trafficTypes: [], userIntents: [], locationTags: [], minPrice: "", maxPrice: "" })}
                 >
-                  Previous
+                  Clear all filters
                 </Button>
-                <div className="flex items-center gap-2">
-                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                    let page;
-                    if (totalPages <= 5) {
-                      page = i + 1;
-                    } else if (currentPage <= 3) {
-                      page = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      page = totalPages - 4 + i;
-                    } else {
-                      page = currentPage - 2 + i;
-                    }
-                    return (
-                      <Button
-                        key={page}
-                        variant={currentPage === page ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setCurrentPage(page)}
-                        data-testid={`button-page-${page}`}
-                      >
-                        {page}
-                      </Button>
-                    );
-                  })}
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6 pb-8">
+                  {screens.slice(0, page * 20).map(screen => (
+                    <ScreenListCard key={screen.id} screen={screen} />
+                  ))}
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  data-testid="button-next-page"
-                >
-                  Next
-                </Button>
-                <select
-                  value={itemsPerPage}
-                  onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-                  className="ml-4 border rounded px-2 py-1 text-sm bg-background"
-                >
-                  <option value={10}>10 / page</option>
-                  <option value={30}>30 / page</option>
-                  <option value={50}>50 / page</option>
-                </select>
+                {screens.length > page * 20 && (
+                  <div className="flex justify-center pb-24 sm:pb-8">
+                    <Button 
+                      variant="outline" 
+                      className="rounded-full shadow-sm"
+                      onClick={() => setPage(p => p + 1)}
+                    >
+                      Load More
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        ) : (
-          <div className="h-full">
-              <Map
-                id="discover-screens-map"
-                style={mapContainerStyle}
-                defaultCenter={defaultCenter}
-                defaultZoom={11}
-                gestureHandling="greedy"
-                disableDefaultUI
-                zoomControl={true}
-                fullscreenControl={true}
-                mapId="discover-screens-map"
+        </div>
+
+        {/* Right Map View */}
+        <div className={`
+          flex-1 bg-slate-50 relative border-l border-slate-200 p-4 sm:p-6 pb-20 sm:pb-6
+          ${isMobile ? (viewMode === 'mobile_map' ? 'block' : 'hidden') : 'block'}
+        `}>
+          <div className="w-full h-full rounded-2xl overflow-hidden shadow-md border border-slate-200/60 bg-slate-200 relative z-0">
+            <Map
+              id="discover-screens-map"
+              mapId="pixelspot-discover-map"
+              defaultCenter={{ lat: 20.5937, lng: 78.9629 }}
+              defaultZoom={5}
+              gestureHandling="greedy"
+              disableDefaultUI={true}
+              zoomControl={true}
+              style={{ width: '100%', height: '100%' }}
+            >
+              {screens
+                .filter(s => !isNaN(parseFloat(String(s.latitude))) && !isNaN(parseFloat(String(s.longitude))))
+                .map((screen) => (
+                <AdvancedMarker
+                  key={screen.id}
+                  position={{ lat: parseFloat(String(screen.latitude)), lng: parseFloat(String(screen.longitude)) }}
+                >
+                  {renderCustomMarker(screen)}
+                </AdvancedMarker>
+              ))}
+            </Map>
+          </div>
+        </div>
+
+        {/* Mobile View Toggle */}
+        {isMobile && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+            <div className="bg-slate-900 text-white rounded-full shadow-2xl p-1 flex items-center">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className={`rounded-full px-6 transition-all ${viewMode === 'mobile_list' ? 'bg-slate-700 text-white' : 'text-slate-300 hover:text-white'}`}
+                onClick={() => setViewMode('mobile_list')}
               >
-                {filteredScreens.map((screen) => {
-                  const isSelected = selectedScreenIds.has(screen.id);
-                  
-                  return (
-                    <AdvancedMarker
-                      key={screen.id}
-                      position={{ lat: parseFloat(screen.latitude.toString()), lng: parseFloat(screen.longitude.toString()) }}
-                      onClick={() => setSelectedScreen(screen)}
-                    >
-                      <div style={{ position: 'relative', cursor: 'pointer' }}>
-                        {/* Screen marker icon */}
-                        <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                          <rect x="8" y="10" width="32" height="22" rx="2" 
-                                fill={isSelected ? '#10b981' : '#0d9488'} 
-                                stroke="white" 
-                                strokeWidth="2"/>
-                          <rect x="10" y="12" width="28" height="18" 
-                                fill={isSelected ? '#059669' : '#0f766e'}
-                                rx="1"/>
-                          <rect x="20" y="32" width="8" height="2" 
-                                fill={isSelected ? '#10b981' : '#0d9488'}/>
-                          <rect x="16" y="34" width="16" height="3" rx="1" 
-                                fill={isSelected ? '#10b981' : '#0d9488'}/>
-                          {screen.isMultiScreen && screen.numberOfScreens ? (
-                            <>
-                              <circle cx="38" cy="12" r="7" fill="#7c3aed" stroke="white" strokeWidth="1.5"/>
-                              <text x="38" y="15" textAnchor="middle" fill="white" fontSize="8" fontWeight="bold">{screen.numberOfScreens}</text>
-                            </>
-                          ) : null}
-                        </svg>
-                      </div>
-                    </AdvancedMarker>
-                  );
-                })}
-
-                {selectedScreen && (
-                  <InfoWindow
-                    position={{ lat: parseFloat(selectedScreen.latitude.toString()), lng: parseFloat(selectedScreen.longitude.toString()) }}
-                    onCloseClick={() => setSelectedScreen(null)}
-                    maxWidth={350}
-                    pixelOffset={[0, -10]}
-                  >
-                    <div style={{ width: '320px', maxWidth: '320px' }}>
-                      {/* Screen Image - LARGE */}
-                      <div className="relative h-48 bg-gray-200 overflow-hidden rounded-md mb-3">
-                        {(() => {
-                          const screenImageUrl = (selectedScreen as any).screen_images?.[0] ?? selectedScreen.screenImages?.[0] ?? selectedScreen.images?.[0];
-                          const hasImage = Boolean(screenImageUrl);
-                          
-                          return hasImage ? (
-                            <img
-                              src={screenImageUrl}
-                              alt={selectedScreen.name}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              onError={(e) => {
-                                e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
-                              }}
-                            />
-                          ) : (
-                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e5e7eb' }}>
-                              <MapPin style={{ width: '48px', height: '48px', color: '#9ca3af' }} />
-                            </div>
-                          );
-                        })()}
-                        <span style={{
-                          position: 'absolute',
-                          top: '8px',
-                          right: '8px',
-                          backgroundColor: 'white',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          fontWeight: '500'
-                        }}>
-                          {selectedScreen.type}
-                        </span>
-                        {selectedScreen.isMultiScreen && selectedScreen.numberOfScreens && (
-                          <span style={{
-                            position: 'absolute',
-                            top: '8px',
-                            left: '8px',
-                            backgroundColor: '#7c3aed',
-                            color: 'white',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            fontSize: '12px',
-                            fontWeight: '500'
-                          }}>
-                            {selectedScreen.numberOfScreens} Screens
-                          </span>
-                        )}
-                      </div>
-
-                      <div style={{ padding: '0 4px' }}>
-                        <h3 style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', color: '#111827' }}>
-                          {selectedScreen.name}
-                        </h3>
-                        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>
-                          {selectedScreen.location}, {selectedScreen.city}
-                        </p>
-
-                        <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                          <span style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            border: '1px solid #d1d5db',
-                            color: '#374151'
-                          }}>
-                            {selectedScreen.size}
-                          </span>
-                          <span style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            border: '1px solid #d1d5db',
-                            color: '#374151'
-                          }}>
-                            {selectedScreen.venueCategory || 'Standard'}
-                          </span>
-                        </div>
-
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          paddingTop: '12px',
-                          borderTop: '1px solid #e5e7eb'
-                        }}>
-                          <div>
-                            <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>Price per day</p>
-                            <p style={{ fontWeight: 'bold', fontSize: '18px', color: '#0d9488' }}>
-                              ₹{selectedScreen.pricePerDay.toLocaleString()}
-                              {selectedScreen.isMultiScreen && selectedScreen.numberOfScreens && (
-                                <span style={{ fontSize: '13px', fontWeight: 'normal', color: '#6b7280' }}>
-                                  {' '}× {selectedScreen.numberOfScreens}
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => toggleScreenSelection(selectedScreen)}
-                            style={{
-                              backgroundColor: selectedScreenIds.has(selectedScreen.id) ? '#f3f4f6' : '#0d9488',
-                              color: selectedScreenIds.has(selectedScreen.id) ? '#111827' : 'white',
-                              padding: '8px 16px',
-                              borderRadius: '6px',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontSize: '13px',
-                              fontWeight: '500',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            {selectedScreenIds.has(selectedScreen.id) ? (
-                              <>
-                                <Check style={{ width: '14px', height: '14px' }} />
-                                Selected
-                              </>
-                            ) : (
-                              <>
-                                <Plus style={{ width: '14px', height: '14px' }} />
-                                Add
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </InfoWindow>
-                )}
-              </Map>
+                <List className="w-4 h-4 mr-2" />
+                List
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className={`rounded-full px-6 transition-all ${viewMode === 'mobile_map' ? 'bg-slate-700 text-white' : 'text-slate-300 hover:text-white'}`}
+                onClick={() => setViewMode('mobile_map')}
+              >
+                <MapIcon className="w-4 h-4 mr-2" />
+                Map
+              </Button>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Screen Detail Dialog */}
-      <Dialog open={!!detailDialogScreen} onOpenChange={(open) => !open && setDetailDialogScreen(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          {detailDialogScreen && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-2xl">{detailDialogScreen.name}</DialogTitle>
-              </DialogHeader>
-              
-              <div className="space-y-6">
-                {/* Screen Images */}
-                {((detailDialogScreen.screenImages && detailDialogScreen.screenImages.length > 0) || (detailDialogScreen.images && detailDialogScreen.images.length > 0)) && (
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-muted-foreground">Screen Photos</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      {(detailDialogScreen.screenImages || detailDialogScreen.images || []).map((imageUrl: string, idx: number) => (
-                        <div key={idx} className="relative h-48 bg-muted rounded-lg overflow-hidden">
-                          <img
-                            src={imageUrl}
-                            alt={`Screen ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
-                            }}
-                          />
-                          {idx === 0 && (
-                            <>
-                              <Badge className="absolute top-3 right-3" variant="secondary">{detailDialogScreen.type}</Badge>
-                              {detailDialogScreen.isMultiScreen && detailDialogScreen.numberOfScreens && (
-                                <Badge className="absolute top-3 left-3 bg-purple-600 hover:bg-purple-700">
-                                  {detailDialogScreen.numberOfScreens} Screens
-                                </Badge>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Surrounding Images */}
-                {detailDialogScreen.surroundingImages && detailDialogScreen.surroundingImages.length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-muted-foreground">Surrounding Area Photos</h4>
-                    <div className="grid grid-cols-3 gap-3">
-                      {detailDialogScreen.surroundingImages.map((imageUrl: string, idx: number) => (
-                        <div key={idx} className="relative h-32 bg-muted rounded-lg overflow-hidden">
-                          <img
-                            src={imageUrl}
-                            alt={`Surrounding ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://placehold.co/600x400/1a1a1a/666?text=No+Image';
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Location */}
-                <div>
-                  <h4 className="text-sm font-semibold text-muted-foreground mb-2">Location</h4>
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
-                    <p className="text-base">{detailDialogScreen.location}, {detailDialogScreen.city}</p>
-                  </div>
-                </div>
-
-                {/* Screen Details */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Size</p>
-                    <Badge variant="outline">{detailDialogScreen.size}</Badge>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Category</p>
-                    <Badge variant="outline">{detailDialogScreen.venueCategory || 'Standard'}</Badge>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Price per day</p>
-                    <p className="text-2xl font-bold text-primary">
-                      {detailDialogScreen.isMultiScreen && detailDialogScreen.numberOfScreens ? (
-                        <>₹{detailDialogScreen.pricePerDay.toLocaleString()}<span className="text-base font-normal text-muted-foreground"> × {detailDialogScreen.numberOfScreens}</span></>
-                      ) : (
-                        <>₹{detailDialogScreen.pricePerDay.toLocaleString()}</>
-                      )}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Minimum booking</p>
-                    <p className="text-xl font-semibold">{detailDialogScreen.minBookingDays} days</p>
-                  </div>
-                </div>
-
-                {/* Action Button */}
-                <div className="pt-4 border-t">
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    variant={selectedScreenIds.has(detailDialogScreen.id) ? "secondary" : "default"}
-                    onClick={() => {
-                      toggleScreenSelection(detailDialogScreen);
-                      setDetailDialogScreen(null);
-                    }}
-                    data-testid={`button-toggle-detail-${detailDialogScreen.id}`}
-                  >
-                    {selectedScreenIds.has(detailDialogScreen.id) ? (
-                      <>
-                        <Check className="h-5 w-5 mr-2" />
-                        Selected - Click to Remove
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-5 w-5 mr-2" />
-                        Add to Campaign
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ScreenDetailsModal 
+        isOpen={!!detailModalScreen}
+        onClose={() => setDetailModalScreen(null)}
+        screen={detailModalScreen}
+        onAdd={toggleScreenSelection}
+        isAdded={detailModalScreen ? selectedScreenIds.has(detailModalScreen.id) : false}
+      />
+      <DiscoverAuthModal 
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          if (pendingAction) pendingAction();
+        }}
+      />
     </div>
   );
 }
