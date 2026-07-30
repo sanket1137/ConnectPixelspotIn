@@ -11,6 +11,7 @@ import { Link } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Screen } from '@shared/schema';
 import ScreenCard from '@/components/ScreenCard';
+import HeroGlobe from '@/components/HeroGlobe';
 import { VENUE_CATEGORIES } from '@shared/constants';
 import logo from "@assets/pixelspot-logo.png";
 import railwayImg from "@assets/Gemini_Generated_Image_wfa0lrwfa0lrwfa0_1763277847119.png";
@@ -310,7 +311,28 @@ export default function PublicHome() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative pt-20 pb-24 overflow-hidden bg-background">
+      <section className="relative pt-20 pb-24 min-h-[85vh] flex items-center justify-center overflow-hidden bg-background">
+        {/* Background Video Layer */}
+        <div className="absolute inset-0 z-0 opacity-15 pointer-events-none overflow-hidden">
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-full h-full object-cover"
+          >
+            <source src="https://assets.mixkit.co/videos/preview/mixkit-abstract-digital-technology-background-43093-large.mp4" type="video/mp4" />
+          </video>
+          <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/90 to-background" />
+        </div>
+
+        {/* 3D Holographic Particle Globe Layer */}
+        <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center overflow-hidden select-none">
+          <div className="w-[90vw] h-[90vw] md:w-[80vw] md:h-[80vw] lg:w-[70vw] lg:h-[70vw] max-w-[850px] aspect-square flex items-center justify-center opacity-90">
+            <HeroGlobe />
+          </div>
+        </div>
+
         <div className="container mx-auto px-4 relative z-10 text-center">
           <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom duration-1000">
             <div className="space-y-6">
