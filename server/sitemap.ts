@@ -43,46 +43,68 @@ function renderSitemap(entries: SitemapEntry[]): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
 
+export async function generateSitemapXml(baseUrl: string = "https://connect.pixelspot.in"): Promise<string> {
+  const { cities, cityVenues, lastUpdated } = await storage.getSitemapData();
+  const lastmod = lastUpdated ? lastUpdated.toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
+
+  const entries: SitemapEntry[] = [
+    { loc: `${baseUrl}/`, lastmod, changefreq: "daily", priority: 1.0 },
+    { loc: `${baseUrl}/discover-screens`, lastmod, changefreq: "daily", priority: 0.9 },
+    { loc: `${baseUrl}/about-us`, lastmod, changefreq: "monthly", priority: 0.5 },
+    { loc: `${baseUrl}/contact-us`, lastmod, changefreq: "monthly", priority: 0.5 },
+    { loc: `${baseUrl}/privacy-policy`, lastmod, changefreq: "yearly", priority: 0.3 },
+    { loc: `${baseUrl}/terms-of-service`, lastmod, changefreq: "yearly", priority: 0.3 },
+    { loc: `${baseUrl}/refund-policy`, lastmod, changefreq: "yearly", priority: 0.3 },
+  ];
+
+  for (const city of cities) {
+    entries.push({
+      loc: `${baseUrl}/city/${toSlug(city)}`,
+      lastmod,
+      changefreq: "weekly",
+      priority: 0.8,
+    });
+  }
+
+  for (const { city, venueCategory } of cityVenues) {
+    entries.push({
+      loc: `${baseUrl}/city/${toSlug(city)}/${toSlug(venueCategory)}`,
+      lastmod,
+      changefreq: "weekly",
+      priority: 0.7,
+    });
+  }
+
+  try {
+    const screens = await storage.getPublicScreens();
+    for (const screen of screens) {
+      if (screen.name) {
+        const slug = `${toSlug(screen.name + "-" + (screen.city || ""))}-${screen.id.split('-')[0]}`;
+        entries.push({
+          loc: `${baseUrl}/screens/${slug}`,
+          lastmod,
+          changefreq: "weekly",
+          priority: 0.7,
+        });
+      }
+    }
+  } catch (err) {
+    // Ignore error if getPublicScreens fails
+  }
+
+  return renderSitemap(entries);
+}
+
 /**
  * GET /sitemap.xml — dynamic sitemap including static routes + city + city/venue landing pages.
  */
 export async function serveSitemap(req: Request, res: Response): Promise<void> {
   try {
     const baseUrl = getBaseUrl(req);
-    const { cities, cityVenues, lastUpdated } = await storage.getSitemapData();
-    const lastmod = lastUpdated.toISOString().split("T")[0];
-
-    const entries: SitemapEntry[] = [
-      { loc: `${baseUrl}/`, lastmod, changefreq: "daily", priority: 1.0 },
-      { loc: `${baseUrl}/discover-screens`, lastmod, changefreq: "daily", priority: 0.9 },
-      { loc: `${baseUrl}/about-us`, lastmod, changefreq: "monthly", priority: 0.5 },
-      { loc: `${baseUrl}/contact-us`, lastmod, changefreq: "monthly", priority: 0.5 },
-      { loc: `${baseUrl}/privacy-policy`, lastmod, changefreq: "yearly", priority: 0.3 },
-      { loc: `${baseUrl}/terms-of-service`, lastmod, changefreq: "yearly", priority: 0.3 },
-      { loc: `${baseUrl}/refund-policy`, lastmod, changefreq: "yearly", priority: 0.3 },
-    ];
-
-    for (const city of cities) {
-      entries.push({
-        loc: `${baseUrl}/city/${toSlug(city)}`,
-        lastmod,
-        changefreq: "weekly",
-        priority: 0.8,
-      });
-    }
-
-    for (const { city, venueCategory } of cityVenues) {
-      entries.push({
-        loc: `${baseUrl}/city/${toSlug(city)}/${toSlug(venueCategory)}`,
-        lastmod,
-        changefreq: "weekly",
-        priority: 0.7,
-      });
-    }
-
+    const xml = await generateSitemapXml(baseUrl);
     res.set("Content-Type", "application/xml; charset=utf-8");
     res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=7200");
-    res.send(renderSitemap(entries));
+    res.send(xml);
   } catch (error) {
     console.error("[sitemap] Failed to generate sitemap.xml:", error);
     res.status(500).set("Content-Type", "application/xml").send(

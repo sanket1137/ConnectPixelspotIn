@@ -29,6 +29,7 @@ import {
   ownerPayouts, invoices, notifications, proofOfPlay,
   aiConversations, aiMessages, aiRateLimits,
   screenTags, screenTagAssignments,
+  supportTickets, ticketMessages,
   type User, type InsertUser, 
   type Screen, type InsertScreen,
   type Campaign, type InsertCampaign,
@@ -41,10 +42,12 @@ import {
   type AiConversation, type InsertAiConversation,
   type AiMessage, type InsertAiMessage,
   type AiRateLimit, type InsertAiRateLimit,
-  type ScreenTag, type ScreenTagAssignment
+  type ScreenTag, type ScreenTagAssignment,
+  type SupportTicket, type InsertSupportTicket,
+  type TicketMessage, type InsertTicketMessage
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, gte, lte, or, desc, asc, sql as drizzleSql, inArray, isNull, count } from "drizzle-orm";
+import { eq, and, gte, lte, or, desc, asc, sql as drizzleSql, inArray, isNull, count, like } from "drizzle-orm";
 import { normalizeCityName } from "@shared/constants";
 import { notifyUser } from "./websocket";
 
@@ -81,7 +84,10 @@ export interface IStorage {
   
   // Screen methods
   getScreen(id: string): Promise<Screen | undefined>;
+  getScreenByShortId(shortId: string): Promise<Screen | undefined>;
   getScreensByOwner(ownerId: string): Promise<Screen[]>;
+  getScreensByCity(city: string): Promise<Screen[]>;
+  getScreensByCategory(category: string): Promise<Screen[]>;
   getAllScreens(): Promise<Screen[]>;
   getActiveScreens(): Promise<Screen[]>;
   getApprovedScreens(): Promise<Screen[]>;
@@ -259,9 +265,15 @@ export interface IStorage {
   getFilteredScreens(filters: {
     city?: string; type?: string; minPrice?: number; maxPrice?: number;
     pincode?: string; lat?: number; lng?: number; radiusKm?: number;
+    locations?: Array<{ type: 'city' | 'map', lat?: number, lng?: number, radiusKm?: number, city?: string }>;
+    venueCategories?: string[]; environmentTypes?: string[];
+    environmentTags?: string[]; userIntents?: string[]; locationTags?: string[];
+    minBookingDays?: number;
     limit?: number; offset?: number;
     search?: string;
     page?: number; pageSize?: number;
+    sortBy?: 'distance' | 'price' | 'popularity' | 'newest';
+    sortOrder?: 'asc' | 'desc';
   }): Promise<Screen[] | { screens: Screen[]; total: number }>;
 
   // Screens: paginated with filters for admin panel
@@ -278,7 +290,16 @@ export interface IStorage {
   getScreenLocations(): Promise<{ states: string[]; citiesByState: Record<string, string[]>; allCities: string[] }>;
   
   // Screens: get unique filter values for the Advanced Builder
-  getScreenFilters(): Promise<{ cities: string[]; venueTypes: string[]; environmentTypes: string[]; tags: { id: string; name: string }[] }>;
+  getScreenFilters(): Promise<{ cities: string[]; venueTypes: string[]; environmentTypes: string[]; tags: { id: string; name: string }[]; userIntents: string[]; locationTags: string[] }>;
+
+  // Support Tickets
+  createSupportTicket(userId: string, data: Partial<InsertSupportTicket>): Promise<SupportTicket>;
+  getSupportTicketsByUser(userId: string): Promise<SupportTicket[]>;
+  getAllSupportTickets(): Promise<SupportTicket[]>;
+  getSupportTicket(id: string): Promise<SupportTicket | undefined>;
+  updateSupportTicket(id: string, data: Partial<SupportTicket>): Promise<SupportTicket | undefined>;
+  addTicketMessage(ticketId: string, senderId: string, message: string, attachments?: any[]): Promise<TicketMessage>;
+  getTicketMessages(ticketId: string): Promise<TicketMessage[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -346,8 +367,21 @@ export class DatabaseStorage implements IStorage {
     return screen || undefined;
   }
 
+  async getScreenByShortId(shortId: string): Promise<Screen | undefined> {
+    const [screen] = await db.select().from(screens).where(like(screens.id, shortId + '%'));
+    return screen;
+  }
+
   async getScreensByOwner(ownerId: string): Promise<Screen[]> {
     return await db.select().from(screens).where(eq(screens.ownerId, ownerId));
+  }
+
+  async getScreensByCity(city: string): Promise<Screen[]> {
+    return await db.select().from(screens).where(and(eq(screens.status, "active"), eq(screens.city, city))).orderBy(desc(screens.createdAt));
+  }
+
+  async getScreensByCategory(category: string): Promise<Screen[]> {
+    return await db.select().from(screens).where(and(eq(screens.status, "active"), eq(screens.venueCategory, category))).orderBy(desc(screens.createdAt));
   }
 
   async getAllScreens(): Promise<Screen[]> {
@@ -564,7 +598,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateCampaign(id: string, data: Partial<InsertCampaign>): Promise<Campaign | undefined> {
-    const [campaign] = await db.update(campaigns).set(data).where(eq(campaigns.id, id)).returning();
+    const [campaign] = await db.update(campaigns).set(data as any).where(eq(campaigns.id, id)).returning();
     return campaign || undefined;
   }
 
@@ -1258,7 +1292,7 @@ export class DatabaseStorage implements IStorage {
   // ── Proof of Play methods ──────────────────
 
   async createProofOfPlay(insertProof: InsertProofOfPlay): Promise<ProofOfPlay> {
-    const [proof] = await db.insert(proofOfPlay).values(insertProof).returning();
+    const [proof] = await db.insert(proofOfPlay).values(insertProof as any).returning();
     return proof;
   }
 
@@ -1631,11 +1665,15 @@ export class DatabaseStorage implements IStorage {
   async getFilteredScreens(filters: {
     city?: string; type?: string; minPrice?: number; maxPrice?: number;
     pincode?: string; lat?: number; lng?: number; radiusKm?: number;
+    locations?: Array<{ type: 'city' | 'map', lat?: number, lng?: number, radiusKm?: number, city?: string }>;
     venueCategories?: string[]; environmentTypes?: string[];
-    environmentTags?: string[]; minBookingDays?: number;
+    environmentTags?: string[]; userIntents?: string[]; locationTags?: string[]; minBookingDays?: number;
+    types?: string[]; occupationMixes?: string[]; userMoods?: string[]; genderOrientations?: string[]; incomeLevels?: string[];
     limit?: number; offset?: number;
     search?: string;
     page?: number; pageSize?: number;
+    sortBy?: 'distance' | 'price' | 'popularity' | 'newest';
+    sortOrder?: 'asc' | 'desc';
   }): Promise<Screen[] | { screens: Screen[]; total: number }> {
     // Build dynamic conditions using drizzle sql template fragments
     const conditions: ReturnType<typeof drizzleSql>[] = [drizzleSql`status = 'active'`];
@@ -1666,24 +1704,83 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (filters.venueCategories && filters.venueCategories.length > 0) {
-      conditions.push(drizzleSql`venue_category = ANY(${filters.venueCategories})`);
+      const venueArrStr = `{${filters.venueCategories.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
+      conditions.push(drizzleSql`venue_category = ANY(${venueArrStr}::text[])`);
     }
     
     if (filters.environmentTypes && filters.environmentTypes.length > 0) {
-      conditions.push(drizzleSql`environment_type = ANY(${filters.environmentTypes})`);
+      const envArrStr = `{${filters.environmentTypes.map(e => `"${e.replace(/"/g, '\\"')}"`).join(',')}}`;
+      conditions.push(drizzleSql`environment_type = ANY(${envArrStr}::text[])`);
     }
 
     if (filters.environmentTags && filters.environmentTags.length > 0) {
       // Postgres array overlap operator && to see if ANY of the requested tags exist in either location_tags or lifestyle_tags
-      conditions.push(drizzleSql`(location_tags && ${filters.environmentTags}::text[] OR lifestyle_tags && ${filters.environmentTags}::text[])`);
+      const tagArrStr = `{${filters.environmentTags.map(t => `"${t.replace(/"/g, '\\"')}"`).join(',')}}`;
+      conditions.push(drizzleSql`(location_tags && ${tagArrStr}::text[] OR lifestyle_tags && ${tagArrStr}::text[])`);
+    }
+
+    if (filters.userIntents && filters.userIntents.length > 0) {
+      const intentArrStr = `{${filters.userIntents.map(i => `"${i.replace(/"/g, '\\"')}"`).join(',')}}`;
+      conditions.push(drizzleSql`user_intent && ${intentArrStr}::text[]`);
+    }
+    
+    if (filters.types && filters.types.length > 0) {
+      const arrStr = `{${filters.types.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
+      conditions.push(drizzleSql`type = ANY(${arrStr}::text[])`);
+    }
+
+    if (filters.occupationMixes && filters.occupationMixes.length > 0) {
+      const arrStr = `{${filters.occupationMixes.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
+      conditions.push(drizzleSql`occupation_mix && ${arrStr}::text[]`);
+    }
+
+    if (filters.userMoods && filters.userMoods.length > 0) {
+      const arrStr = `{${filters.userMoods.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
+      conditions.push(drizzleSql`user_mood && ${arrStr}::text[]`);
+    }
+
+    if (filters.genderOrientations && filters.genderOrientations.length > 0) {
+      const arrStr = `{${filters.genderOrientations.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
+      conditions.push(drizzleSql`gender_orientation = ANY(${arrStr}::text[])`);
+    }
+
+    if (filters.incomeLevels && filters.incomeLevels.length > 0) {
+      const arrStr = `{${filters.incomeLevels.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
+      conditions.push(drizzleSql`income_level = ANY(${arrStr}::text[])`);
+    }
+
+    if (filters.locationTags && filters.locationTags.length > 0) {
+      const locTagArrStr = `{${filters.locationTags.map(t => `"${t.replace(/"/g, '\\"')}"`).join(',')}}`;
+      conditions.push(drizzleSql`location_tags && ${locTagArrStr}::text[]`);
     }
 
     if (filters.minBookingDays !== undefined) {
       conditions.push(drizzleSql`min_booking_days <= ${filters.minBookingDays}`);
     }
 
-    if (filters.lat !== undefined && filters.lng !== undefined && filters.radiusKm !== undefined) {
-      // Bounding box pre-filter for index usage
+    if (filters.locations && filters.locations.length > 0) {
+      const locationConditions: ReturnType<typeof drizzleSql>[] = [];
+      for (const loc of filters.locations) {
+        if (loc.type === 'city' && loc.city) {
+          const normalizedCity = normalizeCityName(loc.city);
+          locationConditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${normalizedCity}%`})`);
+        } else if (loc.type === 'map' && loc.lat !== undefined && loc.lng !== undefined && loc.radiusKm !== undefined) {
+          locationConditions.push(drizzleSql`(
+            6371 * acos(
+              LEAST(1.0, GREATEST(-1.0,
+                cos(radians(${loc.lat})) * cos(radians(latitude::float)) *
+                cos(radians(longitude::float) - radians(${loc.lng})) +
+                sin(radians(${loc.lat})) * sin(radians(latitude::float))
+              ))
+            )
+          ) <= ${loc.radiusKm}`);
+        }
+      }
+      if (locationConditions.length > 0) {
+        conditions.push(drizzleSql`(${drizzleSql.join(locationConditions, drizzleSql` OR `)})`);
+      }
+    } else if (filters.lat !== undefined && filters.lng !== undefined && filters.radiusKm !== undefined) {
+      // Legacy single map logic (Bounding box pre-filter for index usage)
       const latRad = filters.radiusKm / 111.0;
       const lngRad = filters.radiusKm / (111.0 * Math.cos(filters.lat * Math.PI / 180));
       conditions.push(drizzleSql`latitude::float BETWEEN ${filters.lat - latRad} AND ${filters.lat + latRad}`);
@@ -1691,14 +1788,41 @@ export class DatabaseStorage implements IStorage {
       // Precise Haversine distance
       conditions.push(drizzleSql`(
         6371 * acos(
-          cos(radians(${filters.lat})) * cos(radians(latitude::float)) *
-          cos(radians(longitude::float) - radians(${filters.lng})) +
-          sin(radians(${filters.lat})) * sin(radians(latitude::float))
+          LEAST(1.0, GREATEST(-1.0,
+            cos(radians(${filters.lat})) * cos(radians(latitude::float)) *
+            cos(radians(longitude::float) - radians(${filters.lng})) +
+            sin(radians(${filters.lat})) * sin(radians(latitude::float))
+          ))
         )
       ) <= ${filters.radiusKm}`);
     }
 
     const whereClause = drizzleSql.join(conditions, drizzleSql` AND `);
+
+    let haversineSelect = drizzleSql``;
+    let orderClause = drizzleSql`ORDER BY avg_daily_footfall DESC`;
+
+    if (filters.lat !== undefined && filters.lng !== undefined) {
+      haversineSelect = drizzleSql`, (
+        6371 * acos(
+          LEAST(1.0, GREATEST(-1.0,
+            cos(radians(${filters.lat})) * cos(radians(latitude::float)) *
+            cos(radians(longitude::float) - radians(${filters.lng})) +
+            sin(radians(${filters.lat})) * sin(radians(latitude::float))
+          ))
+        )
+      ) AS distance_km`;
+    }
+
+    if (filters.sortBy === 'price') {
+      orderClause = filters.sortOrder === 'asc' ? drizzleSql`ORDER BY price_per_day ASC` : drizzleSql`ORDER BY price_per_day DESC`;
+    } else if (filters.sortBy === 'newest') {
+      orderClause = filters.sortOrder === 'asc' ? drizzleSql`ORDER BY created_at ASC` : drizzleSql`ORDER BY created_at DESC`;
+    } else if (filters.sortBy === 'distance' && filters.lat !== undefined && filters.lng !== undefined) {
+      orderClause = filters.sortOrder === 'desc' ? drizzleSql`ORDER BY distance_km DESC` : drizzleSql`ORDER BY distance_km ASC`;
+    } else if (filters.sortBy === 'popularity') {
+      orderClause = filters.sortOrder === 'asc' ? drizzleSql`ORDER BY avg_daily_footfall ASC` : drizzleSql`ORDER BY avg_daily_footfall DESC`;
+    }
 
     // If page/pageSize provided, return paginated result with total count
     if (filters.page && filters.pageSize) {
@@ -1709,13 +1833,19 @@ export class DatabaseStorage implements IStorage {
 
       const offset = (filters.page - 1) * filters.pageSize;
       const dataResult = await db.execute(
-        drizzleSql`SELECT * FROM screens WHERE ${whereClause} ORDER BY avg_daily_footfall DESC LIMIT ${filters.pageSize} OFFSET ${offset}`
+        drizzleSql`SELECT * ${haversineSelect} FROM screens WHERE ${whereClause} ${orderClause} LIMIT ${filters.pageSize} OFFSET ${offset}`
       );
-      return { screens: (dataResult.rows as any[]).map(r => mapRowToCamel<Screen>(r)), total };
+      
+      const screens = (dataResult.rows as any[]).map(r => {
+        const screen = mapRowToCamel<Screen & { distanceKm?: number }>(r);
+        if (r.distance_km !== undefined) screen.distanceKm = parseFloat(r.distance_km) || 0;
+        return screen as Screen;
+      });
+      return { screens, total };
     }
 
     // Legacy: return array (backward compatibility)
-    let query = drizzleSql`SELECT * FROM screens WHERE ${whereClause} ORDER BY avg_daily_footfall DESC`;
+    let query = drizzleSql`SELECT * ${haversineSelect} FROM screens WHERE ${whereClause} ${orderClause}`;
     if (filters.limit) {
       query = drizzleSql`${query} LIMIT ${filters.limit}`;
     }
@@ -1724,7 +1854,11 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await db.execute(query);
-    return (result.rows as any[]).map(r => mapRowToCamel<Screen>(r));
+    return (result.rows as any[]).map(r => {
+      const screen = mapRowToCamel<Screen & { distanceKm?: number }>(r);
+      if (r.distance_km !== undefined) screen.distanceKm = parseFloat(r.distance_km) || 0;
+      return screen as Screen;
+    });
   }
 
   async getScreenLocations() {
@@ -1863,7 +1997,7 @@ export class DatabaseStorage implements IStorage {
     return { screens, total };
   }
 
-  async getScreenFilters(): Promise<{ cities: string[]; venueTypes: string[]; environmentTypes: string[]; tags: { id: string; name: string; displayName: string; category: string }[] }> {
+  async getScreenFilters(): Promise<{ cities: string[]; venueTypes: string[]; environmentTypes: string[]; tags: { id: string; name: string; displayName: string; category: string }[]; userIntents: string[]; locationTags: string[]; types: string[]; occupationMixes: string[]; userMoods: string[]; genderOrientations: string[]; incomeLevels: string[] }> {
     // Queries to extract distinct active filter values directly from the database
     
     // 1. Unique Cities
@@ -1905,7 +2039,108 @@ export class DatabaseStorage implements IStorage {
         category: r.category 
       }));
 
-    return { cities, venueTypes, environmentTypes, tags };
+    // 5. Unique User Intents
+    const userIntentResult = await db.execute(drizzleSql`
+      SELECT DISTINCT unnest(user_intent) as intent FROM screens WHERE status = 'active' AND user_intent IS NOT NULL
+    `);
+    const userIntents = (userIntentResult.rows as any[]).map(r => r.intent).filter(Boolean);
+
+    // 6. Unique Location Tags
+    const locationTagsResult = await db.execute(drizzleSql`
+      SELECT DISTINCT unnest(location_tags) as tag FROM screens WHERE status = 'active' AND location_tags IS NOT NULL
+    `);
+    const locationTags = (locationTagsResult.rows as any[]).map(r => r.tag).filter(Boolean);
+
+    // 7. Unique Screen Types
+    const typeResult = await db.execute(drizzleSql`
+      SELECT DISTINCT type FROM screens WHERE status = 'active' AND type IS NOT NULL
+    `);
+    const types = (typeResult.rows as any[]).map(r => r.type).filter(Boolean);
+
+    // 8. Unique Occupation Mixes
+    const occMixResult = await db.execute(drizzleSql`
+      SELECT DISTINCT unnest(occupation_mix) as occ FROM screens WHERE status = 'active' AND occupation_mix IS NOT NULL
+    `);
+    const occupationMixes = (occMixResult.rows as any[]).map(r => r.occ).filter(Boolean);
+
+    // 9. Unique User Moods
+    const userMoodResult = await db.execute(drizzleSql`
+      SELECT DISTINCT unnest(user_mood) as mood FROM screens WHERE status = 'active' AND user_mood IS NOT NULL
+    `);
+    const userMoods = (userMoodResult.rows as any[]).map(r => r.mood).filter(Boolean);
+
+    // 10. Unique Gender Orientations
+    const genderResult = await db.execute(drizzleSql`
+      SELECT DISTINCT gender_orientation FROM screens WHERE status = 'active' AND gender_orientation IS NOT NULL
+    `);
+    const genderOrientations = (genderResult.rows as any[]).map(r => r.gender_orientation).filter(Boolean);
+
+    // 11. Unique Income Levels
+    const incomeResult = await db.execute(drizzleSql`
+      SELECT DISTINCT income_level FROM screens WHERE status = 'active' AND income_level IS NOT NULL
+    `);
+    const incomeLevels = (incomeResult.rows as any[]).map(r => r.income_level).filter(Boolean);
+
+    return { cities, venueTypes, environmentTypes, tags, userIntents, locationTags, types, occupationMixes, userMoods, genderOrientations, incomeLevels };
+  }
+
+  // ========== SUPPORT TICKETS ==========
+
+  async createSupportTicket(userId: string, data: Partial<InsertSupportTicket>): Promise<SupportTicket> {
+    const [ticket] = await db.insert(supportTickets).values({
+      userId,
+      subject: data.subject || "No Subject",
+      category: data.category || null,
+      priority: data.priority || "medium",
+    }).returning();
+    return ticket;
+  }
+
+  async getSupportTicketsByUser(userId: string): Promise<SupportTicket[]> {
+    return await db.select().from(supportTickets)
+      .where(eq(supportTickets.userId, userId))
+      .orderBy(desc(supportTickets.updatedAt));
+  }
+
+  async getAllSupportTickets(): Promise<SupportTicket[]> {
+    return await db.select().from(supportTickets)
+      .orderBy(desc(supportTickets.updatedAt));
+  }
+
+  async getSupportTicket(id: string): Promise<SupportTicket | undefined> {
+    const [ticket] = await db.select().from(supportTickets).where(eq(supportTickets.id, id));
+    return ticket || undefined;
+  }
+
+  async updateSupportTicket(id: string, data: Partial<SupportTicket>): Promise<SupportTicket | undefined> {
+    const [ticket] = await db.update(supportTickets)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(supportTickets.id, id))
+      .returning();
+    return ticket || undefined;
+  }
+
+  async addTicketMessage(ticketId: string, senderId: string, message: string, attachments: any[] = []): Promise<TicketMessage> {
+    // Insert message
+    const [msg] = await db.insert(ticketMessages).values({
+      ticketId,
+      senderId,
+      message,
+      attachments,
+    }).returning();
+
+    // Update ticket updatedAt
+    await db.update(supportTickets)
+      .set({ updatedAt: new Date() })
+      .where(eq(supportTickets.id, ticketId));
+
+    return msg;
+  }
+
+  async getTicketMessages(ticketId: string): Promise<TicketMessage[]> {
+    return await db.select().from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, ticketId))
+      .orderBy(asc(ticketMessages.createdAt));
   }
 }
 

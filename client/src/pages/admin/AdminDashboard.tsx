@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, Monitor, FileText, DollarSign, TrendingUp, TrendingDown, Phone, Mail, Building2, AlertCircle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Users, Monitor, FileText, DollarSign, TrendingUp, TrendingDown, Phone, Mail, Building2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import GuidedTour from "@/components/GuidedTour";
@@ -51,6 +52,8 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [runTour, setRunTour] = useState(false);
+  const [draftsPage, setDraftsPage] = useState(1);
+  const DRAFTS_PER_PAGE = 15;
   
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/admin/stats"],
@@ -367,7 +370,9 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y">
-              {drafts.map((draft) => {
+              {drafts
+                .slice((draftsPage - 1) * DRAFTS_PER_PAGE, draftsPage * DRAFTS_PER_PAGE)
+                .map((draft) => {
                 const draftState = (() => { try { return JSON.parse(draft.summary || "{}"); } catch { return {}; } })();
                 const stepLabel = ["Name","Location","Screens","Duration","Validate","Creative","Review"][((draftState._step || 1) - 1)] || "Started";
                 const ago = (() => {
@@ -427,6 +432,31 @@ export default function AdminDashboard() {
               })}
             </div>
           </CardContent>
+          {drafts.length > DRAFTS_PER_PAGE && (
+            <CardFooter className="flex items-center justify-between py-3 border-t">
+              <span className="text-sm text-muted-foreground">
+                Showing {((draftsPage - 1) * DRAFTS_PER_PAGE) + 1} - {Math.min(draftsPage * DRAFTS_PER_PAGE, drafts.length)} of {drafts.length} drafts
+              </span>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setDraftsPage(Math.max(1, draftsPage - 1))}
+                  disabled={draftsPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setDraftsPage(Math.min(Math.ceil(drafts.length / DRAFTS_PER_PAGE), draftsPage + 1))}
+                  disabled={draftsPage === Math.ceil(drafts.length / DRAFTS_PER_PAGE)}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </CardFooter>
+          )}
         </Card>
       )}
 

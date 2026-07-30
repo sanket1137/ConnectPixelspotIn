@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquare, Users, TrendingUp, Calendar, Eye, Globe, Target, Hash } from "lucide-react";
+import { MessageSquare, Users, TrendingUp, Calendar, Eye, Globe, Target, Hash, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface Conversation {
@@ -43,8 +43,18 @@ interface Analytics {
   conversationsThisMonth: number;
 }
 
+const getSafeHostname = (url: string) => {
+  try {
+    return new URL(url.startsWith('http') ? url : `https://${url}`).hostname;
+  } catch {
+    return url;
+  }
+};
+
 export default function AIConversations() {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
 
   // Fetch conversations list
   const { data: conversationsData, isLoading: conversationsLoading } = useQuery<{ conversations: Conversation[] }>({
@@ -175,69 +185,97 @@ export default function AIConversations() {
               <p>No conversations yet</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {conversations.map((conv) => (
-                <div
-                  key={conv.id}
-                  className="border rounded-lg p-4 hover-elevate cursor-pointer"
-                  onClick={() => setSelectedConversation(conv.id)}
-                  data-testid={`conversation-${conv.id}`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-semibold truncate">{conv.userName}</span>
-                        <Badge variant="secondary" className="text-xs">
-                          {conv.userEmail}
-                        </Badge>
-                      </div>
-                      
-                      {conv.title && (
-                        <p className="text-sm font-medium mb-2">{conv.title}</p>
-                      )}
-
-                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <MessageSquare className="h-3 w-3" />
-                          {conv.messageCount} messages
-                        </span>
+            <>
+              <div className="space-y-3">
+                {conversations.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE).map((conv) => (
+                  <div
+                    key={conv.id}
+                    className="border rounded-lg p-4 hover-elevate cursor-pointer"
+                    onClick={() => setSelectedConversation(conv.id)}
+                    data-testid={`conversation-${conv.id}`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-semibold truncate">{conv.userName}</span>
+                          <Badge variant="secondary" className="text-xs">
+                            {conv.userEmail}
+                          </Badge>
+                        </div>
                         
-                        {conv.campaignType && (
-                          <span className="flex items-center gap-1">
-                            <Target className="h-3 w-3" />
-                            {conv.campaignType}
-                          </span>
+                        {conv.title && (
+                          <p className="text-sm font-medium mb-2">{conv.title}</p>
                         )}
 
-                        {conv.websiteUrl && (
+                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
-                            <Globe className="h-3 w-3" />
-                            {new URL(conv.websiteUrl).hostname}
+                            <MessageSquare className="h-3 w-3" />
+                            {conv.messageCount} messages
                           </span>
-                        )}
+                          
+                          {conv.campaignType && (
+                            <span className="flex items-center gap-1">
+                              <Target className="h-3 w-3" />
+                              {conv.campaignType}
+                            </span>
+                          )}
 
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })}
-                        </span>
+                          {conv.websiteUrl && (
+                            <span className="flex items-center gap-1">
+                              <Globe className="h-3 w-3" />
+                              {getSafeHostname(conv.websiteUrl)}
+                            </span>
+                          )}
+
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })}
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedConversation(conv.id);
+                        }}
+                        data-testid={`button-view-${conv.id}`}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {conversations.length > ITEMS_PER_PAGE && (
+                <div className="flex items-center justify-between mt-6 border-t pt-4">
+                  <span className="text-sm text-muted-foreground">
+                    Showing {(page - 1) * ITEMS_PER_PAGE + 1} to {Math.min(page * ITEMS_PER_PAGE, conversations.length)} of {conversations.length}
+                  </span>
+                  <div className="flex items-center gap-2">
                     <Button
+                      variant="outline"
                       size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedConversation(conv.id);
-                      }}
-                      data-testid={`button-view-${conv.id}`}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
                     >
-                      <Eye className="h-4 w-4" />
+                      <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.min(Math.ceil(conversations.length / ITEMS_PER_PAGE), p + 1))}
+                      disabled={page >= Math.ceil(conversations.length / ITEMS_PER_PAGE)}
+                    >
+                      Next <ChevronRight className="h-4 w-4 ml-1" />
                     </Button>
                   </div>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

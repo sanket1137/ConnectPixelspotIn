@@ -470,3 +470,4 @@ export function fromVenueSlug(slug: string): string | null {
   }
   return null;
 }
+}

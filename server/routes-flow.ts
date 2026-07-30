@@ -989,6 +989,17 @@ export function registerFlowRoutes(
     }
   });
 
+  // Mark all notifications as read
+  app.patch("/api/notifications/read-all", authenticate, requireVerified, async (req, res) => {
+    try {
+      await storage.markAllNotificationsRead(req.user!.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Mark all read error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Mark single notification as read
   app.patch("/api/notifications/:id/read", authenticate, requireVerified, async (req, res) => {
     try {
@@ -999,17 +1010,6 @@ export function registerFlowRoutes(
       res.json(notification);
     } catch (error) {
       console.error("Mark notification read error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  // Mark all notifications as read
-  app.patch("/api/notifications/read-all", authenticate, requireVerified, async (req, res) => {
-    try {
-      await storage.markAllNotificationsRead(req.user!.id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Mark all read error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });

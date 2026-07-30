@@ -8,13 +8,11 @@ import {
 } from "lucide-react";
 import type { Screen } from "@shared/schema";
 
+import { LocationItem } from "@/components/map/MultiLocationSearch";
+
 interface Props {
   campaignName: string;
-  locationMode: "city" | "pin";
-  targetCity: string;
-  pinLat: number;
-  pinLng: number;
-  radiusKm: number;
+  locations: LocationItem[];
   campaignDays: number;
   startDate: string;
   creativeUrl: string;
@@ -27,11 +25,7 @@ interface Props {
 
 export default function Step7_ReviewCampaign({
   campaignName,
-  locationMode,
-  targetCity,
-  pinLat,
-  pinLng,
-  radiusKm,
+  locations,
   campaignDays,
   startDate,
   creativeUrl,
@@ -100,10 +94,9 @@ export default function Step7_ReviewCampaign({
     );
   }
 
-  const locationLabel =
-    locationMode === "city"
-      ? targetCity
-      : `${pinLat.toFixed(4)}, ${pinLng.toFixed(4)} (${radiusKm}km radius)`;
+  const locationLabel = locations.length > 0 
+    ? locations.map(l => l.label).join(", ") 
+    : "No locations selected";
 
   return (
     <div className="space-y-6">

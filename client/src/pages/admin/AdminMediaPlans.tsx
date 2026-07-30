@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -17,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ClipboardList, Building2, Monitor, IndianRupee, Search } from "lucide-react";
+import { ClipboardList, Building2, Monitor, IndianRupee, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useMemo } from "react";
 
 type MediaPlanRow = {
@@ -67,6 +68,8 @@ function fmtCurrency(amount: number) {
 export default function AdminMediaPlans() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
 
   const { data: plans = [], isLoading } = useQuery<MediaPlanRow[]>({
     queryKey: ["/api/admin/media-plans"],
@@ -137,10 +140,10 @@ export default function AdminMediaPlans() {
             placeholder="Search by plan name, brand, agency…"
             className="pl-9"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setPage(1); }}>
           <SelectTrigger id="admin-media-plans-status-filter" className="w-full sm:w-52">
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
@@ -180,7 +183,7 @@ export default function AdminMediaPlans() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((plan) => (
+                  {filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE).map((plan) => (
                     <TableRow key={plan.id}>
                       {/* Plan Name */}
                       <TableCell>
@@ -262,10 +265,32 @@ export default function AdminMediaPlans() {
           )}
         </CardContent>
       </Card>
-
-      <p className="text-xs text-muted-foreground">
-        Showing {filtered.length} of {plans.length} plans
-      </p>
+      
+      {filtered.length > ITEMS_PER_PAGE && (
+        <div className="flex items-center justify-between mt-6 pt-2">
+          <span className="text-sm text-muted-foreground">
+            Showing {(page - 1) * ITEMS_PER_PAGE + 1} to {Math.min(page * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(Math.ceil(filtered.length / ITEMS_PER_PAGE), p + 1))}
+              disabled={page >= Math.ceil(filtered.length / ITEMS_PER_PAGE)}
+            >
+              Next <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

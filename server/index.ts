@@ -16,6 +16,7 @@ import { serveStatic, log } from "./static";
 import { setupSecurity } from "./security";
 import { db, storage } from "./storage";
 import { setupWebSocket, broadcastCampaignUpdate } from "./websocket";
+import { seoRouter } from "./routes-seo";
 
 const app = express();
 
@@ -74,6 +75,9 @@ app.use((req, res, next) => {
     res.status(status).json({ message });
     throw err;
   });
+
+  // Apply SEO middleware before Vite catch-all
+  app.use(seoRouter);
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
