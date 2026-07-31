@@ -74,6 +74,7 @@ export function printMediaPlan(data: MediaPlanPdfData) {
 
       // Extract Tags
       const tags: string[] = [];
+      if (s.type) tags.push(s.type);
       if (s.lifestyleTags) tags.push(...s.lifestyleTags);
       if (s.customAudienceTags) tags.push(...s.customAudienceTags);
       if (s.locationTags) tags.push(...s.locationTags);
