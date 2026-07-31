@@ -104,6 +104,18 @@ export function registerAgencyRoutes(
                   trafficType: screen.trafficType,
                   incomeLevel: screen.incomeLevel,
                   avgDailyFootfall: screen.avgDailyFootfall,
+                  // Fields required for PDF generation
+                  latitude: screen.latitude,
+                  longitude: screen.longitude,
+                  screenImages: screen.screenImages,
+                  images: screen.images,
+                  durationPerSlot: screen.durationPerSlot,
+                  loopDuration: screen.loopDuration,
+                  visibility: screen.visibility,
+                  displayFormat: screen.displayFormat,
+                  resolution: screen.resolution,
+                  customAudienceTags: screen.customAudienceTags,
+                  locationTags: screen.locationTags,
                 }
               : null,
           };
