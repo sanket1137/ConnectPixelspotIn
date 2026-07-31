@@ -60,7 +60,10 @@ export function printMediaPlan(data: MediaPlanPdfData) {
       
       const cityArea = `${item.city}${item.venueName ? ` – ${item.venueName}` : ""}`;
       
-      const imageSrc = s.screenImages?.[0] || s.images?.[0];
+      let imageSrc = s.screenImages?.[0] || s.images?.[0];
+      if (imageSrc && imageSrc.startsWith('/')) {
+        imageSrc = `${window.location.origin}${imageSrc}`;
+      }
       const hasImage = !!imageSrc;
       
       let mapUrl = '';
