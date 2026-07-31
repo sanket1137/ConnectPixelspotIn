@@ -131,6 +131,14 @@ export function ScreenDetailsModal({
                   <div><span className="text-slate-500">Format:</span> <span className="font-medium">{screen.displayFormat}</span></div>
                   <div><span className="text-slate-500">Environment:</span> <span className="font-medium">{screen.environmentType}</span></div>
                   <div><span className="text-slate-500">Traffic:</span> <span className="font-medium">{screen.trafficType}</span></div>
+                  {screen.isMultiScreen && (
+                    <div className="col-span-2 pt-2">
+                      <div className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
+                        <Monitor className="h-3.5 w-3.5 mr-1.5" />
+                        Network of {screen.numberOfScreens || 2} Screens
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
