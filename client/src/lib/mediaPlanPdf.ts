@@ -92,8 +92,8 @@ export function printMediaPlan(data: MediaPlanPdfData) {
           </div>
 
           <div class="screen-media-grid">
-            ${hasImage ? `<div class="media-box"><img src="${imageSrc}" alt="Screen" /></div>` : ""}
-            ${hasMap ? `<div class="media-box"><img src="${mapUrl}" alt="Map" /></div>` : ""}
+            ${hasImage ? `<div class="media-box"><img src="${imageSrc}" alt="Screen" onerror="this.onerror=null;this.src='https://placehold.co/400x300?text=No+Image+Available';" /></div>` : ""}
+            ${hasMap ? `<div class="media-box"><img src="${mapUrl}" alt="Map" onerror="this.onerror=null;this.src='https://placehold.co/400x300?text=Map+Unavailable';" /></div>` : ""}
           </div>
 
           <div class="screen-details-grid">
