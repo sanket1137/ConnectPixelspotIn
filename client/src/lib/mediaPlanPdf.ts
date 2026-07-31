@@ -74,7 +74,6 @@ export function printMediaPlan(data: MediaPlanPdfData) {
 
       // Extract Tags
       const tags: string[] = [];
-      if (s.type) tags.push(s.type);
       if (s.lifestyleTags) tags.push(...s.lifestyleTags);
       if (s.customAudienceTags) tags.push(...s.customAudienceTags);
       if (s.locationTags) tags.push(...s.locationTags);
@@ -93,7 +92,12 @@ export function printMediaPlan(data: MediaPlanPdfData) {
           </div>
 
           <div class="screen-media-grid">
-            ${hasImage ? `<div class="media-box"><img src="${imageSrc}" alt="Screen" onerror="this.onerror=null;this.src='https://placehold.co/400x300?text=No+Image+Available';" /></div>` : ""}
+            ${hasImage ? `
+              <div class="media-box" style="position: relative;">
+                ${s.type ? `<div style="position: absolute; top: 12px; left: 12px; background: #0d9488; color: white; padding: 4px 10px; font-size: 10px; font-weight: bold; text-transform: uppercase; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 0.5px; z-index: 2;">${s.type}</div>` : ""}
+                <img src="${imageSrc}" alt="Screen" onerror="this.onerror=null;this.src='https://placehold.co/400x300?text=No+Image+Available';" />
+              </div>
+            ` : ""}
             ${hasMap ? `<div class="media-box"><img src="${mapUrl}" alt="Map" onerror="this.onerror=null;this.src='https://placehold.co/400x300?text=Map+Unavailable';" /></div>` : ""}
           </div>
 
