@@ -398,8 +398,8 @@ function AuthenticatedLayout() {
         {/* Render AppSidebar globally (handles both mobile sheet and desktop aside) */}
         <AppSidebar />
         
-        {/* Main layout context, offset by 16px (w-16 = 4rem) on desktop to clear the fixed sidebar */}
-        <div className="flex flex-1 flex-col min-w-0 md:pl-16">
+        {/* Main layout context, offset by 256px (w-64 = 16rem) on desktop to clear the fixed sidebar */}
+        <div className="flex flex-1 flex-col min-w-0 md:pl-64">
           {/* Mobile-only header with hamburger menu */}
           <header className="sticky top-0 z-50 flex h-14 items-center gap-4 border-b bg-background px-4 md:hidden">
             <div className="md:hidden">
