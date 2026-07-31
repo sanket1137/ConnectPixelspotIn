@@ -49,6 +49,8 @@ export default function DiscoverScreens() {
   const [lng, setLng] = useState<number | undefined>();
   const [radiusKm, setRadiusKm] = useState<number>(15);
   const [locationName, setLocationName] = useState<string>("");
+  const [locationType, setLocationType] = useState<string>("city");
+  const [locationBounds, setLocationBounds] = useState<google.maps.LatLngBoundsLiteral | null>(null);
   const [initialLocationLoaded, setInitialLocationLoaded] = useState(false);
   const geocodingLib = useMapsLibrary("geocoding");
 
@@ -122,7 +124,14 @@ export default function DiscoverScreens() {
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
-    if (lat !== undefined && lng !== undefined) {
+    if (locationBounds && (locationType === "country" || locationType === "administrative_area_level_1")) {
+      params.append("boundsN", locationBounds.north.toString());
+      params.append("boundsS", locationBounds.south.toString());
+      params.append("boundsE", locationBounds.east.toString());
+      params.append("boundsW", locationBounds.west.toString());
+      params.append("sortBy", sortBy === 'distance' ? 'popularity' : sortBy);
+      params.append("sortOrder", sortOrder);
+    } else if (lat !== undefined && lng !== undefined) {
       params.append("lat", lat.toString());
       params.append("lng", lng.toString());
       params.append("radiusKm", radiusKm.toString());
@@ -288,6 +297,17 @@ export default function DiscoverScreens() {
   useEffect(() => {
     if (!map || !window.google) return;
 
+    // Handle Country/State Bounds
+    if (locationBounds && (locationType === "country" || locationType === "administrative_area_level_1")) {
+      if (circleRef.current) {
+        circleRef.current.setMap(null);
+        circleRef.current = null;
+      }
+      map.fitBounds(locationBounds);
+      return;
+    }
+
+    // Handle Radius Circle for City/POI
     if (lat !== undefined && lng !== undefined) {
       if (!circleRef.current) {
         circleRef.current = new window.google.maps.Circle({
@@ -303,12 +323,13 @@ export default function DiscoverScreens() {
       circleRef.current.setRadius(radiusKm * 1000);
 
       // Fit map to circle bounds
-      map.fitBounds(circleRef.current.getBounds()!);
+      const bounds = circleRef.current.getBounds();
+      if (bounds) map.fitBounds(bounds);
     } else if (circleRef.current) {
       circleRef.current.setMap(null);
       circleRef.current = null;
     }
-  }, [map, lat, lng, radiusKm]);
+  }, [map, lat, lng, radiusKm, locationBounds, locationType]);
 
   // Fallback map bounds if no lat/lng but screens exist
   useEffect(() => {
@@ -336,14 +357,43 @@ export default function DiscoverScreens() {
     if (place?.geometry?.location) {
       setLat(place.geometry.location.lat());
       setLng(place.geometry.location.lng());
+      
+      let type = "city";
+      if (place.types) {
+        if (place.types.includes("country")) type = "country";
+        else if (place.types.includes("administrative_area_level_1")) type = "administrative_area_level_1";
+        else if (place.types.includes("locality")) type = "locality";
+        else if (place.types.includes("sublocality") || place.types.includes("neighborhood") || place.types.includes("point_of_interest") || place.types.includes("establishment")) {
+          type = "poi";
+        }
+      }
+      setLocationType(type);
+      
+      if (place.geometry.viewport) {
+        const bounds = place.geometry.viewport.toJSON();
+        setLocationBounds(bounds);
+      } else {
+        setLocationBounds(null);
+      }
+
+      if (type === "poi") {
+        setRadiusKm(10);
+      } else if (type === "locality" || type === "city") {
+        setRadiusKm(15);
+      }
+      
       setFilters(prev => ({ ...prev, search: "" }));
     } else if (inputValue) {
       setLat(undefined);
       setLng(undefined);
+      setLocationBounds(null);
+      setLocationType("city");
       setFilters(prev => ({ ...prev, search: inputValue }));
     } else {
       setLat(undefined);
       setLng(undefined);
+      setLocationBounds(null);
+      setLocationType("city");
       setFilters(prev => ({ ...prev, search: "" }));
     }
   };
@@ -555,6 +605,7 @@ export default function DiscoverScreens() {
                </div>
 
                {/* Radius */}
+               {!["country", "administrative_area_level_1"].includes(locationType) && (
                <div className="px-8 h-[68px] w-full sm:w-64 flex flex-col justify-center hover:bg-slate-50 transition-colors group shrink-0">
                   <div className="text-[11px] uppercase tracking-wider font-bold text-slate-800 flex justify-between mb-1.5">
                     <span>Radius</span>
@@ -571,6 +622,7 @@ export default function DiscoverScreens() {
                     />
                   </div>
                </div>
+               )}
 
                {/* Search Button */}
                <div className="px-3 h-[68px] w-full sm:w-auto flex items-center justify-center shrink-0">
@@ -945,6 +997,7 @@ export default function DiscoverScreens() {
                 />
               </div>
               
+              {!["country", "administrative_area_level_1"].includes(locationType) && (
               <div className="flex flex-col gap-3">
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Radius</label>
@@ -959,6 +1012,7 @@ export default function DiscoverScreens() {
                   className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary mt-2" 
                 />
               </div>
+              )}
               
               <Button 
                 className="w-full h-12 rounded-xl mt-4 text-base font-semibold shadow-sm" 

@@ -1665,6 +1665,7 @@ export class DatabaseStorage implements IStorage {
   async getFilteredScreens(filters: {
     city?: string; type?: string; minPrice?: number; maxPrice?: number;
     pincode?: string; lat?: number; lng?: number; radiusKm?: number;
+    boundsN?: number; boundsS?: number; boundsE?: number; boundsW?: number;
     locations?: Array<{ type: 'city' | 'map', lat?: number, lng?: number, radiusKm?: number, city?: string }>;
     venueCategories?: string[]; environmentTypes?: string[];
     environmentTags?: string[]; userIntents?: string[]; locationTags?: string[]; minBookingDays?: number;
@@ -1779,6 +1780,9 @@ export class DatabaseStorage implements IStorage {
       if (locationConditions.length > 0) {
         conditions.push(drizzleSql`(${drizzleSql.join(locationConditions, drizzleSql` OR `)})`);
       }
+    } else if (filters.boundsN !== undefined && filters.boundsS !== undefined && filters.boundsE !== undefined && filters.boundsW !== undefined) {
+      conditions.push(drizzleSql`latitude::float <= ${filters.boundsN} AND latitude::float >= ${filters.boundsS}`);
+      conditions.push(drizzleSql`longitude::float <= ${filters.boundsE} AND longitude::float >= ${filters.boundsW}`);
     } else if (filters.lat !== undefined && filters.lng !== undefined && filters.radiusKm !== undefined) {
       // Legacy single map logic (Bounding box pre-filter for index usage)
       const latRad = filters.radiusKm / 111.0;

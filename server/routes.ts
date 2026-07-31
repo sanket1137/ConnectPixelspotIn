@@ -2394,7 +2394,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all approved screens (for discovery) with SQL-level filtering & pagination
   app.get("/api/screens", async (req, res) => {
     try {
-      const { city, type, minPrice, maxPrice, pincode, limit, offset, search, page, pageSize, venueCategories, environmentTypes, environmentTags, minBookingDays, lat, lng, radiusKm, sortBy, sortOrder, userIntents, locationTags, locations, types, occupationMixes, userMoods, genderOrientations, incomeLevels } = req.query;
+      const { city, type, minPrice, maxPrice, pincode, limit, offset, search, page, pageSize, venueCategories, environmentTypes, environmentTags, minBookingDays, lat, lng, radiusKm, boundsN, boundsS, boundsE, boundsW, sortBy, sortOrder, userIntents, locationTags, locations, types, occupationMixes, userMoods, genderOrientations, incomeLevels } = req.query;
       
       const result = await storage.getFilteredScreens({
         city: city as string | undefined,
@@ -2421,6 +2421,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lat: lat ? parseFloat(lat as string) : undefined,
         lng: lng ? parseFloat(lng as string) : undefined,
         radiusKm: radiusKm ? parseFloat(radiusKm as string) : undefined,
+        boundsN: boundsN ? parseFloat(boundsN as string) : undefined,
+        boundsS: boundsS ? parseFloat(boundsS as string) : undefined,
+        boundsE: boundsE ? parseFloat(boundsE as string) : undefined,
+        boundsW: boundsW ? parseFloat(boundsW as string) : undefined,
         locations: locations ? JSON.parse(locations as string) : undefined,
         sortBy: sortBy as 'distance' | 'price' | 'popularity' | 'newest' | undefined,
         sortOrder: sortOrder as 'asc' | 'desc' | undefined,

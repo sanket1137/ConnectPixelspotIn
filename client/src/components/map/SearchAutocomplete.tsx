@@ -111,7 +111,7 @@ export function SearchAutocomplete({
     
     placesService.getDetails({
       placeId: prediction.place_id,
-      fields: ['geometry', 'name', 'formatted_address', 'place_id']
+      fields: ['geometry', 'name', 'formatted_address', 'place_id', 'types']
     }, (place, status) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && place) {
         onPlaceSelect(place, prediction.description);
