@@ -379,7 +379,10 @@ function LocationSearchBar({
             <button
               key={i}
               type="button"
-              onClick={() => handleSelect(s)}
+              onMouseDown={(e) => {
+                e.preventDefault(); // Prevents the input from losing focus and hiding the dropdown
+                handleSelect(s);
+              }}
               className="flex items-center gap-3 w-full px-4 py-3 hover:bg-gray-50 transition-colors text-left group"
             >
               <span className="text-xl">{s.icon}</span>
