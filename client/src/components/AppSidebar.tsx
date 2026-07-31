@@ -109,7 +109,8 @@ export function AppSidebar() {
               onClick={() => handleNavigation(item.url)}
             >
               <item.icon className={`h-5 w-5 shrink-0 ${isActive ? "text-primary" : "text-slate-400 group-hover/item:text-slate-600"}`} />
-              <span className="ml-3 font-medium truncate">
+              {/* Opacity zero when collapsed (md only), shown on hover. On mobile sheet, always full width so opacity-100 */}
+              <span className="ml-3 font-medium truncate md:opacity-0 md:w-0 md:group-hover/sidebar:opacity-100 md:group-hover/sidebar:w-auto transition-all duration-300 md:-translate-x-4 md:group-hover/sidebar:translate-x-0">
                 {item.title}
               </span>
             </Button>
@@ -119,11 +120,11 @@ export function AppSidebar() {
       <div className="px-2 pt-4 border-t mt-4">
         <Button
           variant="ghost"
-          className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 overflow-hidden h-11"
+          className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 overflow-hidden group/item h-11"
           onClick={() => signOut()}
         >
           <LogOut className="h-5 w-5 shrink-0" />
-          <span className="ml-3 font-medium truncate">
+          <span className="ml-3 font-medium truncate md:opacity-0 md:w-0 md:group-hover/sidebar:opacity-100 md:group-hover/sidebar:w-auto transition-all duration-300 md:-translate-x-4 md:group-hover/sidebar:translate-x-0">
             Sign Out
           </span>
         </Button>
@@ -154,21 +155,11 @@ export function AppSidebar() {
         </Sheet>
       </div>
 
-      {/* Desktop Persistent Sidebar */}
+      {/* Desktop Persistent Mini-Sidebar */}
       <aside 
-        className="hidden md:flex flex-col fixed inset-y-0 left-0 z-50 h-screen w-64 border-r bg-background shadow-[4px_0_24px_rgba(0,0,0,0.02)]"
+        className="hidden md:flex flex-col group/sidebar fixed top-14 bottom-0 left-0 z-50 w-16 hover:w-64 border-r bg-background shadow-[4px_0_24px_rgba(0,0,0,0.02)] transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)]"
       >
-        <div className="flex h-16 items-center justify-start border-b px-4 shrink-0">
-          <div className="flex flex-col">
-            <div className="w-32 flex items-center">
-              <img src={logo} alt="Pixelspot" className="h-7 w-auto max-w-none" />
-            </div>
-            <div className="whitespace-nowrap mt-1">
-              <span className="text-[10px] uppercase font-bold text-slate-500 inline-block">{portalName}</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 overflow-hidden hover:overflow-y-auto custom-scrollbar pt-2">
           <NavContent />
         </div>
       </aside>

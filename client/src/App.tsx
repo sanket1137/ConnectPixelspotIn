@@ -14,6 +14,7 @@ import { Menu, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
+import logo from "@assets/pixelspot-logo.png";
 
 // Support Ticket Pages
 const SupportTickets = lazy(() => import("@/pages/support/SupportTickets"));
@@ -392,62 +393,59 @@ function AuthenticatedLayout() {
   }
 
   // Show router with sidebar for dashboard routes
+  const { isAdmin, isScreenOwner, isAgency } = useAuth();
+  const portalName = isAdmin ? "Admin Portal" : isScreenOwner ? "Owner Portal" : isAgency ? "Agency Portal" : "Advertiser Portal";
+
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex min-h-screen w-full bg-background">
-        {/* Render AppSidebar globally (handles both mobile sheet and desktop aside) */}
-        <AppSidebar />
-        
-        {/* Main layout context, offset by 256px (w-64 = 16rem) on desktop to clear the fixed sidebar */}
-        <div className="flex flex-1 flex-col min-w-0 md:pl-64">
-          {/* Mobile-only header with hamburger menu */}
-          <header className="sticky top-0 z-50 flex h-14 items-center gap-4 border-b bg-background px-4 md:hidden">
-            <div className="md:hidden">
-              {/* Note: Mobile AppSidebar trigger is already rendered globally above, but due to flex layout we need it in header.
-                  Wait, if AppSidebar handles the trigger, we shouldn't render it again. Let's just adjust AppSidebar to export a trigger if needed, OR we can just render a generic header for mobile and let AppSidebar's mobile component handle its own fixed trigger, OR we can just render AppSidebar here ONLY for mobile, and globally for desktop. 
-                  Actually, in the revised AppSidebar, the mobile trigger is rendered in-place. So if we render AppSidebar here, the mobile trigger will appear here in the header. The desktop aside is fixed, so it doesn't matter where it's rendered, but rendering it twice would mount two desktop sidebars. Let's just render AppSidebar ONCE at the top of the flex container, and inside AppSidebar, the mobile trigger will just flow as the first element of the container, which is NOT in the header. 
-                  To fix this: I'll render AppSidebar ONCE. The Mobile trigger is inside AppSidebar. I will modify AppSidebar to not render the mobile trigger, and instead render it directly here. Wait, AppSidebar has all the state for `isMobileOpen`. 
-                  Better approach: I'll put AppSidebar back where it was for mobile, and for desktop it will just be fixed. But that means it renders inside the `<header md:hidden>`. If it renders inside `<header md:hidden>`, the desktop `<aside>` (which has `hidden md:flex`) will BE HIDDEN because its parent is `md:hidden`!
-                  So I MUST render AppSidebar OUTSIDE the `md:hidden` header.
-                  Let's render it at the root of `div flex`. 
-                  Then the mobile trigger (which is inside AppSidebar and NOT `md:hidden`) will appear at the top-left of the screen? No, the mobile trigger is just a button. I need it inside the mobile header!
-                  I will just split AppSidebar into AppSidebar (desktop) and MobileSidebar, OR just pass a prop `mobileTriggerOnly`.
-                  Let's just use CSS. The Mobile Sheet trigger in AppSidebar can be styled to look like it's in the header, or I can position the mobile header contents correctly.
-                  Let's re-use the standard pattern: render AppSidebar outside. Make the Mobile trigger `fixed top-0 left-0 h-14 w-14 flex items-center justify-center z-50 md:hidden` inside AppSidebar!
-              */}
-            </div>
-            
-            <h1 className="flex-1 text-lg font-semibold ml-12">Pixelspot</h1>
+      <div className="flex flex-col min-h-screen w-full bg-background">
+        {/* Desktop top bar with notification bell and logo (Full Width) */}
+        <header className="hidden md:flex sticky top-0 z-[60] h-14 w-full items-center justify-between border-b bg-background px-6 shadow-sm">
+          <div className="flex items-center">
+            <img src={logo} alt="Pixelspot" className="h-7 w-auto mr-3" />
+            <span className="text-[10px] uppercase font-bold text-slate-500 mt-1">{portalName}</span>
+          </div>
+          <div className="flex items-center gap-2">
             <NotificationBell />
             <Button
               variant="ghost"
               size="icon"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              data-testid="button-refresh"
-              className="h-9 w-9"
+              className="h-8 w-8"
             >
-              <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
-          </header>
+          </div>
+        </header>
 
-          {/* Desktop top bar with notification bell */}
-          <header className="hidden md:flex sticky top-0 z-50 h-14 items-center justify-end border-b bg-background px-6 shadow-sm">
-            <div className="flex items-center gap-2">
+        <div className="flex flex-1 w-full relative">
+          {/* Render AppSidebar globally (handles both mobile sheet and desktop aside) */}
+          <AppSidebar />
+          
+          {/* Main layout context, offset by 16px (w-16 = 4rem) on desktop to clear the fixed sidebar */}
+          <div className="flex flex-1 flex-col min-w-0 md:pl-16">
+            {/* Mobile-only header with hamburger menu */}
+            <header className="sticky top-0 z-50 flex h-14 items-center gap-4 border-b bg-background px-4 md:hidden">
+              <div className="md:hidden">
+                {/* Mobile AppSidebar trigger is handled by AppSidebar */}
+              </div>
+              
+              <h1 className="flex-1 text-lg font-semibold ml-12">Pixelspot</h1>
               <NotificationBell />
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="h-8 w-8"
+                data-testid="button-refresh"
+                className="h-9 w-9"
               >
-                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
               </Button>
-            </div>
-          </header>
-          
-          {/* Main content area */}
+            </header>
+            
+            {/* Main content area */}
           <main className="flex-1 bg-background relative">
             <Suspense fallback={<PageLoader />}>
               <Router />
