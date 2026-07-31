@@ -18,7 +18,8 @@ setInterval(async () => {
 
 export async function storeOTP(identifier: string, type: 'email' | 'mobile', target: string): Promise<string> {
   const code = generateOTP();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const validityMinutes = type === 'mobile' ? 2 : 10;
+  const expiresAt = new Date(Date.now() + validityMinutes * 60 * 1000);
 
   // Upsert: delete existing OTPs for this identifier, then insert new one
   await db.delete(otps).where(eq(otps.identifier, identifier));
@@ -82,7 +83,7 @@ class ComBirdsSMSService {
       userId: process.env.COMBIRDS_USER_ID || '',
       password: process.env.COMBIRDS_PASSWORD || '',
       senderId: process.env.COMBIRDS_HEADER || 'EDUMRC',
-      otpTemplateId: '1707168926925165526', // Fixed DLT template ID
+      otpTemplateId: process.env.COMBIRDS_OTP_TEMPLATE_ID || '1707178064151587006',
       baseUrl: 'https://smsapi.edumarcsms.com/api/v1'
     };
     
@@ -126,7 +127,7 @@ class ComBirdsSMSService {
     }
 
     // Create OTP message (must match DLT template)
-    const otpMessage = `Your Pixelspot OTP for verification is: ${otp}. OTP is confidential, refrain from sharing it with anyone. By Edumarc Technologies`;
+    const otpMessage = `Dear Pixelspot user, your OTP for login is: ${otp}. This code is valid for 2 minutes. OTP is confidential. Do not share it with anyone. - EDUMARC`;
     
     const payload = {
       number: [cleanMobile],

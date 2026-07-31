@@ -420,18 +420,54 @@ export const LOCATION_TAGS = {
 // Flatten all location tags for easy access
 export const ALL_LOCATION_TAGS = Object.values(LOCATION_TAGS).flat();
 
-// Slug utilities
-export function toSlug(str: string): string {
-  if (!str) return '';
-  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+// ========== URL SLUG HELPERS (for SEO routes / sitemap) ==========
+/**
+ * Convert any human-readable name to a URL slug.
+ * - Lowercase
+ * - Strip diacritics (é → e)
+ * - Replace any non-alphanumeric run with a single hyphen
+ * - Trim leading/trailing hyphens
+ */
+export function toSlug(raw: string): string {
+  if (!raw) return "";
+  return raw
+    .toString()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // strip diacritics
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
+/**
+ * Resolve a city slug back to its canonical city name.
+ * Matches against ALL_INDIAN_CITIES + CITY_ALIASES. Returns null if no match.
+ */
 export function fromCitySlug(slug: string): string | null {
   if (!slug) return null;
-  return slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  const target = toSlug(slug);
+  // 1. Direct match against canonical city list
+  const direct = ALL_INDIAN_CITIES.find(c => toSlug(c) === target);
+  if (direct) return direct;
+  // 2. Match against alias keys (e.g., "bangalore" → "Bengaluru")
+  for (const [alias, canonical] of Object.entries(CITY_ALIASES)) {
+    if (toSlug(alias) === target) return canonical;
+  }
+  return null;
 }
 
+/**
+ * Resolve a venue slug back to its canonical venue category.
+ * Matches against VENUE_CATEGORIES + VENUE_CATEGORY_ALIASES. Returns null if no match.
+ */
 export function fromVenueSlug(slug: string): string | null {
   if (!slug) return null;
-  return slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  const target = toSlug(slug);
+  const direct = VENUE_CATEGORIES.find(v => toSlug(v) === target);
+  if (direct) return direct;
+  for (const [alias, canonical] of Object.entries(VENUE_CATEGORY_ALIASES)) {
+    if (toSlug(alias) === target) return canonical;
+  }
+  return null;
+}
 }

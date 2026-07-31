@@ -8,6 +8,8 @@ import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import type { Screen } from '@shared/schema';
+import ScreenCard from '@/components/ScreenCard';
+import HeroGlobe from '@/components/HeroGlobe';
 import { VENUE_CATEGORIES } from '@shared/constants';
 import { PublicFooter } from "@/components/PublicFooter";
 import logo from "@assets/pixelspot-logo.png";
@@ -913,6 +915,57 @@ export default function PublicHome() {
         </div>
       </header>
 
+<<<<<<< HEAD
+      {/* Hero Section */}
+      <section className="relative pt-20 pb-24 min-h-[85vh] flex items-center justify-center overflow-hidden bg-background">
+        {/* Background Video Layer */}
+        <div className="absolute inset-0 z-0 opacity-15 pointer-events-none overflow-hidden">
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-full h-full object-cover"
+          >
+            <source src="https://assets.mixkit.co/videos/preview/mixkit-abstract-digital-technology-background-43093-large.mp4" type="video/mp4" />
+          </video>
+          <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/90 to-background" />
+        </div>
+
+        {/* 3D Holographic Particle Globe Layer */}
+        <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center overflow-hidden select-none">
+          <div className="w-[90vw] h-[90vw] md:w-[80vw] md:h-[80vw] lg:w-[70vw] lg:h-[70vw] max-w-[850px] aspect-square flex items-center justify-center opacity-90">
+            <HeroGlobe />
+          </div>
+        </div>
+
+        <div className="container mx-auto px-4 relative z-10 text-center">
+          <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom duration-1000">
+            <div className="space-y-6">
+              <Badge variant="outline" className="px-4 py-1.5 border-primary/30 text-primary font-medium bg-primary/5 mx-auto">
+                Digital Outdoor Advertising Platform
+              </Badge>
+              <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black tracking-tighter text-foreground leading-[1.1]">
+                Run Ads Across <br />
+                <span className="text-primary italic">Real-World</span> Screens
+              </h1>
+              <p className="text-xl sm:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+                Launch outdoor ad campaigns across digital screens in your city — all from one platform. Google Ads, but for the physical world.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-6 justify-center">
+              <Link href="/register?role=advertiser">
+                <Button size="lg" className="h-16 px-10 text-xl font-bold shadow-2xl shadow-primary/20 hover:scale-[1.02] transition-transform">
+                  Start Campaign
+                </Button>
+              </Link>
+              <Button 
+                size="lg" 
+                variant="outline" 
+                className="h-16 px-10 text-xl font-bold border-2"
+                onClick={scrollToScreens}
+=======
       {/* ─────────────── Secondary nav: Venue filter chips ─────────────── */}
       <div className="border-b border-gray-100 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -929,6 +982,7 @@ export default function PublicHome() {
                     ? 'bg-gray-900 text-white border-gray-900'
                     : 'bg-white text-gray-700 border-gray-200 hover:border-gray-900 hover:bg-gray-900 hover:text-white'
                 }`}
+>>>>>>> 640b4e0be806b957bcb05d3434b742a2df9d475f
               >
                 {chip.label}
               </button>
