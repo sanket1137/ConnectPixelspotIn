@@ -452,6 +452,7 @@ function AuthenticatedLayout() {
             </Suspense>
           </main>
         </div>
+        </div>
       </div>
     </SidebarProvider>
   );
