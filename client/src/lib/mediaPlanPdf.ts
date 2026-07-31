@@ -124,7 +124,7 @@ export function printMediaPlan(data: MediaPlanPdfData) {
               <div class="spec-value">${s.durationPerSlot || 10} Sec</div>
               <div class="spec-sub">Ad Slot Duration</div>
               
-              <div class="spec-value mt-2">${s.loopDuration ? \`\${s.loopDuration} Sec\` : 'Standard'}</div>
+              <div class="spec-value mt-2">${s.loopDuration ? `${s.loopDuration} Sec` : 'Standard'}</div>
               <div class="spec-sub">Loop Time</div>
             </div>
           </div>
