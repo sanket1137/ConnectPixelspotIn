@@ -20,7 +20,6 @@ import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/contexts/AuthContext";
 import { DiscoverAuthModal } from "@/components/DiscoverAuthModal";
 import useEmblaCarousel from "embla-carousel-react";
-import { BottomSheet } from "@/components/BottomSheet";
 
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
 
@@ -803,65 +802,63 @@ export default function DiscoverScreens() {
         )}
       </div>
 
-      {/* Mobile Map Bottom Sheet */}
-      {isMobile && (
-        <BottomSheet 
-          isOpen={isBottomSheetOpen} 
-          onClose={() => { setIsBottomSheetOpen(false); setHoveredScreenId(null); }}
-          snapPoints={['35%', '90%']}
-          initialSnap={0}
-          onSnapChange={setBottomSheetSnap}
-          hideCloseButton={bottomSheetSnap === 0}
-        >
-          {bottomSheetSnap === 0 ? (
-            <div className="w-full pt-1">
-              <div className="overflow-hidden" ref={emblaRef}>
-                <div className="flex touch-pan-y">
-                  {mapScreens.map((screen) => (
-                    <div className="flex-[0_0_85%] min-w-0 pl-4 first:pl-6 last:pr-6" key={screen.id}>
-                      <div className="bg-white rounded-xl shadow-lg border border-slate-100 h-full p-3">
-                        <ScreenListCard screen={screen} />
+      {/* Mobile Map Bottom Carousel */}
+      {isMobile && isBottomSheetOpen && (
+        <div className="absolute bottom-4 left-0 right-0 z-40">
+          <div className="flex justify-end mb-2 pr-4">
+             <Button 
+               variant="secondary" 
+               size="icon" 
+               className="h-8 w-8 rounded-full shadow-lg bg-white hover:bg-slate-100 border border-slate-200" 
+               onClick={() => { setIsBottomSheetOpen(false); setHoveredScreenId(null); }}
+             >
+               <X className="h-4 w-4 text-slate-700" />
+             </Button>
+          </div>
+          <div className="overflow-hidden" ref={emblaRef}>
+            <div className="flex touch-pan-y">
+              {mapScreens.map((screen) => (
+                <div className="flex-[0_0_90%] min-w-0 pl-4 first:pl-6 last:pr-6" key={screen.id}>
+                  <div 
+                    className="bg-white rounded-2xl shadow-xl border border-slate-200 h-32 p-2.5 flex gap-3 cursor-pointer"
+                    onClick={() => setDetailModalScreen(screen)}
+                  >
+                    {/* Compact Image */}
+                    <div className="relative w-24 h-full shrink-0 rounded-xl overflow-hidden bg-slate-200">
+                      <img 
+                        src={screen.screenImages?.[0] || screen.images?.[0] || 'https://images.unsplash.com/photo-1542204165-65bf26472b9b?auto=format&fit=crop&q=80&w=600'} 
+                        alt={screen.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    {/* Compact Details */}
+                    <div className="flex flex-col flex-1 justify-center py-1">
+                      <h3 className="font-bold text-slate-900 text-sm line-clamp-1">{screen.venueName}, {screen.city}</h3>
+                      <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{screen.name} • {screen.category}</p>
+                      <div className="flex items-center text-xs font-medium text-slate-500 mt-1.5">
+                        <Users className="w-3 h-3 mr-1" />
+                        {((screen.avgDailyFootfall || 0) / 1000).toFixed(1)}k daily
+                      </div>
+                      <div className="mt-auto pt-1">
+                        <span className="font-bold text-slate-900">₹{(screen.pricePerDay || 0).toLocaleString()}</span>
+                        <span className="text-slate-500 text-[10px]"> / day</span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="w-full h-full px-4 pt-2">
-              {mapScreens[carouselIndex] && (
-                <div className="h-full overflow-y-auto no-scrollbar pb-24">
-                  <h2 className="text-xl font-bold mb-4">{mapScreens[carouselIndex].name}</h2>
-                  <ScreenListCard screen={mapScreens[carouselIndex]} />
-                  <div className="mt-6 space-y-4 text-sm text-slate-700">
-                    <p><strong>Category:</strong> {mapScreens[carouselIndex].category}</p>
-                    <p><strong>Footfall:</strong> {mapScreens[carouselIndex].avgDailyFootfall} / day</p>
-                    <p><strong>Dimensions:</strong> {mapScreens[carouselIndex].dimensions}</p>
-                    <p><strong>Resolution:</strong> {mapScreens[carouselIndex].resolution}</p>
-                    
-                    <Button 
-                      className="w-full mt-6"
-                      onClick={() => toggleScreenSelection(mapScreens[carouselIndex])}
-                    >
-                      {selectedScreenIds.has(mapScreens[carouselIndex].id) ? "Remove" : "Add to Campaign"}
-                    </Button>
                   </div>
                 </div>
-              )}
+              ))}
             </div>
-          )}
-        </BottomSheet>
+          </div>
+        </div>
       )}
 
-      {!isMobile && (
-        <ScreenDetailsModal 
-          isOpen={!!detailModalScreen}
-          onClose={() => setDetailModalScreen(null)}
-          screen={detailModalScreen}
-          onAdd={toggleScreenSelection}
-          isAdded={detailModalScreen ? selectedScreenIds.has(detailModalScreen.id) : false}
-        />
-      )}
+      <ScreenDetailsModal 
+        isOpen={!!detailModalScreen}
+        onClose={() => setDetailModalScreen(null)}
+        screen={detailModalScreen}
+        onAdd={toggleScreenSelection}
+        isAdded={detailModalScreen ? selectedScreenIds.has(detailModalScreen.id) : false}
+      />
 
       {/* Mobile Search Modal */}
       {isMobile && (
