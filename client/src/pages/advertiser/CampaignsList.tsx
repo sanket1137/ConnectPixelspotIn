@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,9 +25,20 @@ export default function CampaignsList() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: campaigns = [], isLoading } = useQuery<CampaignWithStats[]>({
-    queryKey: ["/api/advertiser/campaigns"],
+  
+  const [page, setPage] = useState(1);
+  const limit = 10;
+
+  const { data: response, isLoading } = useQuery<{ data: CampaignWithStats[]; totalPages: number; total: number } | CampaignWithStats[]>({
+    queryKey: ["/api/advertiser/campaigns", page, limit],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/advertiser/campaigns?page=${page}&limit=${limit}`);
+      return res.json();
+    }
   });
+
+  const campaigns = Array.isArray(response) ? response : (response?.data || []);
+  const totalPages = Array.isArray(response) ? 1 : (response?.totalPages || 1);
 
   const resubmitMutation = useMutation({
     mutationFn: async (campaignId: string) => {
@@ -243,6 +255,31 @@ export default function CampaignsList() {
               </CardContent>
             </Card>
           ))}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-8">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Previous
+              </Button>
+              <div className="text-sm font-medium text-muted-foreground px-4">
+                Page {page} of {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

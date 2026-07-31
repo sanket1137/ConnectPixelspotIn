@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { Screen } from "@shared/schema";
 import { VENUE_CATEGORIES } from "@shared/constants";
+import { getScreenCountDisplay, calculateScreenPricePerDay } from "@shared/utils";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useLocationAutocomplete } from "@/hooks/use-location-autocomplete";
@@ -485,7 +486,8 @@ export default function DiscoverScreens() {
     const isHovered = hoveredScreenId === screen.id;
     const isSelected = selectedScreenIds.has(screen.id);
     
-    const price = screen.pricePerDay || 0;
+    const basePrice = calculateScreenPricePerDay(screen);
+    const price = basePrice || 0;
     let priceDisplay = `₹${price}`;
     if (price >= 1000) {
       priceDisplay = `₹${(price / 1000).toFixed(1).replace('.0', '')}k`;
@@ -578,13 +580,20 @@ export default function DiscoverScreens() {
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-500 line-clamp-1">{screen.name} • {screen.category}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-slate-500 line-clamp-1">{screen.name} • {screen.category}</p>
+            {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+              <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-primary/10 text-primary">
+                {getScreenCountDisplay(screen)}
+              </Badge>
+            )}
+          </div>
           <div className="flex items-center text-sm text-slate-500 mt-0.5">
             <Users className="w-3 h-3 mr-1" />
             {((screen.avgDailyFootfall || 0) / 1000).toFixed(1)}k daily footfall
           </div>
           <div className="mt-1">
-            <span className="font-bold text-slate-900">₹{(screen.pricePerDay || 0).toLocaleString()}</span>
+            <span className="font-bold text-slate-900">₹{calculateScreenPricePerDay(screen).toLocaleString()}</span>
             <span className="text-slate-500 text-sm"> / day</span>
           </div>
         </div>
@@ -708,7 +717,7 @@ export default function DiscoverScreens() {
                         placeholder="All Venues"
                         selected={filters.venueCategories}
                         onChange={(v) => setFilters({ ...filters, venueCategories: v })}
-                        options={VENUE_CATEGORIES.map(c => ({ label: c, value: c }))}
+                        options={(advancedFilters?.venueTypes || VENUE_CATEGORIES).map(c => ({ label: c, value: c }))}
                       />
                     </div>
                     <div className="space-y-2">
@@ -928,7 +937,7 @@ export default function DiscoverScreens() {
         </div>
 
         {/* Mobile View Toggle */}
-        {isMobile && !isBottomSheetOpen && (
+        {isMobile && (
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300">
             <div className="bg-slate-900 text-white rounded-full shadow-2xl p-1 flex items-center">
               <Button 
@@ -955,18 +964,8 @@ export default function DiscoverScreens() {
       </div>
 
       {/* Mobile Map Bottom Carousel */}
-      {isMobile && isBottomSheetOpen && (
-        <div className="absolute bottom-4 left-0 right-0 z-40">
-          <div className="flex justify-end mb-2 pr-4">
-             <Button 
-               variant="secondary" 
-               size="icon" 
-               className="h-8 w-8 rounded-full shadow-lg bg-white hover:bg-slate-100 border border-slate-200" 
-               onClick={() => { setIsBottomSheetOpen(false); setHoveredScreenId(null); }}
-             >
-               <X className="h-4 w-4 text-slate-700" />
-             </Button>
-          </div>
+      {isMobile && viewMode === 'mobile_map' && mapScreens.length > 0 && (
+        <div className="absolute bottom-20 left-0 right-0 z-40 pb-4">
           <div className="overflow-hidden" ref={emblaRef}>
             <div className="flex touch-pan-y">
               {mapScreens.map((screen) => (
@@ -996,7 +995,7 @@ export default function DiscoverScreens() {
                         {((screen.avgDailyFootfall || 0) / 1000).toFixed(1)}k daily
                       </div>
                       <div className="mt-auto pt-1">
-                        <span className="font-bold text-slate-900">₹{(screen.pricePerDay || 0).toLocaleString()}</span>
+                        <span className="font-bold text-slate-900">₹{calculateScreenPricePerDay(screen).toLocaleString()}</span>
                         <span className="text-slate-500 text-[10px]"> / day</span>
                       </div>
                     </div>

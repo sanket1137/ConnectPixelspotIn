@@ -12,6 +12,8 @@ import Step1_CampaignName from "./steps/Step1_CampaignName";
 import Step2_LocationSelect from "./steps/Step2_LocationSelect";
 import Step3_ScreenDiscovery from "./steps/Step3_ScreenDiscovery";
 import Step4_Duration from "./steps/Step4_Duration";
+import Step8_Checkout from "./steps/Step8_Checkout";
+import { calculateScreenPricePerDay, calculateTotalPhysicalScreens } from "@shared/utils";
 import Step5_MinBookingValidation from "./steps/Step5_MinBookingValidation";
 import Step6_UploadCreative from "./steps/Step6_UploadCreative";
 import Step7_ReviewCampaign from "./steps/Step7_ReviewCampaign";
@@ -268,7 +270,7 @@ export default function ExpressCampaignBuilder() {
         .filter((s) => state.selectedScreenIds.includes(s.id))
         .reduce(
           (sum, s) =>
-            sum + s.pricePerDay * (s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1) * state.campaignDays,
+            sum + calculateScreenPricePerDay(s) * state.campaignDays,
           0
         );
 
@@ -299,8 +301,7 @@ export default function ExpressCampaignBuilder() {
       const bookingPromises = state.screensData
         .filter((s) => state.selectedScreenIds.includes(s.id))
         .map((screen) => {
-          const multiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-          const price = screen.pricePerDay * multiplier * state.campaignDays;
+          const price = calculateScreenPricePerDay(screen) * state.campaignDays;
           return apiRequest("POST", "/api/advertiser/bookings", {
             screenId: screen.id,
             campaignId: campaign.id,
@@ -328,80 +329,58 @@ export default function ExpressCampaignBuilder() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Top bar */}
+      {/* Top bar (Compressed) */}
       <div className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b">
-        <div className="max-w-4xl mx-auto px-6 py-3 flex items-center gap-4">
+        <div className="w-full px-4 py-2 flex items-center gap-4">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setLocation("/advertiser/campaigns/new")}
-            className="gap-1.5 shrink-0"
+            className="gap-1.5 shrink-0 h-8"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
-          <div className="flex-1">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-amber-500" />
-                <span className="text-sm font-semibold">Express Campaign</span>
-                {state.campaignName && (
-                  <span className="text-xs text-muted-foreground">— {state.campaignName}</span>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                {/* Draft save indicator */}
-                {draftSaveStatus === "saving" && (
-                  <span className="text-xs text-muted-foreground">Saving…</span>
-                )}
-                {draftSaveStatus === "saved" && (
-                  <span className="text-xs text-emerald-600 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    Draft saved
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground">Step {step} of {STEPS.length}</span>
-              </div>
-            </div>
-            <Progress value={progress} className="h-1.5" />
+          
+          <div className="hidden sm:flex items-center gap-2 border-r pr-4">
+            <Zap className="h-4 w-4 text-amber-500" />
+            <span className="text-sm font-semibold whitespace-nowrap">Express Campaign</span>
+            {state.campaignName && (
+              <span className="text-xs text-muted-foreground truncate max-w-[200px]">— {state.campaignName}</span>
+            )}
           </div>
-        </div>
-
-        {/* Step labels */}
-        <div className="max-w-4xl mx-auto px-6 pb-2 flex gap-1 overflow-x-auto scrollbar-none">
-          {STEPS.map((s) => (
-            <div
-              key={s.id}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                s.id === step
-                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                  : s.id < step
-                  ? "text-muted-foreground line-through"
-                  : "text-muted-foreground/50"
-              }`}
-            >
-              {s.id < step ? "✓" : s.id}. {s.label}
+          
+          <div className="flex-1 flex flex-col justify-center max-w-xl mx-auto">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Step {step} of {STEPS.length}: {STEPS.find(s => s.id === step)?.label}
+              </span>
+              <div className="flex items-center gap-2">
+                {draftSaveStatus === "saving" && <span className="text-[10px] text-muted-foreground">Saving…</span>}
+                {draftSaveStatus === "saved" && <span className="text-[10px] text-emerald-600">Saved</span>}
+              </div>
             </div>
-          ))}
+            <Progress value={progress} className="h-1" />
+          </div>
         </div>
       </div>
 
       {/* Resume draft banner */}
       {showResumeBanner && (
         <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900">
-          <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+          <div className="w-full px-4 py-1.5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <FileEdit className="h-4 w-4 text-amber-600" />
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              <FileEdit className="h-3 w-3 text-amber-600" />
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
                 You have an unfinished campaign draft
               </p>
             </div>
             <div className="flex gap-2 shrink-0">
-              <Button size="sm" variant="outline" onClick={handleDiscardDraft} className="gap-1.5 text-xs h-7">
+              <Button size="sm" variant="outline" onClick={handleDiscardDraft} className="gap-1 text-[10px] h-6 px-2">
                 <Trash2 className="h-3 w-3" />
                 Discard
               </Button>
-              <Button size="sm" onClick={handleResumeDraft} className="bg-amber-500 hover:bg-amber-600 text-white gap-1.5 text-xs h-7">
+              <Button size="sm" onClick={handleResumeDraft} className="bg-amber-500 hover:bg-amber-600 text-white gap-1 text-[10px] h-6 px-2">
                 Resume Draft
               </Button>
             </div>
@@ -517,35 +496,59 @@ export default function ExpressCampaignBuilder() {
         </div>
       )}
 
-      <div className="max-w-4xl mx-auto px-6 pb-8">
+      <div className="max-w-4xl mx-auto px-6 pb-20">
         {/* Validation error */}
         {errors.validation && (
           <p className="mt-4 text-sm text-destructive text-center">{errors.validation}</p>
         )}
-
-        {/* Navigation */}
-        {step < 7 && (
-          <div className="flex justify-between mt-6">
-            <Button
-              variant="outline"
-              onClick={handleBack}
-              disabled={step === 1}
-              data-testid="button-previous"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Button>
-            <Button
-              onClick={handleNext}
-              className="bg-amber-500 hover:bg-amber-600 text-white"
-              data-testid="button-next"
-            >
-              {step === 6 ? "Review Campaign" : "Continue"}
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-        )}
       </div>
+
+      {/* Unified Floating Footer */}
+      {step < 7 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-full flex justify-center px-4">
+          <div className="bg-white/95 backdrop-blur-md border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-full p-1.5 flex items-center pointer-events-auto transition-all">
+            
+            {/* Optional Left Side (Summary) */}
+            {step === 3 && state.selectedScreenIds.length > 0 && (
+              <div className="pl-5 pr-4 border-r border-slate-200 flex items-center gap-2">
+                 <span className="text-sm font-semibold text-slate-800">
+                   <span className="text-amber-600">{calculateTotalPhysicalScreens(state.screensData.filter(s => state.selectedScreenIds.includes(s.id)))}</span>
+                   {" "}Screens Selected
+                 </span>
+                 <span className="text-slate-400 text-sm">•</span>
+                 <span className="text-sm font-medium text-slate-600">
+                   ₹{state.screensData.filter(s => state.selectedScreenIds.includes(s.id)).reduce((sum, s) => sum + calculateScreenPricePerDay(s), 0).toLocaleString()}/day
+                 </span>
+              </div>
+            )}
+            
+            {/* Actions */}
+            <div className="flex items-center gap-1.5 px-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBack}
+                disabled={step === 1}
+                data-testid="button-previous"
+                className="h-10 rounded-full px-4 text-slate-600 hover:text-slate-900"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleNext}
+                className="h-10 rounded-full px-6 bg-amber-500 hover:bg-amber-600 text-white shadow-md hover:shadow-lg transition-all"
+                data-testid="button-next"
+              >
+                {step === 6 ? "Review Campaign" : "Continue"}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+            
+          </div>
+        </div>
+      )}
     </div>
   );
 }

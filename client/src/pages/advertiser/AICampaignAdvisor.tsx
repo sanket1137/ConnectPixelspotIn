@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Sparkles, Send, User, Bot, MapPin, DollarSign, Calendar, ArrowRight, Globe, Zap, Eye, Monitor, CheckSquare, XSquare, Map as MapIcon, RefreshCw, Building } from "lucide-react";
+import { getScreenCountDisplay, calculateScreenPricePerDay } from "@shared/utils";
 import { useLocation } from "wouter";
 import { auth } from "@/lib/firebase";
 
@@ -346,7 +347,7 @@ export default function AICampaignAdvisor() {
                                     <div className="flex items-center justify-between gap-4">
                                       <div className="flex items-center gap-1">
                                         <DollarSign className="h-4 w-4 text-primary" />
-                                        <span className="font-bold text-lg text-primary">₹{screen.pricePerDay.toLocaleString()}</span>
+                                        <span className="font-bold text-lg text-primary">₹{calculateScreenPricePerDay(screen).toLocaleString()}</span>
                                         <span className="text-xs text-muted-foreground">/day</span>
                                       </div>
                                       <div className="flex items-center gap-1 text-sm">
@@ -547,7 +548,7 @@ export default function AICampaignAdvisor() {
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">Price per Day</p>
                   <p className="font-bold text-2xl text-primary flex items-center gap-1">
                     <DollarSign className="h-5 w-5" />
-                    ₹{detailsDialogScreen.pricePerDay.toLocaleString()}
+                    ₹{calculateScreenPricePerDay(detailsDialogScreen).toLocaleString()}
                   </p>
                 </div>
 

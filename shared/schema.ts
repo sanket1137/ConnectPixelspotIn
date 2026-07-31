@@ -114,6 +114,8 @@ export const screens = pgTable("screens", {
   isMultiScreen: boolean("is_multi_screen").notNull().default(false),
   numberOfScreens: integer("number_of_screens"), // Required if isMultiScreen is true
   pricePerDay: integer("price_per_day").notNull(),
+  bundlePricePerDay: integer("bundle_price_per_day"), // Price for the entire package if bulk booked
+  bulkBookingMandatory: boolean("bulk_booking_mandatory").default(false),
   minBookingDays: integer("min_booking_days").notNull().default(1),
   loopDuration: integer("loop_duration"), // Total loop cycle in seconds (e.g., 120s). brandsPerLoop = loopDuration / durationPerSlot
   maxBrandsPerLoop: integer("max_brands_per_loop"), // Auto-calculated: loopDuration / durationPerSlot

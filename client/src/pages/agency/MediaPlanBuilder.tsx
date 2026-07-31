@@ -792,7 +792,15 @@ export default function MediaPlanBuilder() {
 
                           {/* Screen name + tags */}
                           <div className="md:col-span-4">
-                            <p className="font-medium text-sm leading-tight">{s.name || item.screenId}</p>
+                            <p className="font-medium text-sm leading-tight">
+                              {s.name || item.screenId}
+                              {s.numberOfScreens > 1 && (
+                                <span className="ml-1 text-xs text-muted-foreground font-normal">({s.numberOfScreens} Screens)</span>
+                              )}
+                            </p>
+                            {s.numberOfScreens > 1 && (
+                              <p className="text-[10px] text-amber-600 mt-0.5 font-medium">* Mandatory to book all screens</p>
+                            )}
                             <div className="flex flex-wrap gap-1 mt-1">
                               {s.venueCategory && (
                                 <Badge variant="outline" className="text-[10px] px-1 py-0">{s.venueCategory}</Badge>
@@ -827,9 +835,20 @@ export default function MediaPlanBuilder() {
 
                           {/* Net per day (internal reference) */}
                           <div className="md:col-span-2 text-right">
-                            <p className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                              {fmt(item.pricePerDay)}
-                            </p>
+                            {s.numberOfScreens > 1 ? (
+                              <div className="flex flex-col items-end">
+                                <p className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                  {fmt(item.pricePerDay / s.numberOfScreens)} / screen
+                                </p>
+                                <p className="text-xs font-medium text-slate-700 whitespace-nowrap mt-0.5">
+                                  {fmt(item.pricePerDay)} total
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                                {fmt(item.pricePerDay)}
+                              </p>
+                            )}
                           </div>
 
                           {/* Client-facing total + delete */}

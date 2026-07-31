@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Map, AdvancedMarker, InfoWindow, useMap } from "@vis.gl/react-google-maps";
 import { Monitor, MapPin, Users, Clock, Check, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
 import type { Screen } from "@shared/schema";
+import { calculateTotalPhysicalScreens, calculateScreenPricePerDay } from "@shared/utils";
 
 interface MatchReason {
   screenId: string;
@@ -98,7 +99,10 @@ export default function AIStep3_ScreenResults({
           <h2 className="text-2xl font-bold">AI Recommendations</h2>
           <p className="text-sm text-muted-foreground">
             <Sparkles className="inline h-3.5 w-3.5 text-violet-500 mr-1" />
-            {screens.length} screen{screens.length !== 1 ? "s" : ""} matched your criteria
+            {(() => {
+              const total = calculateTotalPhysicalScreens(screens);
+              return `${total} screen${total !== 1 ? "s" : ""} matched your criteria`;
+            })()}
           </p>
         </div>
         <div className="flex gap-2">
@@ -213,7 +217,7 @@ export default function AIStep3_ScreenResults({
                         <div className="text-right shrink-0">
                           <p className="text-[10px] text-muted-foreground">per day</p>
                           <p className="font-bold text-sm text-amber-600">
-                            ₹{screen.pricePerDay.toLocaleString()}
+                            ₹{calculateScreenPricePerDay(screen).toLocaleString()}
                           </p>
                         </div>
                       </div>
@@ -283,7 +287,7 @@ export default function AIStep3_ScreenResults({
                     {(reasonsMap[infoWindowScreen.id] || []).slice(0, 2).map((r) => (
                       <p key={r} className="text-xs text-violet-600">✦ {r}</p>
                     ))}
-                    <p className="text-sm font-semibold text-amber-600 mt-1">₹{infoWindowScreen.pricePerDay.toLocaleString()}/day</p>
+                    <p className="text-sm font-semibold text-amber-600 mt-1">₹{calculateScreenPricePerDay(infoWindowScreen).toLocaleString()}/day</p>
                     <button
                       onClick={() => { onToggleScreen(infoWindowScreen.id); setInfoWindowScreen(null); }}
                       className={`mt-2 w-full text-xs px-3 py-1.5 rounded font-medium ${
@@ -305,8 +309,15 @@ export default function AIStep3_ScreenResults({
         <div className="sticky bottom-0 bg-background border-t pt-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">
-              <span className="text-amber-600 font-bold">{selectedScreenIds.length}</span>{" "}
-              screen{selectedScreenIds.length !== 1 ? "s" : ""} selected
+              {(() => {
+                const total = calculateTotalPhysicalScreens(screens.filter((s) => selectedScreenIds.includes(s.id)));
+                return (
+                  <>
+                    <span className="text-amber-600 font-bold">{total}</span>{" "}
+                    screen{total !== 1 ? "s" : ""} selected
+                  </>
+                );
+              })()}
             </p>
             <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
               ₹{screens.filter((s) => selectedScreenIds.includes(s.id)).reduce((sum, s) => sum + s.pricePerDay, 0).toLocaleString()}/day

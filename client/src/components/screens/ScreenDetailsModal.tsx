@@ -5,6 +5,7 @@ import { Screen } from '@shared/schema';
 import { MapPin, Users, Monitor, Clock, PlayCircle, Eye, CalendarDays, ExternalLink, X, PlusCircle, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { getScreenCountDisplay } from "@shared/utils";
 
 interface ScreenDetailsModalProps {
   isOpen: boolean;
@@ -52,7 +53,11 @@ export function ScreenDetailsModal({
             <img 
               src={getPrimaryImage(screen)} 
               alt={screen.name} 
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-cover bg-muted"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 24 24' fill='none' stroke='%23cbd5e1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='18' height='18' x='3' y='3' rx='2' ry='2'/%3E%3Ccircle cx='9' cy='9' r='2'/%3E%3Cpath d='m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21'/%3E%3C/svg%3E";
+              }}
             />
             
             {/* Screen Type Strip at top-left */}
@@ -131,11 +136,11 @@ export function ScreenDetailsModal({
                   <div><span className="text-slate-500">Format:</span> <span className="font-medium">{screen.displayFormat}</span></div>
                   <div><span className="text-slate-500">Environment:</span> <span className="font-medium">{screen.environmentType}</span></div>
                   <div><span className="text-slate-500">Traffic:</span> <span className="font-medium">{screen.trafficType}</span></div>
-                  {screen.isMultiScreen && (
+                  {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
                     <div className="col-span-2 pt-2">
                       <div className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
                         <Monitor className="h-3.5 w-3.5 mr-1.5" />
-                        Network of {screen.numberOfScreens || 2} Screens
+                        Network of {getScreenCountDisplay(screen)}
                       </div>
                     </div>
                   )}

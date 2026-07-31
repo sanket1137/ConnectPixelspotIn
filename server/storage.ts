@@ -253,7 +253,7 @@ export interface IStorage {
   }>;
 
   // Advertiser: campaigns with booking stats via JOIN (replaces N+1)
-  getCampaignsWithBookingStats(advertiserId: string): Promise<any[]>;
+  getCampaignsWithBookingStats(advertiserId: string, page?: number, limit?: number): Promise<{ data: any[]; total: number; page: number; limit: number; totalPages: number }>;
 
   // Advertiser: bookings with screen/campaign details via JOIN (replaces N+1)
   getAdvertiserBookingsEnriched(advertiserId: string): Promise<any[]>;
@@ -1589,7 +1589,14 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getCampaignsWithBookingStats(advertiserId: string) {
+  async getCampaignsWithBookingStats(advertiserId: string, page: number = 1, limit: number = 10) {
+    const offset = (page - 1) * limit;
+
+    const countResult = await db.execute(drizzleSql`
+      SELECT COUNT(*) as total FROM campaigns WHERE advertiser_id = ${advertiserId}
+    `);
+    const total = Number(countResult.rows[0].total);
+
     const result = await db.execute(drizzleSql`
       SELECT c.*,
         COALESCE(bs.total, 0)::int AS booking_total,
@@ -1607,8 +1614,10 @@ export class DatabaseStorage implements IStorage {
       ) bs ON true
       WHERE c.advertiser_id = ${advertiserId}
       ORDER BY c.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
     `);
-    return (result.rows as any[]).map(r => {
+    
+    const data = (result.rows as any[]).map(r => {
       const mapped = mapRowToCamel<any>(r);
       return {
         ...mapped,
@@ -1620,6 +1629,14 @@ export class DatabaseStorage implements IStorage {
         },
       };
     });
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1
+    };
   }
 
   async getAdvertiserBookingsEnriched(advertiserId: string) {

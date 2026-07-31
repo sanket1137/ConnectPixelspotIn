@@ -7,6 +7,7 @@ import {
   MapPin, Calendar, Monitor, IndianRupee, Eye, Loader2, CheckCircle2
 } from "lucide-react";
 import type { Screen } from "@shared/schema";
+import { getScreenCountDisplay, calculateTotalPhysicalScreens, calculateScreenPricePerDay } from "@shared/utils";
 
 import { LocationItem } from "@/components/map/MultiLocationSearch";
 
@@ -41,7 +42,7 @@ export default function Step7_ReviewCampaign({
   const selectedScreens = screensData.filter((s) => selectedScreenIds.includes(s.id));
 
   const totalCostPerDay = selectedScreens.reduce(
-    (sum, s) => sum + s.pricePerDay * (s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1),
+    (sum, s) => sum + calculateScreenPricePerDay(s),
     0
   );
   const totalCost = totalCostPerDay * campaignDays;
@@ -87,8 +88,8 @@ export default function Step7_ReviewCampaign({
         </div>
         <h2 className="text-2xl font-bold">Campaign Created!</h2>
         <p className="text-muted-foreground max-w-sm">
-          Your campaign <strong>"{campaignName}"</strong> has been created with {selectedScreenIds.length} booking
-          request{selectedScreenIds.length !== 1 ? "s" : ""}. Redirecting to your campaigns…
+          Your campaign <strong>"{campaignName}"</strong> has been created with {calculateTotalPhysicalScreens(selectedScreens)} booking
+          request{calculateTotalPhysicalScreens(selectedScreens) !== 1 ? "s" : ""}. Redirecting to your campaigns…
         </p>
       </div>
     );
@@ -131,7 +132,7 @@ export default function Step7_ReviewCampaign({
           <span className="text-sm text-muted-foreground flex items-center gap-1.5">
             <Monitor className="h-3.5 w-3.5" /> Screens
           </span>
-          <span className="font-semibold text-sm">{selectedScreenIds.length} selected</span>
+          <span className="font-semibold text-sm">{calculateTotalPhysicalScreens(selectedScreens)} selected</span>
         </div>
         {reach && (
           <div className="flex items-center justify-between p-4">
@@ -158,8 +159,7 @@ export default function Step7_ReviewCampaign({
         </p>
         <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
           {selectedScreens.map((screen) => {
-            const multiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-            const cost = screen.pricePerDay * multiplier * campaignDays;
+            const cost = calculateScreenPricePerDay(screen) * campaignDays;
             return (
               <div key={screen.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                 <div className="w-12 h-12 rounded-md overflow-hidden shrink-0 border bg-muted">
@@ -176,7 +176,14 @@ export default function Step7_ReviewCampaign({
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{screen.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium truncate">{screen.name}</p>
+                    {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+                      <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-primary/10 text-primary">
+                        {getScreenCountDisplay(screen)}
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground truncate">{screen.city}</p>
                 </div>
                 <p className="text-sm font-semibold text-amber-600">₹{cost.toLocaleString()}</p>

@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, ArrowRight, Bot, Sparkles } from "lucide-react";
+import { calculateScreenPricePerDay } from "@shared/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Screen } from "@shared/schema";
@@ -146,7 +147,7 @@ export default function AICampaignBuilder() {
 
       const totalCost = state.screensData
         .filter((s) => state.selectedScreenIds.includes(s.id))
-        .reduce((sum, s) => sum + s.pricePerDay * (s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1) * state.campaignDays, 0);
+        .reduce((sum, s) => sum + calculateScreenPricePerDay(s) * state.campaignDays, 0);
 
       const campRes = await apiRequest("POST", "/api/advertiser/campaigns", {
         name: state.campaignName,
@@ -169,7 +170,7 @@ export default function AICampaignBuilder() {
         .filter((s) => state.selectedScreenIds.includes(s.id))
         .map((screen) => apiRequest("POST", "/api/advertiser/bookings", {
           screenId: screen.id, campaignId: campaign.id,
-          price: screen.pricePerDay * (screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1) * state.campaignDays,
+          price: calculateScreenPricePerDay(screen) * state.campaignDays,
           startDate: startDate.toISOString(), endDate: endDate.toISOString(),
         }))
       );

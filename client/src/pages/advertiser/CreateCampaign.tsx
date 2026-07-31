@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { VENUE_CATEGORIES } from "@shared/constants";
 import { ArrowLeft, Target, MapPin, Filter as FilterIcon, Check, Map as MapIcon, Image as ImageIcon, X, Trash2, Search, SlidersHorizontal, ChevronRight, ChevronLeft, AlertTriangle, ArrowRight, LayoutGrid, Users } from "lucide-react";
+import { calculateScreenCampaignPrice, getScreenCountDisplay, calculateTotalPhysicalScreens, calculateScreenPricePerDay } from "@shared/utils";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import type { Screen } from "@shared/schema";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import ScreenCard from "@/components/ScreenCard";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -69,6 +71,16 @@ function MapPanner({ target }: { target: { lat: number; lng: number; zoom?: numb
   return null;
 }
 
+/** Fits map to country/state bounds — same behavior as Discover Screens */
+function MapBoundsFitter({ bounds }: { bounds: google.maps.LatLngBoundsLiteral | null }) {
+  const map = useMap();
+  React.useEffect(() => {
+    if (!map || !bounds) return;
+    map.fitBounds(bounds);
+  }, [map, bounds?.north, bounds?.south, bounds?.east, bounds?.west]);
+  return null;
+}
+
 // Filter Types
 export type FilterConfig = {
   cities: string[];
@@ -110,7 +122,7 @@ const defaultFilters: ActiveFilters = {
   genderOrientations: [],
   incomeLevels: [],
   priceRange: [0, 100000],
-  minBookingDays: 30
+  minBookingDays: 90
 };
 
 const createCampaignSchema = z.object({
@@ -165,9 +177,9 @@ export default function CreateCampaign() {
   const [screens, setScreens] = useState<Screen[]>([]);
   const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>([]);
   const [selectedMapScreen, setSelectedMapScreen] = useState<Screen | null>(null);
-  const [mapCenter, setMapCenter] = useState(defaultCenter);
   const [mapPanTarget, setMapPanTarget] = useState<{ lat: number; lng: number; zoom?: number } | null>(null);
   const [activeScreenIndex, setActiveScreenIndex] = useState<number | null>(null);
+  const [hoveredScreenId, setHoveredScreenId] = useState<string | null>(null);
 
   // Filter State
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({
@@ -179,6 +191,7 @@ export default function CreateCampaign() {
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(defaultFilters);
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(true);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(true);
+  const [mapCenter, setMapCenter] = useState(defaultCenter);
 
   // Load Filters from API
   useEffect(() => {
@@ -200,15 +213,47 @@ export default function CreateCampaign() {
   }, []);
 
   // Fetch Screens based on Filters
+  // Uses the same intelligent location logic as Discover Screens:
+  //   - Country / State → use bounding-box params (boundsN/S/E/W) via /api/screens
+  //   - City / POI / map → use /api/screens/in-area with location radius JSON
   useEffect(() => {
     const fetchFilteredScreens = async () => {
       try {
-        // Build query string
+        const hasLocations = activeFilters.locations.length > 0;
         const params = new URLSearchParams();
-        
-        if (activeFilters.locations.length > 0) {
-          params.append("locations", JSON.stringify(activeFilters.locations));
+
+        // --- Intelligent location strategy (same as Discover Screens) ---
+        // Check if any selected location is a wide-area type (country/state)
+        const wideLocation = activeFilters.locations.find(
+          l => l.locationType === 'country' || l.locationType === 'state'
+        );
+        const narrowLocations = activeFilters.locations.filter(
+          l => l.locationType !== 'country' && l.locationType !== 'state'
+        );
+
+        let endpoint: string;
+
+        if (wideLocation && wideLocation.bounds) {
+          // Country/State: use bounding-box — same as Discover Screens
+          params.append("boundsN", wideLocation.bounds.north.toString());
+          params.append("boundsS", wideLocation.bounds.south.toString());
+          params.append("boundsE", wideLocation.bounds.east.toString());
+          params.append("boundsW", wideLocation.bounds.west.toString());
+          params.append("sortBy", "popularity");
+          params.append("sortOrder", "desc");
+          // Append any other filters below, then use /api/screens
+          endpoint = "bounds";
+        } else if (hasLocations) {
+          // City / POI / map: use radius-based in-area endpoint
+          params.append("locations", JSON.stringify(
+            narrowLocations.length > 0 ? narrowLocations : activeFilters.locations
+          ));
+          endpoint = "in-area";
+        } else {
+          endpoint = "all";
         }
+
+        // Common filters for both paths
         if (activeFilters.venueTypes.length > 0) {
           activeFilters.venueTypes.forEach(v => params.append("venueCategories", v));
         }
@@ -239,36 +284,55 @@ export default function CreateCampaign() {
         if (activeFilters.priceRange[0] > 0) {
           params.append("minPrice", activeFilters.priceRange[0].toString());
         }
-        if (activeFilters.priceRange[1] < 50000) {
+        if (activeFilters.priceRange[1] < 100000) {
           params.append("maxPrice", activeFilters.priceRange[1].toString());
         }
-        if (activeFilters.minBookingDays > 1) {
+        if (activeFilters.minBookingDays < 90) {
           params.append('minBookingDays', activeFilters.minBookingDays.toString());
         }
 
         const queryString = params.toString();
-        const url = `/api/public/screens/filters${queryString ? `?${queryString}` : ''}`;
-        
-        console.log("Fetching screens with filters:", url);
-        // Note: We might need a slightly different endpoint that returns screens instead of filters
-        // For now, let's reuse api/screens or api/screens/in-area if possible, or wait to create a new one
-        // Let's assume /api/screens supports these query parameters as configured previously
-        const screenResponse = await apiRequest("GET", `/api/screens${queryString ? `?${queryString}` : ''}`);
-        const screenData = await screenResponse.json();
-        setScreens(Array.isArray(screenData) ? screenData : []);
 
-        // Recenter map if location is selected (simplistic logic)
-        if (activeFilters.locations.length > 0 && Array.isArray(screenData) && screenData.length > 0) {
-          const firstScreen = screenData[0];
+        // Choose the right API endpoint based on location type
+        let apiUrl: string;
+        if (endpoint === "bounds") {
+          // Wide area: /api/screens supports boundsN/S/E/W
+          apiUrl = `/api/screens${queryString ? `?${queryString}` : ''}`;
+        } else if (endpoint === "in-area") {
+          // Radius-based: use the in-area endpoint (same as Express Campaign)
+          apiUrl = `/api/screens/in-area${queryString ? `?${queryString}` : ''}`;
+        } else {
+          // No location: fetch all with filters
+          apiUrl = `/api/screens/in-area${queryString ? `?${queryString}` : ''}`;
+        }
+
+        console.log("[Advanced Builder] Fetching screens:", apiUrl);
+        const screenResponse = await apiRequest("GET", apiUrl);
+        const screenData = await screenResponse.json();
+        // /api/screens may return {screens, total} for paginated calls; extract correctly
+        const screenList: Screen[] = Array.isArray(screenData)
+          ? screenData
+          : (screenData?.screens ?? []);
+        setScreens(screenList);
+
+        // Map pan/zoom
+        if (wideLocation?.bounds) {
+          // fitBounds is handled by MapController below via mapPanTarget
+          // set center to bounds center
+          const b = wideLocation.bounds;
+          setMapCenter({
+            lat: (b.north + b.south) / 2,
+            lng: (b.east + b.west) / 2,
+          });
+        } else if (hasLocations && screenList.length > 0) {
+          const firstScreen = screenList[0];
           setMapCenter({
             lat: parseFloat(firstScreen.latitude.toString()),
             lng: parseFloat(firstScreen.longitude.toString())
           });
-        } else if (activeFilters.locations.length > 0) {
-          const mapLoc = activeFilters.locations.find(l => l.type === 'map' && l.lat);
-          if (mapLoc) {
-            setMapCenter({ lat: mapLoc.lat!, lng: mapLoc.lng! });
-          }
+        } else if (hasLocations) {
+          const mapLoc = activeFilters.locations.find(l => l.lat);
+          if (mapLoc) setMapCenter({ lat: mapLoc.lat!, lng: mapLoc.lng! });
         }
       } catch (error) {
         console.error("❌ Error fetching filtered screens:", error);
@@ -344,8 +408,7 @@ export default function CreateCampaign() {
   
   const selectedScreensFull = screens.filter(s => selectedScreenIds.includes(s.id));
   const estimatedCost = selectedScreensFull.reduce((sum, s) => {
-    const multi = s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1;
-    return sum + (s.pricePerDay * multi * durationDays);
+    return sum + (calculateScreenPricePerDay(s) * durationDays);
   }, 0);
   
   const totalReach = selectedScreensFull.reduce((sum, s) => sum + (s.avgDailyFootfall || 0) * durationDays, 0);
@@ -389,8 +452,7 @@ export default function CreateCampaign() {
 
       // Create bookings for each selected screen
       const bookingPromises = selectedScreensFull.map(screen => {
-        const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-        const price = screen.pricePerDay * screenMultiplier * durationDays;
+        const price = calculateScreenPricePerDay(screen) * durationDays;
 
         return apiRequest("POST", "/api/advertiser/bookings", {
           screenId: screen.id,
@@ -407,7 +469,7 @@ export default function CreateCampaign() {
     onSuccess: () => {
       toast({
         title: "Campaign Submitted!",
-        description: `Campaign created successfully with ${selectedScreenIds.length} booking request(s).`,
+        description: `Campaign created successfully with ${calculateTotalPhysicalScreens(screens.filter(s => selectedScreenIds.includes(s.id)))} booking request(s).`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
       setTimeout(() => {
@@ -571,7 +633,7 @@ export default function CreateCampaign() {
                 <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
                   Min Booking Days (Up to)
                   <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 p-1 px-2 flex items-center justify-center rounded-full text-[10px]">
-                    {activeFilters.minBookingDays}d
+                    {activeFilters.minBookingDays >= 90 ? 'Any' : `${activeFilters.minBookingDays}d`}
                   </Badge>
                 </AccordionTrigger>
                 <AccordionContent className="pt-4 pb-2 px-3">
@@ -585,9 +647,9 @@ export default function CreateCampaign() {
                   />
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>1 day</span>
-                    <span>90 days</span>
+                    <span>Any (90+)</span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-2 italic">Shows screens accepting bookings up to this duration.</p>
+                  <p className="text-[10px] text-muted-foreground mt-2 italic">At max (90), all screens are shown regardless of booking duration. Drag left to restrict to shorter-booking screens only.</p>
                 </AccordionContent>
               </AccordionItem>
 
@@ -845,8 +907,18 @@ export default function CreateCampaign() {
                   zoomControl={true}
                 >
                   <MapPanner target={mapPanTarget} />
-                  {/* Draw multiple target location pins and circles */}
-                  {activeFilters.locations.filter(l => l.type === 'map' && l.lat && l.lng).map((loc, idx) => (
+                  {/* Fit map to country/state bounds automatically */}
+                  {activeFilters.locations
+                    .filter(l => (l.locationType === 'country' || l.locationType === 'state') && l.bounds)
+                    .slice(-1)  // only last wide location
+                    .map((loc, idx) => (
+                      <MapBoundsFitter key={`bounds-${idx}`} bounds={loc.bounds!} />
+                    ))
+                  }
+                  {/* Draw target location pins and radius circles — only for city/poi, not country/state */}
+                  {activeFilters.locations
+                    .filter(l => l.lat && l.lng && l.locationType !== 'country' && l.locationType !== 'state')
+                    .map((loc, idx) => (
                     <React.Fragment key={`target-${idx}`}>
                       <AdvancedMarker
                         position={{ lat: loc.lat!, lng: loc.lng! }}
@@ -860,39 +932,62 @@ export default function CreateCampaign() {
                           <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                         </div>
                       </AdvancedMarker>
-                      <CircleOverlay
-                        center={{ lat: loc.lat!, lng: loc.lng! }}
-                        radius={(loc.radiusKm || 5) * 1000}
-                      />
+                      {loc.radiusKm && (
+                        <CircleOverlay
+                          center={{ lat: loc.lat!, lng: loc.lng! }}
+                          radius={loc.radiusKm * 1000}
+                        />
+                      )}
                     </React.Fragment>
                   ))}
 
-                  {/* Render mapping markers from filtered screens */}
-                  {screens.map((screen) => (
-                    <AdvancedMarker
-                      key={screen.id}
-                      position={{
-                        lat: parseFloat(screen.latitude.toString()),
-                        lng: parseFloat(screen.longitude.toString()),
-                      }}
-                      onClick={() => setSelectedMapScreen(screen)}
-                      zIndex={selectedScreenIds.includes(screen.id) ? 10 : 1}
-                    >
-                      <div className={`relative flex items-center justify-center rounded-full shadow-lg transition-transform ${selectedScreenIds.includes(screen.id) ? 'scale-125' : 'hover:scale-110'}`}
-                           style={{
-                             width: selectedScreenIds.includes(screen.id) ? 28 : 22,
-                             height: selectedScreenIds.includes(screen.id) ? 28 : 22,
-                             backgroundColor: selectedScreenIds.includes(screen.id) ? '#22c55e' : '#8b5cf6',
-                             border: '2px solid white'
-                           }}>
-                         {selectedScreenIds.includes(screen.id) ? (
-                           <Check className="h-3 w-3 text-white" strokeWidth={3}/>
-                         ) : (
-                           <div className="h-1.5 w-1.5 bg-white rounded-full" />
-                         )}
-                      </div>
-                    </AdvancedMarker>
-                  ))}
+                  {/* Render price bubble markers — same style as Discover Screens */}
+                  {screens.map((screen) => {
+                    const isSelected = selectedScreenIds.includes(screen.id);
+                    const isHovered = hoveredScreenId === screen.id;
+                    const price = calculateScreenPricePerDay(screen) || 0;
+                    const priceDisplay = price >= 1000
+                      ? `₹${(price / 1000).toFixed(1).replace('.0', '')}k`
+                      : `₹${price}`;
+
+                    return (
+                      <AdvancedMarker
+                        key={screen.id}
+                        position={{
+                          lat: parseFloat(screen.latitude.toString()),
+                          lng: parseFloat(screen.longitude.toString()),
+                        }}
+                        onClick={() => setSelectedMapScreen(screen)}
+                        zIndex={isSelected ? 20 : isHovered ? 15 : 1}
+                      >
+                        <div
+                          className={`relative flex flex-col items-center cursor-pointer transition-all duration-200 ${isHovered ? 'scale-125' : 'scale-100'}`}
+                          onMouseEnter={() => setHoveredScreenId(screen.id)}
+                          onMouseLeave={() => setHoveredScreenId(null)}
+                        >
+                          {/* Price bubble */}
+                          <div className={`
+                            px-3 py-1.5 rounded-full font-bold text-[13px] border-2 whitespace-nowrap
+                            ${isSelected
+                              ? 'bg-green-600 text-white border-white shadow-lg'
+                              : isHovered
+                                ? 'bg-slate-900 text-white border-slate-900 shadow-xl'
+                                : 'bg-white text-slate-800 border-white shadow-md hover:bg-slate-50'
+                            }
+                          `}>
+                            {priceDisplay}
+                          </div>
+                          {/* Triangle caret */}
+                          <div className={`w-0 h-0 -mt-px
+                            border-l-[6px] border-l-transparent
+                            border-r-[6px] border-r-transparent
+                            border-t-[6px]
+                            ${isSelected ? 'border-t-green-600' : isHovered ? 'border-t-slate-900' : 'border-t-white'}
+                          `} />
+                        </div>
+                      </AdvancedMarker>
+                    );
+                  })}
 
                 </Map>
             </div>
@@ -988,7 +1083,7 @@ export default function CreateCampaign() {
                             
                             <div className="flex justify-between items-center text-sm">
                               <span className="text-muted-foreground">Screens Targeted</span>
-                              <Badge variant="secondary" className="font-semibold text-sm">{selectedScreenIds.length} Screens</Badge>
+                              <Badge variant="secondary" className="font-semibold text-sm">{calculateTotalPhysicalScreens(screens.filter(s => selectedScreenIds.includes(s.id)))} Screens</Badge>
                             </div>
                             
                             <div className="flex justify-between items-center text-sm">
@@ -1099,7 +1194,7 @@ export default function CreateCampaign() {
               <div className="p-4 space-y-4">
                  <div className="flex items-center justify-between">
                     <h3 className="font-semibold text-sm flex items-center gap-1.5"><Target className="h-4 w-4 text-primary"/> Selected Inventory</h3>
-                    <Badge variant="secondary" className="bg-primary hover:bg-primary text-white text-xs">{selectedScreenIds.length} Screens</Badge>
+                    <Badge variant="secondary" className="bg-primary hover:bg-primary text-white text-xs">{calculateTotalPhysicalScreens(screens.filter(s => selectedScreenIds.includes(s.id)))} Screens</Badge>
                  </div>
                  
                  {selectedScreensFull.length === 0 ? (
@@ -1109,38 +1204,21 @@ export default function CreateCampaign() {
                        <p className="text-xs text-muted-foreground mt-2 px-6">Click map markers or use <span className="font-bold text-primary">"Select All"</span> to build your network.</p>
                     </div>
                  ) : (
-                    <div className="space-y-2">
-                       {selectedScreensFull.map((screen, idx) => (
-                          <div key={screen.id} className="bg-background border rounded-lg p-3 hover:border-primary/50 transition-colors shadow-sm group">
-                             <div className="flex gap-3">
-                                <div className="h-12 w-16 bg-muted rounded overflow-hidden flex-shrink-0">
-                                   {screen.images?.[0] ? (
-                                     <img src={screen.images[0]} alt="" className="w-full h-full object-cover" />
-                                   ) : (
-                                     <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                                        <ImageIcon className="h-4 w-4 text-gray-300" />
-                                     </div>
-                                   )}
-                                </div>
-                                <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                   <div className="flex justify-between items-start gap-2">
-                                     <h4 className="text-sm font-bold truncate leading-none mt-1">{screen.name}</h4>
-                                     <button 
-                                      onClick={() => toggleScreenSelection(screen.id)}
-                                      className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                     >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                     </button>
-                                   </div>
-                                   <p className="text-[10px] text-muted-foreground truncate">{screen.location}</p>
-                                   <div className="flex justify-between items-center mt-1">
-                                      <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">₹{screen.pricePerDay.toLocaleString()}/day</span>
-                                      <span className="text-[10px] text-muted-foreground">👣 {screen.avgDailyFootfall ? (screen.avgDailyFootfall / 1000).toFixed(1) + 'k' : 'N/A'}</span>
-                                   </div>
-                                </div>
-                             </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                      {selectedScreensFull.map((screen, idx) => (
+                        <div key={screen.id} className="relative group rounded-lg overflow-hidden border hover:border-primary/50 transition-colors shadow-sm">
+                          <div className="pointer-events-none">
+                            <ScreenCard screen={screen} />
                           </div>
-                       ))}
+                          <button 
+                           onClick={() => toggleScreenSelection(screen.id)}
+                           className="absolute top-2 right-2 bg-destructive/90 text-destructive-foreground p-1.5 rounded-full hover:bg-destructive opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md pointer-events-auto"
+                           title="Remove from campaign"
+                          >
+                             <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                  )}
               </div>

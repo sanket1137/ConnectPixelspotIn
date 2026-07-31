@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { calculateScreenPricePerDay, getScreenCountDisplay, calculateTotalPhysicalScreens } from "@shared/utils";
 import { ArrowLeft, ArrowRight, Target, Calendar, Check, Monitor } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Screen } from "@shared/schema";
@@ -131,8 +132,7 @@ export default function QuickCampaignFromCart() {
   // Calculate total budget based on duration
   const duration = watchDurationMode === "auto" ? 7 : (watchCustomDays || 7);
   const totalBudget = selectedScreens.reduce((sum, screen) => {
-    const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-    return sum + (screen.pricePerDay * screenMultiplier * duration);
+    return sum + (calculateScreenPricePerDay(screen) * duration);
   }, 0);
 
   const createCampaignMutation = useMutation({
@@ -173,8 +173,7 @@ export default function QuickCampaignFromCart() {
 
       // Create bookings for each screen
       const bookingPromises = selectedScreens.map(screen => {
-        const screenMultiplier = screen.isMultiScreen && screen.numberOfScreens ? screen.numberOfScreens : 1;
-        const price = screen.pricePerDay * screenMultiplier * finalDuration;
+        const price = calculateScreenPricePerDay(screen) * finalDuration;
 
         return apiRequest("POST", "/api/advertiser/bookings", {
           screenId: screen.id,
@@ -191,7 +190,7 @@ export default function QuickCampaignFromCart() {
     onSuccess: () => {
       toast({
         title: "Campaign Created Successfully!",
-        description: `Campaign created with ${selectedScreens.length} booking requests.`,
+        description: `Campaign created with ${calculateTotalPhysicalScreens(selectedScreens)} booking requests.`,
       });
       setCampaignCreated(true);
       queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
@@ -297,7 +296,10 @@ export default function QuickCampaignFromCart() {
                   <Alert>
                     <Monitor className="h-4 w-4" />
                     <AlertDescription>
-                      <strong>{selectedScreens.length} screen{selectedScreens.length > 1 ? 's' : ''} selected</strong> from your cart
+                      <strong>{(() => {
+                        const total = calculateTotalPhysicalScreens(selectedScreens);
+                        return `${total} screen${total > 1 ? 's' : ''}`;
+                      })()} selected</strong> from your cart
                     </AlertDescription>
                   </Alert>
 
@@ -424,7 +426,7 @@ export default function QuickCampaignFromCart() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">Selected Screens:</span>
-                          <span className="font-semibold">{selectedScreens.length}</span>
+                          <span className="font-semibold">{calculateTotalPhysicalScreens(selectedScreens)}</span>
                         </div>
                         <Separator />
                         <div className="flex justify-between text-lg">
@@ -476,7 +478,7 @@ export default function QuickCampaignFromCart() {
 
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-lg">Selected Screens ({selectedScreens.length})</CardTitle>
+                      <CardTitle className="text-lg">Selected Screens ({calculateTotalPhysicalScreens(selectedScreens)})</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -487,13 +489,13 @@ export default function QuickCampaignFromCart() {
                                 <p className="text-sm font-medium truncate">{screen.name}</p>
                                 {screen.isMultiScreen && screen.numberOfScreens && (
                                   <Badge variant="default" className="text-xs bg-purple-600">
-                                    {screen.numberOfScreens}x
+                                    {getScreenCountDisplay(screen)}
                                   </Badge>
                                 )}
                               </div>
                               <p className="text-xs text-muted-foreground">{screen.city}</p>
                               <p className="text-xs font-semibold text-primary mt-1">
-                                ₹{(screen.pricePerDay * (screen.numberOfScreens || 1) * duration).toLocaleString()}
+                                ₹{(calculateScreenPricePerDay(screen) * duration).toLocaleString()}
                               </p>
                             </div>
                           </div>

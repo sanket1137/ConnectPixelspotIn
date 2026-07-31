@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
 import logo from "@assets/pixelspot-logo.png";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Support Ticket Pages
 const SupportTickets = lazy(() => import("@/pages/support/SupportTickets"));
@@ -242,6 +243,26 @@ function Router() {
           <ExpressCampaignBuilder />
         </AuthGuard>
       </Route>
+      {/* Advertiser Express Campaign Flow wrapped in ErrorBoundary */}
+      <Route path="/advertiser/campaigns/create/express">
+        {() => (
+          <AuthGuard allowedRoles={["advertiser", "agency"]}>
+            <ErrorBoundary>
+              <CreateCampaign mode="express" />
+            </ErrorBoundary>
+          </AuthGuard>
+        )}
+      </Route>
+      
+      <Route path="/advertiser/campaigns/create/advanced">
+        {() => (
+          <AuthGuard allowedRoles={["advertiser", "agency"]}>
+            <ErrorBoundary>
+              <CreateCampaign mode="advanced" />
+            </ErrorBoundary>
+          </AuthGuard>
+        )}
+      </Route>
       <Route path="/advertiser/campaigns/new/ai">
         <AuthGuard allowedRoles={["advertiser"]}>
           <AICampaignBuilder />
@@ -350,7 +371,7 @@ function Router() {
 }
 
 function AuthenticatedLayout() {
-  const { user } = useAuth();
+  const { user, isAdmin, isScreenOwner, isAgency } = useAuth();
   const [location] = useLocation();
   const { toast } = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -394,7 +415,6 @@ function AuthenticatedLayout() {
   }
 
   // Show router with sidebar for dashboard routes
-  const { isAdmin, isScreenOwner, isAgency } = useAuth();
   const portalName = isAdmin ? "Admin Portal" : isScreenOwner ? "Owner Portal" : isAgency ? "Agency Portal" : "Advertiser Portal";
 
   return (

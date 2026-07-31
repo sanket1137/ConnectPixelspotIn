@@ -1,5 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { calculateScreenPricePerDay, calculateTotalPhysicalScreens } from "@shared/utils";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, IndianRupee } from "lucide-react";
 import type { Screen } from "@shared/schema";
@@ -27,7 +28,7 @@ export default function Step4_Duration({
 }: Props) {
   const selectedScreens = screensData.filter((s) => selectedScreenIds.includes(s.id));
   const totalCostPerDay = selectedScreens.reduce(
-    (sum, s) => sum + s.pricePerDay * (s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1),
+    (sum, s) => sum + calculateScreenPricePerDay(s),
     0
   );
   const totalCost = totalCostPerDay * campaignDays;
@@ -119,7 +120,7 @@ export default function Step4_Duration({
         <p className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Cost Estimate</p>
         <div className="flex items-end justify-between">
           <div className="space-y-1 text-sm text-muted-foreground">
-            <p>{selectedScreens.length} screen{selectedScreens.length !== 1 ? "s" : ""} × {campaignDays} days</p>
+            <p>{calculateTotalPhysicalScreens(selectedScreens)} screen{calculateTotalPhysicalScreens(selectedScreens) !== 1 ? "s" : ""} × {campaignDays} days</p>
             <p>₹{totalCostPerDay.toLocaleString()} / day</p>
           </div>
           <div className="text-right">

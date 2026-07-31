@@ -1,0 +1,19 @@
+#!/usr/bin/expect -f
+set timeout -1
+spawn npm run db:push
+
+expect {
+  "Is support_tickets table created or renamed from another table?" {
+    send "\r"
+    exp_continue
+  }
+  "Is ticket_messages table created or renamed from another table?" {
+    send "\r"
+    exp_continue
+  }
+  "Do you want to truncate invoices table?" {
+    send "\r"
+    exp_continue
+  }
+  eof
+}

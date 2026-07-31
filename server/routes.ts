@@ -2544,7 +2544,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { 
         lat, lng, radiusKm, city, budget, duration,
-        venueCategories, environmentTypes, environmentTags, minBookingDays, locations
+        venueCategories, environmentTypes, environmentTags, minBookingDays, locations,
+        types, occupationMixes, userIntents, userMoods, genderOrientations, incomeLevels,
+        minPrice, maxPrice, locationTags
       } = req.query;
 
       let screens: any[];
@@ -2553,7 +2555,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         venueCategories: venueCategories ? (Array.isArray(venueCategories) ? venueCategories : [venueCategories]) as string[] : undefined,
         environmentTypes: environmentTypes ? (Array.isArray(environmentTypes) ? environmentTypes : [environmentTypes]) as string[] : undefined,
         environmentTags: environmentTags ? (Array.isArray(environmentTags) ? environmentTags : [environmentTags]) as string[] : undefined,
+        types: types ? (Array.isArray(types) ? types : [types]) as string[] : undefined,
+        occupationMixes: occupationMixes ? (Array.isArray(occupationMixes) ? occupationMixes : [occupationMixes]) as string[] : undefined,
+        userIntents: userIntents ? (Array.isArray(userIntents) ? userIntents : [userIntents]) as string[] : undefined,
+        userMoods: userMoods ? (Array.isArray(userMoods) ? userMoods : [userMoods]) as string[] : undefined,
+        genderOrientations: genderOrientations ? (Array.isArray(genderOrientations) ? genderOrientations : [genderOrientations]) as string[] : undefined,
+        incomeLevels: incomeLevels ? (Array.isArray(incomeLevels) ? incomeLevels : [incomeLevels]) as string[] : undefined,
+        locationTags: locationTags ? (Array.isArray(locationTags) ? locationTags : [locationTags]) as string[] : undefined,
         minBookingDays: minBookingDays ? parseInt(minBookingDays as string) : undefined,
+        minPrice: minPrice ? parseInt(minPrice as string) : undefined,
+        maxPrice: maxPrice ? parseInt(maxPrice as string) : undefined,
       };
 
       if (locations) {
@@ -2950,7 +2961,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/advertiser/campaigns", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
-      const campaignsWithStats = await storage.getCampaignsWithBookingStats(req.user!.id);
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
+      
+      const campaignsWithStats = await storage.getCampaignsWithBookingStats(req.user!.id, page, limit);
       res.json(campaignsWithStats);
     } catch (error) {
       console.error("Get campaigns error:", error);

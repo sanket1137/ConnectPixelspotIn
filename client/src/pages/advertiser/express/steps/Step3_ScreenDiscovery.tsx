@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Screen } from "@shared/schema";
 import { MultiLocationSearch, LocationItem } from "@/components/map/MultiLocationSearch";
 import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
+import { getScreenCountDisplay, calculateTotalPhysicalScreens, calculateScreenPricePerDay } from "@shared/utils";
 
 interface Props {
   locations: LocationItem[];
@@ -88,19 +89,39 @@ export default function Step3_ScreenDiscovery({
     if (locations.length === 0) return;
     const key = JSON.stringify(locations);
     if (key === prevKey.current && screensData.length > 0) return;
-    const url = `/api/screens/in-area?locations=${encodeURIComponent(JSON.stringify(locations))}`;
     prevKey.current = key;
     setIsLoading(true);
     setFetchError(null);
-    apiRequest("GET", url)
+
+    // Intelligent location strategy — same as Discover Screens:
+    //   Country/State → use boundsN/S/E/W via /api/screens
+    //   City/POI/map  → use /api/screens/in-area with radius JSON
+    const wideLocation = locations.find(
+      l => l.locationType === 'country' || l.locationType === 'state'
+    );
+
+    let fetchUrl: string;
+    if (wideLocation && wideLocation.bounds) {
+      const b = wideLocation.bounds;
+      fetchUrl = `/api/screens?boundsN=${b.north}&boundsS=${b.south}&boundsE=${b.east}&boundsW=${b.west}&sortBy=popularity&sortOrder=desc`;
+    } else {
+      fetchUrl = `/api/screens/in-area?locations=${encodeURIComponent(JSON.stringify(locations))}`;
+    }
+
+    apiRequest("GET", fetchUrl)
       .then(res => res.json())
-      .then((data: Screen[]) => {
-        onScreensLoaded(data);
-        const first = data.find(s => s.latitude && s.longitude && Number(s.latitude) !== 0);
-        if (first) {
-          setPanTarget({ lat: Number(first.latitude), lng: Number(first.longitude), zoom: 12 });
-        } else if (defaultMapLoc) {
-          setPanTarget({ lat: defaultMapLoc.lat!, lng: defaultMapLoc.lng!, zoom: 12 });
+      .then((data: any) => {
+        const screens: Screen[] = Array.isArray(data) ? data : (data?.screens ?? []);
+        onScreensLoaded(screens);
+        if (wideLocation?.bounds) {
+          // Map will be fit via MapBoundsFitter; no panTarget needed
+        } else {
+          const first = screens.find(s => s.latitude && s.longitude && Number(s.latitude) !== 0);
+          if (first) {
+            setPanTarget({ lat: Number(first.latitude), lng: Number(first.longitude), zoom: 12 });
+          } else if (defaultMapLoc) {
+            setPanTarget({ lat: defaultMapLoc.lat!, lng: defaultMapLoc.lng!, zoom: 12 });
+          }
         }
       })
       .catch(e => {
@@ -156,7 +177,7 @@ export default function Step3_ScreenDiscovery({
   const handleCardHover = (id: string | null) => setHighlightedId(id);
 
   const handleCardClick = (screen: Screen) => {
-    onToggleScreen(screen.id);
+    setDetailModalScreen(screen);
     setHighlightedId(screen.id);
     if (screen.latitude && screen.longitude && Number(screen.latitude) !== 0) {
       setPanTarget({ lat: Number(screen.latitude), lng: Number(screen.longitude), zoom: 14 });
@@ -174,15 +195,25 @@ export default function Step3_ScreenDiscovery({
     return null;
   }
 
+  function MapBoundsFitter({ bounds }: { bounds: google.maps.LatLngBoundsLiteral }) {
+    const map = useMap();
+    useEffect(() => {
+      if (!map) return;
+      map.fitBounds(bounds);
+    }, [map, bounds.north, bounds.south, bounds.east, bounds.west]);
+    return null;
+  }
+
   const locationLabel = locations.map(l => l.label).join(", ") || "selected locations";
 
   // ── Airbnb-style price bubble marker ─────────────────────────────────────
   const PriceBubble = ({ screen }: { screen: Screen }) => {
     const isSelected = selectedScreenIds.includes(screen.id);
     const isHovered = highlightedId === screen.id;
-    const price = screen.pricePerDay >= 1000
-      ? `₹${(screen.pricePerDay / 1000).toFixed(0)}k`
-      : `₹${screen.pricePerDay}`;
+    const basePrice = calculateScreenPricePerDay(screen);
+    const price = basePrice >= 1000
+      ? `₹${(basePrice / 1000).toFixed(0)}k`
+      : `₹${basePrice}`;
     return (
       <div className="relative">
         <div className={`
@@ -228,11 +259,18 @@ export default function Step3_ScreenDiscovery({
               <Monitor className="h-10 w-10 text-slate-300" />
             </div>
           )}
-          {isSelected && (
-            <div className="absolute top-2 left-2 bg-blue-600 text-white px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 shadow">
-              <Check className="w-3 h-3" /> Selected
-            </div>
-          )}
+          <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
+            {isSelected && (
+              <div className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 shadow">
+                <Check className="w-3 h-3" /> Selected
+              </div>
+            )}
+            {screen.isMultiScreen && screen.bulkBookingMandatory && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+              <Badge className="px-1.5 py-0 h-5 text-[10px] bg-amber-500 hover:bg-amber-600 text-white border-0 shadow uppercase">
+                {screen.numberOfScreens} Screens (All Required)
+              </Badge>
+            )}
+          </div>
           {screen.environmentType && (
             <div className="absolute top-2 right-2">
               <Badge variant="secondary" className="px-1.5 py-0 h-5 text-[10px] bg-black/60 text-white border-0 backdrop-blur-sm uppercase">
@@ -243,18 +281,28 @@ export default function Step3_ScreenDiscovery({
           <button
             className={`absolute bottom-2 right-2 h-8 w-8 rounded-full flex items-center justify-center shadow-md transition-all opacity-0 group-hover:opacity-100 ${isSelected ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
             onClick={(e) => { e.stopPropagation(); onToggleScreen(screen.id); }}
+            title={isSelected ? "Deselect" : "Select"}
           >
             <Check className="w-4 h-4" />
           </button>
         </div>
 
         {/* Info */}
-        <div className="space-y-0.5 px-0.5">
-          <div className="flex justify-between items-start">
-            <h3 className="font-semibold text-slate-900 text-sm line-clamp-1">{screen.venueName || screen.name}, {screen.city}</h3>
-            {dist !== null && <span className="text-xs text-slate-400 shrink-0 ml-1">{dist.toFixed(1)} km</span>}
+        <div className="px-1">
+          <div className="flex items-center justify-between mb-0.5 gap-2">
+            <h3 className="font-semibold text-sm text-slate-900 truncate leading-tight group-hover:text-blue-600 transition-colors">{screen.name}</h3>
+            {dist !== null && (
+              <span className="text-[10px] text-slate-400 shrink-0">{dist.toFixed(1)} km</span>
+            )}
           </div>
-          <p className="text-xs text-slate-500 line-clamp-1">{screen.name} · {screen.category || screen.type}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-slate-500 line-clamp-1">{screen.venueName || screen.name} · {screen.category || screen.type}</p>
+            {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+              <Badge variant="secondary" className="text-[9px] h-3.5 px-1 py-0 bg-primary/10 text-primary uppercase font-bold">
+                {getScreenCountDisplay(screen)}
+              </Badge>
+            )}
+          </div>
           {screen.avgDailyFootfall && (
             <div className="flex items-center gap-1 text-xs text-slate-400">
               <Users className="w-3 h-3" />
@@ -262,7 +310,7 @@ export default function Step3_ScreenDiscovery({
             </div>
           )}
           <div className="pt-0.5">
-            <span className="font-bold text-slate-900 text-sm">₹{(screen.pricePerDay || 0).toLocaleString()}</span>
+            <span className="font-bold text-slate-900 text-sm">₹{calculateScreenPricePerDay(screen).toLocaleString()}</span>
             <span className="text-slate-400 text-xs"> / day</span>
           </div>
         </div>
@@ -272,80 +320,97 @@ export default function Step3_ScreenDiscovery({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-[calc(100vh-260px)] min-h-[560px] w-full bg-white border-y border-slate-200">
-      {/* Location Search Bar */}
-      <div className="shrink-0 px-6 py-4 border-b border-slate-200 bg-slate-50/50">
-        <MultiLocationSearch
-          selectedLocations={locations}
-          onChange={onChangeLocations}
-          onLocationFocus={(loc) => {
-            if (loc.lat && loc.lng) {
-              setPanTarget({ lat: loc.lat, lng: loc.lng, zoom: 12 });
-            }
-          }}
-          placeholder="Search for another city, area, or landmark..."
-          className="max-w-3xl"
-        />
-      </div>
-
-      {/* Header bar */}
-      <div className="shrink-0 px-6 py-3 border-b border-slate-200 bg-white grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-center gap-4">
-        {/* Left: Title & Info */}
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-slate-900">
-            {isLoading ? (
-              <span className="flex items-center gap-1.5">
-                <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
-                Loading screens in {locationLabel}…
-              </span>
-            ) : (
-              <>Over {screensData.length.toLocaleString()} screen{screensData.length !== 1 ? "s" : ""}</>
-            )}
-          </h2>
-          {!isLoading && <p className="text-xs text-slate-400 truncate pr-4">{locationLabel}</p>}
+    <div className="flex flex-col h-[calc(100vh-100px)] min-h-[560px] w-full bg-white">
+      {/* Unified Toolbar */}
+      <div className="shrink-0 px-4 py-2 border-b border-slate-200 bg-white shadow-sm z-20 flex flex-col lg:flex-row items-center gap-4">
+        <div className="flex-1 w-full min-w-0">
+          <MultiLocationSearch
+            selectedLocations={locations}
+            onChange={onChangeLocations}
+            onLocationFocus={(loc) => {
+              if (loc.lat && loc.lng) {
+                setPanTarget({ lat: loc.lat, lng: loc.lng, zoom: 12 });
+              }
+            }}
+            placeholder="Search city, area, or landmark..."
+            className="w-full"
+          />
         </div>
-
-        {/* Center: Filters */}
-        <div className="flex justify-center">
-          <Tabs defaultValue="all" onValueChange={setEnvFilter}>
-            <TabsList className="h-8 bg-slate-100 rounded-full p-0.5 shadow-sm border border-slate-200/60">
-              <TabsTrigger value="all" className="rounded-full h-7 px-3 text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">All</TabsTrigger>
-              <TabsTrigger value="indoor" className="rounded-full h-7 px-3 text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-1">
-                <Home className="h-3 w-3" /> Indoor
-              </TabsTrigger>
-              <TabsTrigger value="outdoor" className="rounded-full h-7 px-3 text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-1">
-                <Sun className="h-3 w-3" /> Outdoor
-              </TabsTrigger>
-              <TabsTrigger value="semi" className="rounded-full h-7 px-3 text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-1">
-                <SunMoon className="h-3 w-3" /> Semi
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-
-        {/* Right: Actions */}
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={onSelectAll} disabled={isLoading || screensData.length === 0} className="rounded-full text-xs h-8 px-4" data-testid="button-select-all">
-            Select All
+        
+        {/* Environment Filters */}
+        <div className="flex items-center gap-2 shrink-0 border-t lg:border-t-0 lg:border-l pt-3 lg:pt-0 lg:pl-4 w-full lg:w-auto overflow-x-auto scrollbar-none pb-1 lg:pb-0">
+          <Button
+            variant={envFilter === "all" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setEnvFilter("all")}
+            className={`rounded-full h-9 px-4 text-xs font-medium ${envFilter === "all" ? "bg-slate-900 text-white" : ""}`}
+          >
+            All
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClearAll} className="rounded-full text-xs h-8 px-4 text-slate-500 hover:text-slate-700" data-testid="button-clear-all">
-            Clear
+          <Button
+            variant={envFilter === "indoor" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setEnvFilter("indoor")}
+            className={`rounded-full h-9 px-4 text-xs font-medium gap-1.5 ${envFilter === "indoor" ? "bg-slate-900 text-white" : ""}`}
+          >
+            <Home className="h-3.5 w-3.5" /> Indoor
+          </Button>
+          <Button
+            variant={envFilter === "outdoor" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setEnvFilter("outdoor")}
+            className={`rounded-full h-9 px-4 text-xs font-medium gap-1.5 ${envFilter === "outdoor" ? "bg-slate-900 text-white" : ""}`}
+          >
+            <Sun className="h-3.5 w-3.5" /> Outdoor
+          </Button>
+          <Button
+            variant={envFilter === "semi" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setEnvFilter("semi")}
+            className={`rounded-full h-9 px-4 text-xs font-medium gap-1.5 ${envFilter === "semi" ? "bg-slate-900 text-white" : ""}`}
+          >
+            <SunMoon className="h-3.5 w-3.5" /> Semi
           </Button>
         </div>
       </div>
 
       {(error || fetchError) && (
-        <p className="text-sm text-destructive px-6 py-2">{error || fetchError}</p>
+        <p className="text-xs font-medium text-destructive px-4 py-1.5 bg-red-50 border-b border-red-100">{error || fetchError}</p>
       )}
 
       {/* Main split view */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Airbnb card grid */}
-        <div ref={listRef} className="w-[52%] overflow-y-auto bg-white border-r border-slate-200">
-          <div className="p-6">
+        <div ref={listRef} className="w-[55%] flex flex-col bg-slate-50 border-r border-slate-200 z-10">
+          {/* List Header */}
+          <div className="shrink-0 bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between sticky top-0 z-10">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                {isLoading ? (
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
+                    Loading screens…
+                  </span>
+                ) : (
+                  <>Over {calculateTotalPhysicalScreens(screensData).toLocaleString()} screen{calculateTotalPhysicalScreens(screensData) !== 1 ? "s" : ""}</>
+                )}
+              </h2>
+              {!isLoading && <p className="text-[10px] text-slate-400 truncate max-w-[250px]">{locationLabel}</p>}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button variant="outline" size="sm" onClick={onSelectAll} disabled={isLoading || screensData.length === 0} className="h-7 text-[11px] px-2.5 rounded-md">
+                Select All
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onClearAll} className="h-7 text-[11px] px-2.5 rounded-md text-slate-500">
+                Clear
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
             {isLoading ? (
-              <div className="grid grid-cols-2 gap-4">
-                {Array.from({ length: 6 }).map((_, i) => (
+              <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+                {Array.from({ length: 9 }).map((_, i) => (
                   <div key={i} className="animate-pulse">
                     <div className="aspect-[4/3] bg-slate-200 rounded-xl mb-2" />
                     <div className="h-3 bg-slate-200 rounded w-3/4 mb-1" />
@@ -360,7 +425,7 @@ export default function Step3_ScreenDiscovery({
                 <p className="text-sm text-slate-400 mt-1">Try adding a different location or adjusting your radius.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 pb-8">
+              <div className="grid grid-cols-2 xl:grid-cols-3 gap-4 pb-8">
                 {sortedScreens.map(screen => (
                   <ScreenCard key={screen.id} screen={screen} />
                 ))}
@@ -370,7 +435,7 @@ export default function Step3_ScreenDiscovery({
         </div>
 
         {/* Right: Map */}
-        <div className="flex-1 relative bg-slate-50 p-4">
+        <div className="flex-1 relative bg-slate-200">
           <div className="w-full h-full rounded-2xl overflow-hidden shadow-md border border-slate-200/60 bg-slate-200 relative">
             {isLoading && (
               <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
@@ -390,8 +455,17 @@ export default function Step3_ScreenDiscovery({
             >
               <MapController />
 
-              {/* Target location pins + circles */}
-              {locations.filter(l => l.type === 'map' && l.lat && l.lng).map((loc, idx) => (
+              {/* Fit map for country/state wide-area locations */}
+              {locations
+                .filter(l => (l.locationType === 'country' || l.locationType === 'state') && l.bounds)
+                .slice(-1)
+                .map((loc, idx) => (
+                  <MapBoundsFitter key={`bounds-${idx}`} bounds={loc.bounds!} />
+                ))
+              }
+
+              {/* Target location pins + circles — only for city/poi, not country/state */}
+              {locations.filter(l => l.lat && l.lng && l.locationType !== 'country' && l.locationType !== 'state').map((loc, idx) => (
                 <React.Fragment key={`target-${idx}`}>
                   <AdvancedMarker
                     position={{ lat: loc.lat!, lng: loc.lng! }}
@@ -405,7 +479,9 @@ export default function Step3_ScreenDiscovery({
                       <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                     </div>
                   </AdvancedMarker>
-                  <CircleOverlay center={{ lat: loc.lat!, lng: loc.lng! }} radius={(loc.radiusKm || 5) * 1000} />
+                  {loc.radiusKm && (
+                    <CircleOverlay center={{ lat: loc.lat!, lng: loc.lng! }} radius={loc.radiusKm * 1000} />
+                  )}
                 </React.Fragment>
               ))}
 
@@ -424,24 +500,6 @@ export default function Step3_ScreenDiscovery({
           </div>
         </div>
       </div>
-
-      {/* Sticky bottom — selected count */}
-      {selectedScreenIds.length > 0 && (
-        <div className="shrink-0 bg-white border-t border-slate-200 px-6 py-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-slate-700">
-              <span className="text-amber-600 font-bold">{selectedScreenIds.length}</span> screen{selectedScreenIds.length !== 1 ? "s" : ""} selected
-              {" · "}
-              <span className="text-slate-500">
-                ₹{screensData.filter(s => selectedScreenIds.includes(s.id)).reduce((sum, s) => sum + s.pricePerDay, 0).toLocaleString()}/day
-              </span>
-            </p>
-            <Button variant="ghost" size="sm" onClick={onClearAll} className="text-xs text-slate-400 h-7">
-              Clear all
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Screen Details Modal (same as Find Screens) */}
       <ScreenDetailsModal

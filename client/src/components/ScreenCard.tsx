@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { MapPin, Users, Monitor, Eye, Navigation } from 'lucide-react';
 import { Link } from 'wouter';
 import type { Screen } from '@shared/schema';
+import { getScreenCountDisplay, calculateScreenPricePerDay } from '@shared/utils';
 
 interface ScreenCardProps {
   screen: Screen & { distanceKm?: number };
@@ -61,6 +62,11 @@ export default function ScreenCard({
               : `${screen.distanceKm.toFixed(1)}km`}
           </Badge>
         )}
+        {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+          <Badge className={`absolute bottom-2 left-2 text-[10px] uppercase font-bold border-0 shadow-md ${screen.bulkBookingMandatory ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-primary/90 text-primary-foreground backdrop-blur-sm'}`}>
+            {getScreenCountDisplay(screen)} {screen.bulkBookingMandatory ? '(All Required)' : ''}
+          </Badge>
+        )}
       </div>
 
       <CardContent className="p-3 sm:p-4 space-y-2.5">
@@ -87,7 +93,7 @@ export default function ScreenCard({
         <div className="flex items-center justify-between pt-2 border-t">
           <div>
             <p className="text-xs text-muted-foreground">Per day</p>
-            <p className="font-bold text-lg sm:text-xl text-primary">₹{screen.pricePerDay.toLocaleString()}</p>
+            <p className="font-bold text-lg sm:text-xl text-primary">₹{calculateScreenPricePerDay(screen).toLocaleString()}</p>
           </div>
           <Link href="/register?role=advertiser">
             <Button size="sm" data-testid={`button-book-${screen.id}`}>
