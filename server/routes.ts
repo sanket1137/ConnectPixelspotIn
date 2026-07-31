@@ -137,7 +137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           city: screens.city,
         })
         .from(screens)
-        .where(eq(screens.status, "active"));
+        .where(inArray(screens.status, ["active", "approved"]));
       const locations = rows.map((r) => ({
         lat: Number(r.latitude),
         lng: Number(r.longitude),

@@ -377,11 +377,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getScreensByCity(city: string): Promise<Screen[]> {
-    return await db.select().from(screens).where(and(eq(screens.status, "active"), eq(screens.city, city))).orderBy(desc(screens.createdAt));
+    return await db.select().from(screens).where(and(inArray(screens.status, ["active", "approved"]), eq(screens.city, city))).orderBy(desc(screens.createdAt));
   }
 
   async getScreensByCategory(category: string): Promise<Screen[]> {
-    return await db.select().from(screens).where(and(eq(screens.status, "active"), eq(screens.venueCategory, category))).orderBy(desc(screens.createdAt));
+    return await db.select().from(screens).where(and(inArray(screens.status, ["active", "approved"]), eq(screens.venueCategory, category))).orderBy(desc(screens.createdAt));
   }
 
   async getAllScreens(): Promise<Screen[]> {
@@ -389,15 +389,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getActiveScreens(): Promise<Screen[]> {
-    return await db.select().from(screens).where(eq(screens.status, "active"));
+    return await db.select().from(screens).where(inArray(screens.status, ["active", "approved"]));
   }
 
   async getApprovedScreens(): Promise<Screen[]> {
-    // Return screens with 'active' status (available for booking)
+    // Return screens with 'active' or 'approved' status (available for booking)
     const cached = publicCache.get<Screen[]>('pub:approvedScreens');
     if (cached) return cached;
-    const activeScreens = await db.select().from(screens).where(eq(screens.status, "active"));
-    console.log(`   💾 [getApprovedScreens] Found ${activeScreens.length} active screens in database`);
+    const activeScreens = await db.select().from(screens).where(inArray(screens.status, ["active", "approved"]));
+    console.log(`   💾 [getApprovedScreens] Found ${activeScreens.length} active/approved screens in database`);
     if (activeScreens.length > 0) {
       console.log(`      Sample cities: ${activeScreens.slice(0, 5).map(s => s.city).join(', ')}`);
     }
@@ -408,7 +408,7 @@ export class DatabaseStorage implements IStorage {
   async getPublicScreens(): Promise<Screen[]> {
     const cached = publicCache.get<Screen[]>('pub:publicScreens');
     if (cached) return cached;
-    const result = await db.select().from(screens).where(eq(screens.status, "active")).orderBy(desc(screens.createdAt));
+    const result = await db.select().from(screens).where(inArray(screens.status, ["active", "approved"])).orderBy(desc(screens.createdAt));
     publicCache.set('pub:publicScreens', result, PUBLIC_SCREENS_TTL);
     return result;
   }
@@ -419,7 +419,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .selectDistinct({ city: screens.city })
       .from(screens)
-      .where(eq(screens.status, "active"));
+      .where(inArray(screens.status, ["active", "approved"]));
     const cities = result
       .map(r => r.city)
       .filter((city): city is string => city !== null)
@@ -435,7 +435,7 @@ export class DatabaseStorage implements IStorage {
       SELECT city,
         SUM(CASE WHEN is_multi_screen = true AND number_of_screens IS NOT NULL
                  THEN number_of_screens ELSE 1 END)::int AS screen_count
-      FROM screens WHERE status = 'active'
+      FROM screens WHERE status IN ('active', 'approved')
       GROUP BY city ORDER BY screen_count DESC
     `);
     const cityStats = (result.rows as any[]).map(r => ({
