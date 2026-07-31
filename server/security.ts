@@ -183,6 +183,7 @@ export function setupSecurity(app: Express) {
           "https://api.razorpay.com",
           "https://lumberjack.razorpay.com",
           "https://*.razorpay.com",
+          "https://ipapi.co",
           ...replitDomains,
           ...replitWsDomains,
         ].filter(Boolean),
