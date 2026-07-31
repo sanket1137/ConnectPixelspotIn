@@ -2,7 +2,7 @@ import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { PublicFooter } from "@/components/PublicFooter";
-import { ScreenCard } from "@/components/ScreenCard";
+import ScreenCard from "@/components/ScreenCard";
 import { Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
