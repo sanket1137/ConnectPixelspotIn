@@ -42,6 +42,7 @@ export default function DiscoverScreens() {
   const [emblaRef, emblaApi] = useEmblaCarousel({ startIndex: 0, align: "center", skipSnaps: false });
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [bottomSheetSnap, setBottomSheetSnap] = useState(0);
+  const [carouselIndex, setCarouselIndex] = useState(0);
 
   // Search State
   const [lat, setLat] = useState<number | undefined>();
@@ -53,6 +54,7 @@ export default function DiscoverScreens() {
     if (!emblaApi) return;
     const onSelect = () => {
       const index = emblaApi.selectedScrollSnap();
+      setCarouselIndex(index);
       // Use the filtered screens that are actually displayed on the map
       const mapScreens = screens.filter(s => !isNaN(parseFloat(String(s.latitude))) && !isNaN(parseFloat(String(s.longitude))));
       const selectedScreen = mapScreens[index];
@@ -828,21 +830,21 @@ export default function DiscoverScreens() {
             </div>
           ) : (
             <div className="w-full h-full px-4 pt-2">
-              {mapScreens[emblaApi?.selectedScrollSnap() || 0] && (
+              {mapScreens[carouselIndex] && (
                 <div className="h-full overflow-y-auto no-scrollbar pb-24">
-                  <h2 className="text-xl font-bold mb-4">{mapScreens[emblaApi?.selectedScrollSnap() || 0].name}</h2>
-                  <ScreenListCard screen={mapScreens[emblaApi?.selectedScrollSnap() || 0]} />
+                  <h2 className="text-xl font-bold mb-4">{mapScreens[carouselIndex].name}</h2>
+                  <ScreenListCard screen={mapScreens[carouselIndex]} />
                   <div className="mt-6 space-y-4 text-sm text-slate-700">
-                    <p><strong>Category:</strong> {mapScreens[emblaApi?.selectedScrollSnap() || 0].category}</p>
-                    <p><strong>Footfall:</strong> {mapScreens[emblaApi?.selectedScrollSnap() || 0].avgDailyFootfall} / day</p>
-                    <p><strong>Dimensions:</strong> {mapScreens[emblaApi?.selectedScrollSnap() || 0].dimensions}</p>
-                    <p><strong>Resolution:</strong> {mapScreens[emblaApi?.selectedScrollSnap() || 0].resolution}</p>
+                    <p><strong>Category:</strong> {mapScreens[carouselIndex].category}</p>
+                    <p><strong>Footfall:</strong> {mapScreens[carouselIndex].avgDailyFootfall} / day</p>
+                    <p><strong>Dimensions:</strong> {mapScreens[carouselIndex].dimensions}</p>
+                    <p><strong>Resolution:</strong> {mapScreens[carouselIndex].resolution}</p>
                     
                     <Button 
                       className="w-full mt-6"
-                      onClick={() => toggleScreenSelection(mapScreens[emblaApi?.selectedScrollSnap() || 0])}
+                      onClick={() => toggleScreenSelection(mapScreens[carouselIndex])}
                     >
-                      {selectedScreenIds.has(mapScreens[emblaApi?.selectedScrollSnap() || 0].id) ? "Remove" : "Add to Campaign"}
+                      {selectedScreenIds.has(mapScreens[carouselIndex].id) ? "Remove" : "Add to Campaign"}
                     </Button>
                   </div>
                 </div>
