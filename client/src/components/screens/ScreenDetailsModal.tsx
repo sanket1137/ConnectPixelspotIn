@@ -54,8 +54,18 @@ export function ScreenDetailsModal({
               alt={screen.name} 
               className="absolute inset-0 w-full h-full object-cover"
             />
+            
+            {/* Screen Type Strip at top-left */}
+            {screen.type && (
+              <div className="absolute top-6 left-6 z-10">
+                <Badge className="bg-teal-500 hover:bg-teal-600 text-white border-0 shadow-xl px-3 py-1.5 text-xs font-bold uppercase tracking-widest rounded-md backdrop-blur-md">
+                  {screen.type}
+                </Badge>
+              </div>
+            )}
+
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-6">
-              <Badge variant="secondary" className="w-fit mb-3 bg-teal-500/20 text-teal-100 hover:bg-teal-500/30 border-0 backdrop-blur-sm">
+              <Badge variant="secondary" className="w-fit mb-3 bg-white/20 text-white hover:bg-white/30 border-0 backdrop-blur-sm shadow-sm">
                 {screen.category}
               </Badge>
               <h2 className="text-2xl font-bold text-white leading-tight mb-2">{screen.name}</h2>
@@ -142,15 +152,10 @@ export function ScreenDetailsModal({
               <Separator />
 
               {/* Tags */}
-              {(screen.type || screen.lifestyleTags || screen.locationTags) && (
+              {(screen.lifestyleTags || screen.locationTags) && (
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900 mb-3">Audience & Location Tags</h3>
                   <div className="flex flex-wrap gap-2">
-                    {screen.type && (
-                      <Badge variant="secondary" className="bg-teal-50 text-teal-700 border-teal-200 font-medium">
-                        {screen.type}
-                      </Badge>
-                    )}
                     {screen.lifestyleTags?.map(tag => (
                       <Badge key={tag} variant="secondary" className="bg-slate-100 text-slate-700 font-normal">
                         {tag}
