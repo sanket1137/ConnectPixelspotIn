@@ -50,22 +50,6 @@ export default function DiscoverScreens() {
   const [radiusKm, setRadiusKm] = useState<number>(15);
   const [locationName, setLocationName] = useState<string>("");
 
-  useEffect(() => {
-    if (!emblaApi) return;
-    const onSelect = () => {
-      const index = emblaApi.selectedScrollSnap();
-      setCarouselIndex(index);
-      // Use the filtered screens that are actually displayed on the map
-      const mapScreens = screens.filter(s => !isNaN(parseFloat(String(s.latitude))) && !isNaN(parseFloat(String(s.longitude))));
-      const selectedScreen = mapScreens[index];
-      if (selectedScreen && isBottomSheetOpen && bottomSheetSnap === 0) {
-        setHoveredScreenId(selectedScreen.id);
-      }
-    };
-    emblaApi.on('select', onSelect);
-    return () => { emblaApi.off('select', onSelect); };
-  }, [emblaApi, screens, isBottomSheetOpen, bottomSheetSnap]);
-
   // Filters State
   const [filters, setFilters] = useState<{
     state: string;
@@ -192,6 +176,20 @@ export default function DiscoverScreens() {
   const mapScreens = useMemo(() => {
     return screens.filter(s => !isNaN(parseFloat(String(s.latitude))) && !isNaN(parseFloat(String(s.longitude))));
   }, [screens]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    const onSelect = () => {
+      const index = emblaApi.selectedScrollSnap();
+      setCarouselIndex(index);
+      const selectedScreen = mapScreens[index];
+      if (selectedScreen && isBottomSheetOpen && bottomSheetSnap === 0) {
+        setHoveredScreenId(selectedScreen.id);
+      }
+    };
+    emblaApi.on('select', onSelect);
+    return () => { emblaApi.off('select', onSelect); };
+  }, [emblaApi, mapScreens, isBottomSheetOpen, bottomSheetSnap]);
 
   const { data: locations } = useQuery<{
     states: string[];
