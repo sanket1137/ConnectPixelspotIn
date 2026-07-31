@@ -19,6 +19,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/contexts/AuthContext";
 import { DiscoverAuthModal } from "@/components/DiscoverAuthModal";
+import useEmblaCarousel from "embla-carousel-react";
+import { BottomSheet } from "@/components/BottomSheet";
 
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
 
@@ -37,11 +39,30 @@ export default function DiscoverScreens() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   
+  const [emblaRef, emblaApi] = useEmblaCarousel({ startIndex: 0, align: "center", skipSnaps: false });
+  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
+  const [bottomSheetSnap, setBottomSheetSnap] = useState(0);
+
   // Search State
   const [lat, setLat] = useState<number | undefined>();
   const [lng, setLng] = useState<number | undefined>();
   const [radiusKm, setRadiusKm] = useState<number>(15);
   const [locationName, setLocationName] = useState<string>("");
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    const onSelect = () => {
+      const index = emblaApi.selectedScrollSnap();
+      // Use the filtered screens that are actually displayed on the map
+      const mapScreens = screens.filter(s => !isNaN(parseFloat(String(s.latitude))) && !isNaN(parseFloat(String(s.longitude))));
+      const selectedScreen = mapScreens[index];
+      if (selectedScreen && isBottomSheetOpen && bottomSheetSnap === 0) {
+        setHoveredScreenId(selectedScreen.id);
+      }
+    };
+    emblaApi.on('select', onSelect);
+    return () => { emblaApi.off('select', onSelect); };
+  }, [emblaApi, screens, isBottomSheetOpen, bottomSheetSnap]);
 
   // Filters State
   const [filters, setFilters] = useState<{
@@ -164,6 +185,10 @@ export default function DiscoverScreens() {
     return screens.reduce((acc, s) => {
       return acc + (s.isMultiScreen && s.numberOfScreens ? s.numberOfScreens : 1);
     }, 0);
+  }, [screens]);
+
+  const mapScreens = useMemo(() => {
+    return screens.filter(s => !isNaN(parseFloat(String(s.latitude))) && !isNaN(parseFloat(String(s.longitude))));
   }, [screens]);
 
   const { data: locations } = useQuery<{
@@ -310,7 +335,7 @@ export default function DiscoverScreens() {
   };
 
   // Custom Map Marker Content
-  const renderCustomMarker = (screen: Screen) => {
+  const renderCustomMarker = (screen: Screen, index: number) => {
     const isHovered = hoveredScreenId === screen.id;
     const isSelected = selectedScreenIds.has(screen.id);
     
@@ -327,13 +352,21 @@ export default function DiscoverScreens() {
         `}
         onMouseEnter={() => setHoveredScreenId(screen.id)}
         onMouseLeave={() => setHoveredScreenId(null)}
-        onClick={() => setDetailModalScreen(screen)}
+        onClick={() => {
+          if (isMobile) {
+            setIsBottomSheetOpen(true);
+            setBottomSheetSnap(0);
+            setTimeout(() => emblaApi?.scrollTo(index), 50);
+          } else {
+            setDetailModalScreen(screen);
+          }
+        }}
       >
         <div className={`
           px-3 py-1.5 rounded-full font-bold text-[13px] shadow-lg border-2 whitespace-nowrap
           ${isSelected 
             ? 'bg-green-600 text-white border-white' 
-            : 'bg-white text-slate-800 border-white hover:bg-slate-50'
+            : (isHovered ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-800 border-white hover:bg-slate-50')
           }
           ${isHovered && !isSelected ? 'shadow-xl font-extrabold' : 'shadow-md'}
         `}>
@@ -343,7 +376,7 @@ export default function DiscoverScreens() {
           border-l-[6px] border-l-transparent 
           border-r-[6px] border-r-transparent 
           border-t-[6px] 
-          ${isSelected ? 'border-t-green-600' : 'border-t-white'}
+          ${isSelected ? 'border-t-green-600' : (isHovered ? 'border-t-slate-900' : 'border-t-white')}
         `}></div>
       </div>
     );
@@ -415,7 +448,7 @@ export default function DiscoverScreens() {
     <div className="flex flex-col h-[calc(100vh-64px)] w-full overflow-hidden bg-white">
       
       {/* Top Banner & Header */}
-      <div className="bg-white border-b border-slate-200 z-10 shadow-sm shrink-0">
+      <div className="bg-white border-b border-slate-200 z-10 shadow-sm shrink-0 hidden md:block">
         <div className="px-6 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-slate-900">Discover Screens</h1>
           <div className="flex items-center gap-4">
@@ -437,7 +470,7 @@ export default function DiscoverScreens() {
           </div>
         </div>
         
-        {/* Airbnb style Search & Quick Filters */}
+        {/* Desktop Search & Quick Filters */}
         <div className="px-6 pb-2 pt-4 flex flex-col gap-4 w-full max-w-[100vw] overflow-hidden">
           
           <div className="flex justify-center w-full">
@@ -685,10 +718,40 @@ export default function DiscoverScreens() {
 
         {/* Right Map View */}
         <div className={`
-          flex-1 bg-slate-50 relative border-l border-slate-200 p-4 sm:p-6 pb-20 sm:pb-6
-          ${isMobile ? (viewMode === 'mobile_map' ? 'block' : 'hidden') : 'block'}
+          flex-1 bg-slate-50 relative p-0 sm:p-6 sm:pb-6 md:border-l border-slate-200
+          ${isMobile ? (viewMode === 'mobile_map' ? 'block absolute inset-0 z-0' : 'hidden') : 'block'}
         `}>
-          <div className="w-full h-full rounded-2xl overflow-hidden shadow-md border border-slate-200/60 bg-slate-200 relative z-0">
+          
+          {/* Mobile Floating Search Pill */}
+          {isMobile && viewMode === 'mobile_map' && (
+            <div className="absolute top-4 left-4 right-4 z-20 flex items-center gap-2">
+              <div 
+                className="flex-1 bg-white rounded-full shadow-lg border border-slate-200 px-4 h-12 flex items-center gap-3 cursor-pointer"
+                onClick={() => setViewMode('mobile_list')}
+              >
+                <Search className="w-5 h-5 text-slate-800 font-bold" />
+                <div className="flex-1 flex flex-col justify-center">
+                  <span className="text-[13px] font-bold text-slate-900 leading-tight">
+                    {locationName || "Where to promote?"}
+                  </span>
+                  <span className="text-[11px] text-slate-500 leading-tight">
+                    {radiusKm} km • Any format
+                  </span>
+                </div>
+              </div>
+              
+              <Button 
+                variant="outline" 
+                size="icon"
+                className="w-12 h-12 rounded-full bg-white shadow-lg border-slate-200 shrink-0"
+                onClick={() => setShowAdvancedFilters(true)}
+              >
+                <SlidersHorizontal className="w-5 h-5 text-slate-700" />
+              </Button>
+            </div>
+          )}
+
+          <div className="w-full h-full sm:rounded-2xl overflow-hidden shadow-none sm:shadow-md border-0 sm:border border-slate-200/60 bg-slate-200 relative z-0">
             <Map
               id="discover-screens-map"
               mapId="pixelspot-discover-map"
@@ -699,14 +762,13 @@ export default function DiscoverScreens() {
               zoomControl={true}
               style={{ width: '100%', height: '100%' }}
             >
-              {screens
-                .filter(s => !isNaN(parseFloat(String(s.latitude))) && !isNaN(parseFloat(String(s.longitude))))
-                .map((screen) => (
+              {mapScreens.map((screen, index) => (
                 <AdvancedMarker
                   key={screen.id}
                   position={{ lat: parseFloat(String(screen.latitude)), lng: parseFloat(String(screen.longitude)) }}
+                  zIndex={hoveredScreenId === screen.id ? 100 : 1}
                 >
-                  {renderCustomMarker(screen)}
+                  {renderCustomMarker(screen, index)}
                 </AdvancedMarker>
               ))}
             </Map>
@@ -714,8 +776,8 @@ export default function DiscoverScreens() {
         </div>
 
         {/* Mobile View Toggle */}
-        {isMobile && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+        {isMobile && !isBottomSheetOpen && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300">
             <div className="bg-slate-900 text-white rounded-full shadow-2xl p-1 flex items-center">
               <Button 
                 variant="ghost" 
@@ -740,13 +802,65 @@ export default function DiscoverScreens() {
         )}
       </div>
 
-      <ScreenDetailsModal 
-        isOpen={!!detailModalScreen}
-        onClose={() => setDetailModalScreen(null)}
-        screen={detailModalScreen}
-        onAdd={toggleScreenSelection}
-        isAdded={detailModalScreen ? selectedScreenIds.has(detailModalScreen.id) : false}
-      />
+      {/* Mobile Map Bottom Sheet */}
+      {isMobile && (
+        <BottomSheet 
+          isOpen={isBottomSheetOpen} 
+          onClose={() => { setIsBottomSheetOpen(false); setHoveredScreenId(null); }}
+          snapPoints={['35%', '90%']}
+          initialSnap={0}
+          onSnapChange={setBottomSheetSnap}
+          hideCloseButton={bottomSheetSnap === 0}
+        >
+          {bottomSheetSnap === 0 ? (
+            <div className="w-full pt-1">
+              <div className="overflow-hidden" ref={emblaRef}>
+                <div className="flex touch-pan-y">
+                  {mapScreens.map((screen) => (
+                    <div className="flex-[0_0_85%] min-w-0 pl-4 first:pl-6 last:pr-6" key={screen.id}>
+                      <div className="bg-white rounded-xl shadow-lg border border-slate-100 h-full p-3">
+                        <ScreenListCard screen={screen} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full h-full px-4 pt-2">
+              {mapScreens[emblaApi?.selectedScrollSnap() || 0] && (
+                <div className="h-full overflow-y-auto no-scrollbar pb-24">
+                  <h2 className="text-xl font-bold mb-4">{mapScreens[emblaApi?.selectedScrollSnap() || 0].name}</h2>
+                  <ScreenListCard screen={mapScreens[emblaApi?.selectedScrollSnap() || 0]} />
+                  <div className="mt-6 space-y-4 text-sm text-slate-700">
+                    <p><strong>Category:</strong> {mapScreens[emblaApi?.selectedScrollSnap() || 0].category}</p>
+                    <p><strong>Footfall:</strong> {mapScreens[emblaApi?.selectedScrollSnap() || 0].avgDailyFootfall} / day</p>
+                    <p><strong>Dimensions:</strong> {mapScreens[emblaApi?.selectedScrollSnap() || 0].dimensions}</p>
+                    <p><strong>Resolution:</strong> {mapScreens[emblaApi?.selectedScrollSnap() || 0].resolution}</p>
+                    
+                    <Button 
+                      className="w-full mt-6"
+                      onClick={() => toggleScreenSelection(mapScreens[emblaApi?.selectedScrollSnap() || 0])}
+                    >
+                      {selectedScreenIds.has(mapScreens[emblaApi?.selectedScrollSnap() || 0].id) ? "Remove" : "Add to Campaign"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </BottomSheet>
+      )}
+
+      {!isMobile && (
+        <ScreenDetailsModal 
+          isOpen={!!detailModalScreen}
+          onClose={() => setDetailModalScreen(null)}
+          screen={detailModalScreen}
+          onAdd={toggleScreenSelection}
+          isAdded={detailModalScreen ? selectedScreenIds.has(detailModalScreen.id) : false}
+        />
+      )}
       <DiscoverAuthModal 
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
