@@ -169,7 +169,7 @@ export default function PrivacyPolicy() {
               <p className="text-muted-foreground mt-3">
                 Email: <a href="mailto:contact@pixelspot.in" className="text-primary hover:underline">contact@pixelspot.in</a>
               </p>
-              <p className="text-muted-foreground">Phone: +91 72048 08334</p>
+              <p className="text-muted-foreground">Phone: +91 77608 07137</p>
               <p className="text-muted-foreground mt-3">
                 Website: <a href="https://connect.pixelspot.in" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">connect.pixelspot.in</a>
               </p>

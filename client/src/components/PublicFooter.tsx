@@ -82,7 +82,7 @@ export function PublicFooter({ platformStats }: PublicFooterProps) {
               ))}
               <div className="mt-4 pt-4 border-t border-gray-800 space-y-1">
                 <p className="text-sm text-gray-400">contact@pixelspot.in</p>
-                <p className="text-sm text-gray-400">+91 72048 08334</p>
+                <p className="text-sm text-gray-400">+91 77608 07137</p>
                 <p className="text-sm text-gray-400">Bengaluru, Karnataka</p>
               </div>
             </div>

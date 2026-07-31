@@ -66,8 +66,8 @@ export default function ContactUs() {
               </div>
             </CardHeader>
             <CardContent>
-              <a href="tel:+917204808334" className="text-primary hover:underline font-medium">
-                +91 72048 08334
+              <a href="tel:+917760807137" className="text-primary hover:underline font-medium">
+                +91 77608 07137
               </a>
               <p className="text-sm text-muted-foreground mt-1">Available during business hours</p>
             </CardContent>

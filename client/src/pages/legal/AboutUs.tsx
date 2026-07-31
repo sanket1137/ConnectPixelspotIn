@@ -147,7 +147,7 @@ export default function AboutUs() {
               Email: <a href="mailto:contact@pixelspot.in" className="text-primary hover:underline">contact@pixelspot.in</a>
             </p>
             <p className="text-muted-foreground">
-              Phone: <a href="tel:+917204808334" className="text-primary hover:underline">+91 72048 08334</a>
+              Phone: <a href="tel:+917760807137" className="text-primary hover:underline">+91 77608 07137</a>
             </p>
           </div>
           <div className="mt-4">

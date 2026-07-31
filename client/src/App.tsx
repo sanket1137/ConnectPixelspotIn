@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
 import logo from "@assets/pixelspot-logo.png";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
 
 // Support Ticket Pages
 const SupportTickets = lazy(() => import("@/pages/support/SupportTickets"));
@@ -468,6 +469,7 @@ function App() {
           </AuthProvider>
         </GoogleMapsProvider>
         <Toaster />
+        <WhatsAppButton />
       </TooltipProvider>
     </QueryClientProvider>
   );
