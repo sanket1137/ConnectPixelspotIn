@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, ClipboardList, Trash2, ExternalLink, Calendar, Building2 } from "lucide-react";
+import { Plus, ClipboardList, Trash2, ExternalLink, Calendar, Building2, Monitor } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -106,13 +106,16 @@ export default function MediaPlansList() {
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" /> {fmtDate(plan.startDate)} – {fmtDate(plan.endDate)}
                       </span>
+                      <span className="flex items-center gap-1 font-medium">
+                        <Monitor className="w-3 h-3" /> {plan.totalScreens || 0} screen{(plan.totalScreens || 0) !== 1 ? 's' : ''}
+                      </span>
                     </div>
                     {plan.notes && (
                       <p className="text-xs text-muted-foreground mt-2 line-clamp-1 italic">{plan.notes}</p>
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-2 shrink-0">
-                    <span className="font-bold text-lg text-violet-700">{fmt(plan.budget || 0)}</span>
+                    <span className="font-bold text-lg text-violet-700">{fmt(plan.calculatedTotal || plan.budget || 0)}</span>
                     <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant="ghost" size="icon"

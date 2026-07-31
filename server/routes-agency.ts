@@ -20,13 +20,27 @@ export function registerAgencyRoutes(
   // GET /api/agency/media-plans — list all plans for the logged-in agency
   app.get("/api/agency/media-plans", authenticate, requireRole("agency"), async (req, res) => {
     try {
+      // Fetch plans with aggregated totals from items
       const plans = await db
-        .select()
+        .select({
+          plan: mediaPlans,
+          totalScreens: sql<number>`count(${mediaPlanItems.id})`.mapWith(Number),
+          calculatedTotal: sql<number>`sum(${mediaPlanItems.totalPrice})`.mapWith(Number)
+        })
         .from(mediaPlans)
+        .leftJoin(mediaPlanItems, eq(mediaPlans.id, mediaPlanItems.planId))
         .where(eq(mediaPlans.agencyId, req.user!.id))
+        .groupBy(mediaPlans.id)
         .orderBy(mediaPlans.createdAt);
 
-      res.json(plans.reverse()); // newest first
+      // Flatten the result
+      const formattedPlans = plans.map(p => ({
+        ...p.plan,
+        totalScreens: p.totalScreens || 0,
+        calculatedTotal: p.calculatedTotal || 0
+      })).reverse(); // newest first
+
+      res.json(formattedPlans);
     } catch (error) {
       console.error("Get media plans error:", error);
       res.status(500).json({ error: "Internal server error" });
