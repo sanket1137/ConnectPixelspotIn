@@ -6,11 +6,12 @@ import { Map, AdvancedMarker, InfoWindow, useMap, useMapsLibrary } from "@vis.gl
 import { MapPin, Check, Users, Monitor, Loader2, Home, Sun, SunMoon } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Screen } from "@shared/schema";
-import { LocationItem } from "@/components/map/MultiLocationSearch";
+import { MultiLocationSearch, LocationItem } from "@/components/map/MultiLocationSearch";
 import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
 
 interface Props {
   locations: LocationItem[];
+  onChangeLocations: (locations: LocationItem[]) => void;
   selectedScreenIds: string[];
   screensData: Screen[];
   onScreensLoaded: (screens: Screen[]) => void;
@@ -54,6 +55,7 @@ function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
 
 export default function Step3_ScreenDiscovery({
   locations,
+  onChangeLocations,
   selectedScreenIds,
   screensData,
   onScreensLoaded,
@@ -271,6 +273,21 @@ export default function Step3_ScreenDiscovery({
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-[calc(100vh-260px)] min-h-[560px] w-full bg-white border-y border-slate-200">
+      {/* Location Search Bar */}
+      <div className="shrink-0 px-6 py-4 border-b border-slate-200 bg-slate-50/50">
+        <MultiLocationSearch
+          selectedLocations={locations}
+          onChange={onChangeLocations}
+          onLocationFocus={(loc) => {
+            if (loc.lat && loc.lng) {
+              setPanTarget({ lat: loc.lat, lng: loc.lng, zoom: 12 });
+            }
+          }}
+          placeholder="Search for another city, area, or landmark..."
+          className="max-w-3xl"
+        />
+      </div>
+
       {/* Header bar */}
       <div className="shrink-0 px-6 py-3 border-b border-slate-200 bg-white grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-center gap-4">
         {/* Left: Title & Info */}

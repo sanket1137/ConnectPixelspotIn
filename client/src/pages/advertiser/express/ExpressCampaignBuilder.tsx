@@ -413,10 +413,30 @@ export default function ExpressCampaignBuilder() {
       {step === 3 ? (
         <Step3_ScreenDiscovery
           locations={state.locations}
+          onChangeLocations={(locs) => {
+            update({ locations: locs });
+          }}
           selectedScreenIds={state.selectedScreenIds}
           screensData={state.screensData}
           onScreensLoaded={(screens) => {
-            update({ screensData: screens, selectedScreenIds: screens.map((s) => s.id) });
+            setState((prev) => {
+              // Keep screens that are currently selected even if they aren't in the new fetch
+              const currentlySelectedScreens = prev.screensData.filter(s => prev.selectedScreenIds.includes(s.id));
+              const mergedScreens = [...screens];
+              for (const s of currentlySelectedScreens) {
+                if (!mergedScreens.find(ms => ms.id === s.id)) {
+                  mergedScreens.push(s);
+                }
+              }
+
+              if (prev.screensData.length === 0) {
+                // Initial load: auto-select all
+                return { ...prev, screensData: mergedScreens, selectedScreenIds: screens.map((s) => s.id) };
+              }
+              
+              // Subsequent load: just update screensData, preserve selectedScreenIds
+              return { ...prev, screensData: mergedScreens };
+            });
           }}
           onToggleScreen={(id) => {
             const ids = state.selectedScreenIds.includes(id)
