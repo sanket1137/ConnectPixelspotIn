@@ -5,7 +5,7 @@ import { Map, AdvancedMarker, useMap, useMapsLibrary } from "@vis.gl/react-googl
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, ShoppingCart, List, Map as MapIcon, SlidersHorizontal, Check, Loader2, Star, Menu, Users, Search, X } from "lucide-react";
+import { MapPin, ShoppingCart, List, Map as MapIcon, SlidersHorizontal, Check, Loader2, Star, Menu, Users, Search, X, Coffee, Utensils, Bus, ShoppingBag, Building2, Plane, Monitor, Train, Briefcase, Activity, Store, Hotel, Ticket, MonitorPlay, Dumbbell, GraduationCap, Scissors, Car } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { Screen } from "@shared/schema";
@@ -453,6 +453,33 @@ export default function DiscoverScreens() {
     setLocation("/advertiser/quick-campaign");
   };
 
+  const VenueIconFallback = ({ category, name }: { category: string, name: string }) => {
+    const normalized = (category || "").toLowerCase();
+    
+    let Icon = Monitor;
+    if (normalized.includes("cafe") || normalized.includes("coffee")) Icon = Coffee;
+    else if (normalized.includes("restaurant") || normalized.includes("food")) Icon = Utensils;
+    else if (normalized.includes("bus") || normalized.includes("transit")) Icon = Bus;
+    else if (normalized.includes("mall") || normalized.includes("retail") || normalized.includes("shopping")) Icon = Store;
+    else if (normalized.includes("corporate") || normalized.includes("office") || normalized.includes("apartment") || normalized.includes("building")) Icon = Building2;
+    else if (normalized.includes("airport") || normalized.includes("plane")) Icon = Plane;
+    else if (normalized.includes("metro") || normalized.includes("train") || normalized.includes("railway")) Icon = Train;
+    else if (normalized.includes("cinema") || normalized.includes("movie")) Icon = MonitorPlay;
+    else if (normalized.includes("gym") || normalized.includes("fitness")) Icon = Dumbbell;
+    else if (normalized.includes("college") || normalized.includes("school")) Icon = GraduationCap;
+    else if (normalized.includes("hospital") || normalized.includes("clinic")) Icon = Activity;
+    else if (normalized.includes("hotel") || normalized.includes("resort")) Icon = Hotel;
+    else if (normalized.includes("salon")) Icon = Scissors;
+    else if (normalized.includes("road") || normalized.includes("highway") || normalized.includes("junction") || normalized.includes("flyover")) Icon = MapPin;
+
+    return (
+      <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center text-slate-400 group-hover:bg-slate-200 transition-colors">
+        <Icon className="w-10 h-10 mb-2 opacity-50" />
+        <span className="text-[10px] font-medium uppercase tracking-wider opacity-60 text-center px-2 line-clamp-1">{category || "Digital Screen"}</span>
+      </div>
+    );
+  };
+
   // Custom Map Marker Content
   const renderCustomMarker = (screen: Screen, index: number) => {
     const isHovered = hoveredScreenId === screen.id;
@@ -513,11 +540,15 @@ export default function DiscoverScreens() {
         onClick={() => setDetailModalScreen(screen)}
       >
         <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-slate-200">
-          <img 
-            src={screen.screenImages?.[0] || screen.images?.[0] || 'https://images.unsplash.com/photo-1542204165-65bf26472b9b?auto=format&fit=crop&q=80&w=600'} 
-            alt={screen.name}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
+          {(screen.screenImages?.[0] || screen.images?.[0]) ? (
+            <img 
+              src={screen.screenImages?.[0] || screen.images?.[0]} 
+              alt={screen.name}
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <VenueIconFallback category={screen.category || ""} name={screen.name} />
+          )}
           {isAdded && (
             <div className="absolute top-3 left-3 bg-green-500 text-white px-2 py-1 rounded-full shadow-sm text-xs font-semibold flex items-center">
               <Check className="w-3 h-3 mr-1" /> Added
@@ -946,11 +977,15 @@ export default function DiscoverScreens() {
                   >
                     {/* Compact Image */}
                     <div className="relative w-24 h-full shrink-0 rounded-xl overflow-hidden bg-slate-200">
-                      <img 
-                        src={screen.screenImages?.[0] || screen.images?.[0] || 'https://images.unsplash.com/photo-1542204165-65bf26472b9b?auto=format&fit=crop&q=80&w=600'} 
-                        alt={screen.name}
-                        className="w-full h-full object-cover"
-                      />
+                      {(screen.screenImages?.[0] || screen.images?.[0]) ? (
+                        <img 
+                          src={screen.screenImages?.[0] || screen.images?.[0]} 
+                          alt={screen.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <VenueIconFallback category={screen.category || ""} name={screen.name} />
+                      )}
                     </div>
                     {/* Compact Details */}
                     <div className="flex flex-col flex-1 justify-center py-1">
