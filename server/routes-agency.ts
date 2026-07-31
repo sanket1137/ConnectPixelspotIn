@@ -116,6 +116,7 @@ export function registerAgencyRoutes(
                   resolution: screen.resolution,
                   customAudienceTags: screen.customAudienceTags,
                   locationTags: screen.locationTags,
+                  type: screen.type,
                 }
               : null,
           };

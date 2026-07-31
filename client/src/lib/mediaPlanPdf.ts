@@ -385,6 +385,7 @@ export function printMediaPlan(data: MediaPlanPdfData) {
       <div class="logo-area">
         <h1>${plan.agencyName}</h1>
         <p>Premium Media Proposal</p>
+        <p style="font-size: 10px; color: #9ca3af; margin-top: 4px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Powered by Pixelspot</p>
       </div>
       <div class="plan-meta">
         <h2>MEDIA PLAN</h2>
