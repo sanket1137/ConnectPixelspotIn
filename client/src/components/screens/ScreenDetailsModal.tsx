@@ -142,10 +142,15 @@ export function ScreenDetailsModal({
               <Separator />
 
               {/* Tags */}
-              {(screen.lifestyleTags || screen.locationTags) && (
+              {(screen.type || screen.lifestyleTags || screen.locationTags) && (
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900 mb-3">Audience & Location Tags</h3>
                   <div className="flex flex-wrap gap-2">
+                    {screen.type && (
+                      <Badge variant="secondary" className="bg-teal-50 text-teal-700 border-teal-200 font-medium">
+                        {screen.type}
+                      </Badge>
+                    )}
                     {screen.lifestyleTags?.map(tag => (
                       <Badge key={tag} variant="secondary" className="bg-slate-100 text-slate-700 font-normal">
                         {tag}
