@@ -43,6 +43,7 @@ export default function DiscoverScreens() {
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [bottomSheetSnap, setBottomSheetSnap] = useState(0);
   const [carouselIndex, setCarouselIndex] = useState(0);
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
 
   // Search State
   const [lat, setLat] = useState<number | undefined>();
@@ -727,7 +728,7 @@ export default function DiscoverScreens() {
             <div className="absolute top-4 left-4 right-4 z-20 flex items-center gap-2">
               <div 
                 className="flex-1 bg-white rounded-full shadow-lg border border-slate-200 px-4 h-12 flex items-center gap-3 cursor-pointer"
-                onClick={() => setViewMode('mobile_list')}
+                onClick={() => setShowMobileSearch(true)}
               >
                 <Search className="w-5 h-5 text-slate-800 font-bold" />
                 <div className="flex-1 flex flex-col justify-center">
@@ -861,6 +862,50 @@ export default function DiscoverScreens() {
           isAdded={detailModalScreen ? selectedScreenIds.has(detailModalScreen.id) : false}
         />
       )}
+
+      {/* Mobile Search Modal */}
+      {isMobile && (
+        <Dialog open={showMobileSearch} onOpenChange={setShowMobileSearch}>
+          <DialogContent className="sm:max-w-[425px] overflow-hidden rounded-2xl border-0 p-0 shadow-2xl mt-safe top-24 transform -translate-y-0">
+            <div className="bg-white p-6 flex flex-col gap-6">
+              <h2 className="text-xl font-bold text-slate-900">Where to promote?</h2>
+              
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location</label>
+                <SearchAutocomplete 
+                  onPlaceSelect={(place, val) => { handlePlaceSelect(place, val); }} 
+                  className="w-full h-12 text-base"
+                  initialValue={filters.search}
+                />
+              </div>
+              
+              <div className="flex flex-col gap-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Radius</label>
+                  <span className="text-sm font-semibold text-slate-900 bg-slate-100 px-2 py-1 rounded-md">{radiusKm} km</span>
+                </div>
+                <input 
+                  type="range" 
+                  min={1} 
+                  max={50} 
+                  value={radiusKm} 
+                  onChange={(e) => setRadiusKm(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary mt-2" 
+                />
+              </div>
+              
+              <Button 
+                className="w-full h-12 rounded-xl mt-4 text-base font-semibold shadow-sm" 
+                onClick={() => setShowMobileSearch(false)}
+              >
+                <Search className="w-4 h-4 mr-2" />
+                Search Area
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       <DiscoverAuthModal 
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
