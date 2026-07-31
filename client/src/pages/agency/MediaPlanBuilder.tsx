@@ -570,6 +570,7 @@ export default function MediaPlanBuilder() {
           pricePerDay: i.pricePerDay,
           totalPrice: i.totalPrice || i.days * i.pricePerDay,
           notes: i.notes,
+          screen: i.screen,
         })),
     });
   };
