@@ -24,16 +24,16 @@ import discoverHeroImg from "@assets/Gemini_Generated_Image_a8c8zna8c8zna8c8_176
 import airportKioskImg from "@assets/Gemini_Generated_Image_ladsi7ladsi7lads_1763277847120.png";
 import cinema1Img from "@assets/Screenshot 2025-11-16 at 9.47.23 PM_1763309847078.png";
 import cinema2Img from "@assets/Screenshot 2025-11-16 at 9.32.10 PM_1763308932655.png";
-import newCafeImg from "@assets/CAFE 3.png";
-import newCinemaImg from "@assets/Cinema Hall 2.png";
-import newCinemaImgAlt from "@assets/CINEMA HALL 5.png";
-import newBillboardImg from "@assets/billboard1.png";
-import newMallImg from "@assets/Mall1.png";
-import newSupermarketImg from "@assets/supper market1.png";
-import newTechParkImg from "@assets/Tech Park.png";
-import newSalonImg from "@assets/Salon.jpeg";
-import newGymImg from "@assets/Gym.jpeg";
-import newBusStopImg from "@assets/Bus Stop.png";
+const newCafeImg = cafeImg;
+const newCinemaImg = cinema1Img;
+const newCinemaImgAlt = railwayImg;
+const newBillboardImg = streetBillboardImg;
+const newMallImg = corporateImg;
+const newSupermarketImg = airportLargeImg;
+const newTechParkImg = corporateImg;
+const newSalonImg = cafeImg;
+const newGymImg = gymImg;
+const newBusStopImg = railwayImg;
 interface HomeDataResponse {
   screens: Screen[];
   cities: string[];
