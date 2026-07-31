@@ -432,44 +432,81 @@ function VenueCard({ card, onSelect }: { card: typeof VENUE_CARDS[0]; onSelect: 
 }
 
 // ──────────────────────────────────────────────────────────
-// Network Stats (Simplified for Performance)
 // ──────────────────────────────────────────────────────────
-function NetworkStats({ platformStats }: { platformStats: any }) {
+// Animated Network Stats (Optimized Scroll-Linked Dial)
+// ──────────────────────────────────────────────────────────
+function AnimatedNetworkStats({ platformStats }: { platformStats: any }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end end"]
+  });
+
+  // Dial Animation Mappings for 3 items
+  const y0 = useTransform(scrollYProgress, [0, 0.5, 1], ["0%", "-80%", "-160%"]);
+  const op0 = useTransform(scrollYProgress, [0, 0.25, 0.5], [1, 0.3, 0]);
+  const scale0 = useTransform(scrollYProgress, [0, 0.25, 0.5], [1, 0.9, 0.8]);
+
+  const y1 = useTransform(scrollYProgress, [0, 0.5, 1], ["80%", "0%", "-80%"]);
+  const op1 = useTransform(scrollYProgress, [0, 0.25, 0.5, 0.75, 1], [0, 0.3, 1, 0.3, 0]);
+  const scale1 = useTransform(scrollYProgress, [0, 0.25, 0.5, 0.75, 1], [0.8, 0.9, 1, 0.9, 0.8]);
+
+  const y2 = useTransform(scrollYProgress, [0, 0.5, 1], ["160%", "80%", "0%"]);
+  const op2 = useTransform(scrollYProgress, [0.5, 0.75, 1], [0, 0.3, 1]);
+  const scale2 = useTransform(scrollYProgress, [0.5, 0.75, 1], [0.8, 0.9, 1]);
+
   const stats = [
-    { text: `${platformStats?.totalPhysicalScreens?.toLocaleString() || '3,192'}+`, label: "DIGITAL SCREENS" },
-    { text: `${platformStats?.totalCities || '78'}+`, label: "CITIES ACROSS INDIA" },
-    { text: `100M+`, label: "IMPRESSIONS" }
+    { text: `${platformStats?.totalPhysicalScreens?.toLocaleString() || '3,192'}+ DIGITAL SCREENS`, y: y0, op: op0, scale: scale0 },
+    { text: `${platformStats?.totalCities || '78'}+ CITIES ACROSS INDIA`, y: y1, op: op1, scale: scale1 },
+    { text: `100M+ IMPRESSIONS`, y: y2, op: op2, scale: scale2 }
   ];
 
   return (
-    <section className="py-24 bg-white border-t border-gray-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="bg-black rounded-[32px] md:rounded-[48px] overflow-hidden shadow-2xl p-10 md:p-16 lg:p-24 relative">
+    <section ref={containerRef} className="relative h-[300vh] bg-white">
+      <div className="sticky top-0 h-screen w-full flex items-center justify-center p-3 sm:p-4 md:p-6 lg:p-8 xl:p-12">
+        
+        {/* Premium Black Container */}
+        <div className="relative w-full h-[85vh] md:h-[80vh] min-h-[600px] bg-black rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row border border-gray-900">
           
-          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-900/20 blur-3xl rounded-full" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-900/20 blur-3xl rounded-full" />
+          {/* Left Side Title - Removed backdrop-blur-md for huge performance gain */}
+          <div className="md:w-[320px] lg:w-[400px] xl:w-[450px] p-8 md:p-16 flex flex-col justify-center relative z-20 bg-gradient-to-r from-black via-black to-transparent">
+            <p className="text-gray-400 font-bold uppercase tracking-widest text-xs mb-3 md:mb-4">
+              Our Network
+            </p>
+            <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] tracking-tight shrink-0">
+              Scale That<br />Delivers
+            </h2>
+          </div>
 
-          <div className="relative z-10 flex flex-col md:flex-row gap-16 md:gap-8 items-center justify-between">
-            <div className="md:w-1/3">
-              <p className="text-gray-400 font-bold uppercase tracking-widest text-sm mb-4">
-                Our Network
-              </p>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
-                Scale That<br />Delivers
-              </h2>
-            </div>
+          {/* Right Side Dial Typography */}
+          <div className="relative h-full flex-1 flex items-center justify-center md:justify-end min-w-0" style={{ transform: 'translateZ(0)' }}>
             
-            <div className="md:w-2/3 flex flex-col sm:flex-row gap-10 md:gap-16 items-start justify-end">
+            {/* Gradient Fades for Smooth Entry/Exit */}
+            <div className="absolute top-0 left-0 right-0 h-32 md:h-40 bg-gradient-to-b from-black to-transparent z-10 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 h-32 md:h-40 bg-gradient-to-t from-black to-transparent z-10 pointer-events-none" />
+
+            <div className="relative w-full h-full flex items-center justify-center md:justify-end pr-0 md:pr-16">
               {stats.map((stat, i) => (
-                <div key={i} className="text-left">
-                  <h3 className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-2 tracking-tight">
-                    {stat.text}
+                <motion.div 
+                  key={i}
+                  style={{ y: stat.y, opacity: stat.op, scale: stat.scale, willChange: "transform, opacity" }}
+                  className="absolute w-full px-6 md:px-0 text-center md:text-right origin-center md:origin-right"
+                >
+                  <h3 className="text-6xl sm:text-7xl md:text-8xl lg:text-[110px] xl:text-[130px] 2xl:text-[150px] font-black text-white leading-[0.85] tracking-[-0.04em] uppercase flex flex-col md:inline-block">
+                    {stat.text.split('+').map((part, idx, arr) => (
+                      <span key={idx}>
+                        {part}
+                        {idx < arr.length - 1 && <span className="text-gray-600">+</span>}
+                      </span>
+                    ))}
                   </h3>
-                  <p className="text-gray-400 font-medium tracking-wide uppercase text-sm">{stat.label}</p>
-                </div>
+                </motion.div>
               ))}
             </div>
+
           </div>
+          
         </div>
       </div>
     </section>
@@ -1006,7 +1043,7 @@ export default function PublicHome() {
       </section>
 
       {/* ─────────────────── ANIMATED STATS STRIP ─────────────────── */}
-      <NetworkStats platformStats={platformStats} />
+      <AnimatedNetworkStats platformStats={platformStats} />
 
       {/* ─────────────────── DESTINATION BRANDS ─────────────────── */}
       <DestinationBrandsSection />
