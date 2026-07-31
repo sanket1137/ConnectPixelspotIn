@@ -86,18 +86,16 @@ export function printMediaPlan(data: MediaPlanPdfData) {
           <div class="screen-card-header">
             <div class="screen-title-area">
               <h3>${idx + 1}. ${item.screenName}</h3>
-              <p class="subtitle">${cityArea} • ${item.venueCategory} • ${item.environmentType}</p>
+              <p class="subtitle">
+                ${cityArea} • ${item.venueCategory} • ${item.environmentType} 
+                ${s.type ? `• <span style="background: #ccfbf1; color: #0f766e; padding: 2px 8px; border-radius: 12px; font-weight: 600; font-size: 11px; margin-left: 4px; display: inline-block;">${s.type}</span>` : ""}
+              </p>
               ${item.notes ? `<p class="item-note">${item.notes}</p>` : ""}
             </div>
           </div>
 
           <div class="screen-media-grid">
-            ${hasImage ? `
-              <div class="media-box" style="position: relative;">
-                ${s.type ? `<div style="position: absolute; top: 12px; left: 12px; background: #0d9488; color: white; padding: 4px 10px; font-size: 10px; font-weight: bold; text-transform: uppercase; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 0.5px; z-index: 2;">${s.type}</div>` : ""}
-                <img src="${imageSrc}" alt="Screen" onerror="this.onerror=null;this.src='https://placehold.co/400x300?text=No+Image+Available';" />
-              </div>
-            ` : ""}
+            ${hasImage ? `<div class="media-box"><img src="${imageSrc}" alt="Screen" onerror="this.onerror=null;this.src='https://placehold.co/400x300?text=No+Image+Available';" /></div>` : ""}
             ${hasMap ? `<div class="media-box"><img src="${mapUrl}" alt="Map" onerror="this.onerror=null;this.src='https://placehold.co/400x300?text=Map+Unavailable';" /></div>` : ""}
           </div>
 
