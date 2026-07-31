@@ -454,10 +454,6 @@ function AuthenticatedLayout() {
             </Suspense>
           </main>
         </div>
-        
-        {/* Render AppSidebar globally here. The desktop aside is fixed left. 
-            I'll need to update AppSidebar to absolute-position the mobile trigger into the header. */}
-        <AppSidebar />
       </div>
     </SidebarProvider>
   );
