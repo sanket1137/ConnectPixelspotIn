@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Map, AdvancedMarker, useMap } from "@vis.gl/react-google-maps";
+import { Map, AdvancedMarker, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -49,6 +49,8 @@ export default function DiscoverScreens() {
   const [lng, setLng] = useState<number | undefined>();
   const [radiusKm, setRadiusKm] = useState<number>(15);
   const [locationName, setLocationName] = useState<string>("");
+  const [initialLocationLoaded, setInitialLocationLoaded] = useState(false);
+  const geocodingLib = useMapsLibrary("geocoding");
 
   // Filters State
   const [filters, setFilters] = useState<{
@@ -163,7 +165,74 @@ export default function DiscoverScreens() {
 
   const { data: result, isLoading } = useQuery<{ screens: (Screen & { distanceKm?: number })[], total?: number } | Screen[]>({
     queryKey: [`/api/screens?${queryString}`],
+    enabled: initialLocationLoaded,
   });
+
+  useEffect(() => {
+    // If we've already done the initial location fetch, do nothing.
+    if (initialLocationLoaded) return;
+    
+    // If the library is not yet loaded, we must wait. 
+    if (!geocodingLib) return; 
+
+    const geocoder = new geocodingLib.Geocoder();
+
+    const fetchFallbackIPLocation = async () => {
+      try {
+        const response = await fetch("https://ipapi.co/json/");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.latitude && data.longitude && data.city) {
+            setLat(data.latitude);
+            setLng(data.longitude);
+            setLocationName(data.city);
+            setInitialLocationLoaded(true);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("IP fallback failed", err);
+      }
+      
+      // Ultimate fallback: Just load everything
+      setInitialLocationLoaded(true);
+    };
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setLat(latitude);
+          setLng(longitude);
+          
+          // Reverse geocode to get the city name
+          geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (results, status) => {
+            if (status === "OK" && results && results[0]) {
+              // Find locality or administrative_area_level_2
+              const cityComponent = results[0].address_components.find(c => 
+                c.types.includes("locality") || c.types.includes("administrative_area_level_2")
+              );
+              if (cityComponent) {
+                setLocationName(cityComponent.long_name);
+              } else {
+                setLocationName("Current Location");
+              }
+            } else {
+              setLocationName("Current Location");
+            }
+            setInitialLocationLoaded(true);
+          });
+        },
+        (error) => {
+          console.error("Geolocation denied or failed", error);
+          fetchFallbackIPLocation();
+        },
+        { timeout: 5000, maximumAge: 60000 }
+      );
+    } else {
+      fetchFallbackIPLocation();
+    }
+  }, [initialLocationLoaded, geocodingLib]);
 
   const screens = Array.isArray(result) ? result : (result?.screens || []);
 
