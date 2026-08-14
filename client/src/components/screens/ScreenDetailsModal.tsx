@@ -1,8 +1,8 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Screen } from '@shared/schema';
-import { MapPin, Users, Monitor, Clock, PlayCircle, Eye, CalendarDays, ExternalLink, X, PlusCircle, CheckCircle2 } from 'lucide-react';
+import { Screen, ZoneInfo } from '@shared/schema';
+import { MapPin, Users, Monitor, Clock, PlayCircle, Eye, CalendarDays, ExternalLink, X, PlusCircle, CheckCircle2, Layers, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { getScreenCountDisplay } from "@shared/utils";
@@ -13,6 +13,12 @@ interface ScreenDetailsModalProps {
   screen: Screen | null;
   onAdd: (screen: Screen) => void;
   isAdded: boolean;
+  // Zone props (optional — only passed when screen belongs to a zone)
+  zoneInfo?: ZoneInfo | null;
+  allZoneScreens?: Screen[];
+  onViewZone?: () => void;
+  onBookZone?: () => void;
+  isZoneBooked?: boolean;
 }
 
 export function ScreenDetailsModal({
@@ -20,7 +26,12 @@ export function ScreenDetailsModal({
   onClose,
   screen,
   onAdd,
-  isAdded
+  isAdded,
+  zoneInfo,
+  allZoneScreens = [],
+  onViewZone,
+  onBookZone,
+  isZoneBooked = false,
 }: ScreenDetailsModalProps) {
   if (!screen) return null;
 
@@ -34,11 +45,13 @@ export function ScreenDetailsModal({
     return `https://www.google.com/maps/dir/?api=1&destination=${screen.latitude},${screen.longitude}`;
   };
 
+  const isZoneScreen = !!zoneInfo;
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-4xl p-0 overflow-hidden bg-white border-0 rounded-2xl shadow-2xl flex flex-col sm:flex-row h-[90vh] sm:h-auto sm:max-h-[85vh]">
         
-        {/* Left Column - Image & Quick Info (Scrollable on mobile) */}
+        {/* Left Column - Image & Quick Info */}
         <div className="w-full sm:w-2/5 bg-slate-50 flex flex-col relative h-[40vh] sm:h-auto shrink-0">
           <Button 
             variant="ghost" 
@@ -48,6 +61,16 @@ export function ScreenDetailsModal({
           >
             <X className="h-5 w-5" />
           </Button>
+
+          {/* Zone Badge on image */}
+          {isZoneScreen && (
+            <div className="absolute top-4 left-4 z-10">
+              <div className="flex items-center gap-1.5 bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">
+                <Layers className="h-3.5 w-3.5" />
+                ZONE INVENTORY
+              </div>
+            </div>
+          )}
 
           <div className="relative h-full w-full min-h-[250px]">
             <img 
@@ -60,8 +83,8 @@ export function ScreenDetailsModal({
               }}
             />
             
-            {/* Screen Type Strip at top-left */}
-            {screen.type && (
+            {/* Screen Type Strip at top-left (only when not a zone) */}
+            {screen.type && !isZoneScreen && (
               <div className="absolute top-6 left-6 z-10">
                 <Badge className="bg-teal-500 hover:bg-teal-600 text-white border-0 shadow-xl px-3 py-1.5 text-xs font-bold uppercase tracking-widest rounded-md backdrop-blur-md">
                   {screen.type}
@@ -133,6 +156,7 @@ export function ScreenDetailsModal({
                 </h3>
                 <div className="grid grid-cols-2 gap-y-3 text-sm">
                   <div><span className="text-slate-500">Resolution:</span> <span className="font-medium">{screen.resolution}</span></div>
+                  <div><span className="text-slate-500">Size:</span> <span className="font-medium">{screen.size}</span></div>
                   <div><span className="text-slate-500">Format:</span> <span className="font-medium">{screen.displayFormat}</span></div>
                   <div><span className="text-slate-500">Environment:</span> <span className="font-medium">{screen.environmentType}</span></div>
                   <div><span className="text-slate-500">Traffic:</span> <span className="font-medium">{screen.trafficType}</span></div>
@@ -187,36 +211,102 @@ export function ScreenDetailsModal({
 
           {/* Sticky Bottom Bar */}
           <div className="p-4 sm:p-6 bg-white border-t border-slate-100 sticky bottom-0 z-10">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div>
-                <div className="text-2xl font-bold text-slate-900">
-                  ₹{(screen.pricePerDay || 0).toLocaleString()}
-                  <span className="text-sm font-normal text-slate-500"> /day</span>
+            {isZoneScreen ? (
+              /* Zone-aware bottom bar */
+              <div className="flex flex-col gap-3">
+                {/* Zone notice */}
+                <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3.5">
+                  <div className="mt-0.5 p-1.5 bg-amber-100 rounded-lg shrink-0">
+                    <Layers className="h-4 w-4 text-amber-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-900">{zoneInfo!.zoneName}</p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      This campaign requires booking the complete zone — {zoneInfo!.screenIds.length} screen{zoneInfo!.screenIds.length !== 1 ? 's' : ''} across multiple locations.
+                    </p>
+                  </div>
                 </div>
-                <div className="text-xs font-medium text-slate-500 flex items-center mt-1">
-                  <CalendarDays className="h-3 w-3 mr-1" />
-                  Min. {screen.minBookingDays} days booking
+
+                {/* Zone price + actions */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="text-2xl font-bold text-slate-900">
+                      ₹{(zoneInfo!.pricePerDay || 0).toLocaleString()}
+                      <span className="text-sm font-normal text-slate-500"> /day (zone)</span>
+                    </div>
+                    <div className="text-xs font-medium text-slate-500 flex items-center mt-1">
+                      <CalendarDays className="h-3 w-3 mr-1" />
+                      Min. {zoneInfo!.minBookingDays} days · {zoneInfo!.screenIds.length} screens total
+                    </div>
+                  </div>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 sm:flex-none rounded-xl border-amber-300 text-amber-700 hover:bg-amber-50 font-medium"
+                      onClick={() => { onViewZone?.(); onClose(); }}
+                    >
+                      <MapPin className="h-4 w-4 mr-1.5" />
+                      View Zone
+                    </Button>
+                    <Button 
+                      size="sm"
+                      className={`flex-1 sm:flex-none rounded-xl font-medium transition-all ${
+                        isZoneBooked 
+                          ? 'bg-green-600 hover:bg-green-700' 
+                          : 'bg-amber-500 hover:bg-amber-600'
+                      } text-white`}
+                      onClick={() => { onBookZone?.(); onClose(); }}
+                      disabled={isZoneBooked}
+                    >
+                      {isZoneBooked ? (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                          Zone Booked
+                        </>
+                      ) : (
+                        <>
+                          <Layers className="h-4 w-4 mr-1.5" />
+                          Book Zone
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
-              
-              <Button 
-                size="lg" 
-                className={`w-full sm:w-auto min-w-[200px] rounded-xl font-medium transition-all ${isAdded ? 'bg-green-600 hover:bg-green-700' : 'bg-teal-600 hover:bg-teal-700'}`}
-                onClick={() => onAdd(screen)}
-              >
-                {isAdded ? (
-                  <>
-                    <CheckCircle2 className="h-5 w-5 mr-2" />
-                    Added to Campaign
-                  </>
-                ) : (
-                  <>
-                    <PlusCircle className="h-5 w-5 mr-2" />
-                    Add to Campaign
-                  </>
-                )}
-              </Button>
-            </div>
+            ) : (
+              /* Standard single-screen bottom bar */
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  <div className="text-2xl font-bold text-slate-900">
+                    ₹{(screen.pricePerDay || 0).toLocaleString()}
+                    <span className="text-sm font-normal text-slate-500"> /day</span>
+                  </div>
+                  <div className="text-xs font-medium text-slate-500 flex items-center mt-1">
+                    <CalendarDays className="h-3 w-3 mr-1" />
+                    Min. {screen.minBookingDays} days booking
+                  </div>
+                </div>
+                
+                <Button 
+                  size="lg" 
+                  className={`w-full sm:w-auto min-w-[200px] rounded-xl font-medium transition-all ${isAdded ? 'bg-green-600 hover:bg-green-700' : 'bg-teal-600 hover:bg-teal-700'}`}
+                  onClick={() => onAdd(screen)}
+                >
+                  {isAdded ? (
+                    <>
+                      <CheckCircle2 className="h-5 w-5 mr-2" />
+                      Added to Campaign
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle className="h-5 w-5 mr-2" />
+                      Add to Campaign
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
           
         </div>

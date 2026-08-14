@@ -12,9 +12,15 @@ if (!process.env.DATABASE_URL) {
 
 export const pool = new Pool({ 
   connectionString: process.env.DATABASE_URL,
-  max: 20,                    // Maximum pool size (Neon free tier supports up to 100)
+  max: 20,                    // Maximum pool size
   idleTimeoutMillis: 30000,   // Close idle connections after 30s
-  connectionTimeoutMillis: 10000, // Fail fast if can't connect in 10s
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  connectionTimeoutMillis: 30000, // Give Neon 30s to wake up from cold start
+  ssl: true,                  // Enforce SSL for Neon
 });
+
+// Prevent idle connection resets from crashing the Node.js process
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client:', err);
+});
+
 export const db = drizzle({ client: pool, schema });

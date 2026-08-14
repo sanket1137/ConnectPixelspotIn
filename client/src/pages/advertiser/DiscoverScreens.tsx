@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MapPin, ShoppingCart, List, Map as MapIcon, SlidersHorizontal, Check, Loader2, Star, Menu, Users, Search, X, Coffee, Utensils, Bus, ShoppingBag, Building2, Plane, Monitor, Train, Briefcase, Activity, Store, Hotel, Ticket, MonitorPlay, Dumbbell, GraduationCap, Scissors, Car } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import type { Screen } from "@shared/schema";
+import type { Screen, ZoneInfo } from "@shared/schema";
 import { VENUE_CATEGORIES } from "@shared/constants";
 import { getScreenCountDisplay, calculateScreenPricePerDay } from "@shared/utils";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -36,6 +36,14 @@ export default function DiscoverScreens() {
   const [hoveredScreenId, setHoveredScreenId] = useState<string | null>(null);
   const [detailModalScreen, setDetailModalScreen] = useState<Screen | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // Zone State
+  const [zoneInfo, setZoneInfo] = useState<ZoneInfo | null>(null);
+  const [zoneScreens, setZoneScreens] = useState<Screen[]>([]);
+  const [activeZoneScreens, setActiveZoneScreens] = useState<Screen[] | null>(null);
+  const [activeZoneName, setActiveZoneName] = useState<string | null>(null);
+  const [highlightedZoneIds, setHighlightedZoneIds] = useState<Set<string>>(new Set());
+  const [zonePriceOverrides, setZonePriceOverrides] = useState<globalThis.Map<string, number>>(new globalThis.Map());
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   
@@ -121,7 +129,51 @@ export default function DiscoverScreens() {
         console.error("Failed to parse selected screens from localStorage", e);
       }
     }
+    const savedOverrides = localStorage.getItem("zonePriceOverrides");
+    if (savedOverrides) {
+      try {
+        const parsed = JSON.parse(savedOverrides);
+        if (Array.isArray(parsed)) {
+          setZonePriceOverrides(new globalThis.Map(parsed));
+        }
+      } catch (e) {
+        console.error("Failed to parse zone prices", e);
+      }
+    }
   }, []);
+
+  // Fetch zone info when a screen is selected for details
+  useEffect(() => {
+    if (!detailModalScreen) {
+      setZoneInfo(null);
+      setZoneScreens([]);
+      return;
+    }
+
+    async function fetchZoneInfo() {
+      try {
+        const res = await fetch(`/api/zones/screen/${detailModalScreen!.id}`);
+        const data = await res.json();
+        if (data.zone) {
+          setZoneInfo(data.zone);
+          const screensRes = await fetch(`/api/zones/${encodeURIComponent(data.zone.zoneName)}/screens`);
+          const screensData = await screensRes.json();
+          setZoneScreens(screensData.screens || []);
+        } else {
+          setZoneInfo(null);
+          setZoneScreens([]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch zone info:", err);
+      }
+    }
+    fetchZoneInfo();
+  }, [detailModalScreen]);
+
+  const saveZoneOverrides = (newOverrides: Map<string, number>) => {
+    setZonePriceOverrides(newOverrides);
+    localStorage.setItem("zonePriceOverrides", JSON.stringify(Array.from(newOverrides.entries())));
+  };
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -244,7 +296,8 @@ export default function DiscoverScreens() {
     }
   }, [initialLocationLoaded, geocodingLib]);
 
-  const screens = Array.isArray(result) ? result : (result?.screens || []);
+  const fetchedScreens = Array.isArray(result) ? result : (result?.screens || []);
+  const screens = activeZoneScreens || fetchedScreens;
 
   const totalPhysicalScreensCount = useMemo(() => {
     return screens.reduce((acc, s) => {
@@ -384,18 +437,24 @@ export default function DiscoverScreens() {
       }
       
       setFilters(prev => ({ ...prev, search: "" }));
+      setActiveZoneScreens(null);
+      setActiveZoneName(null);
     } else if (inputValue) {
       setLat(undefined);
       setLng(undefined);
       setLocationBounds(null);
       setLocationType("city");
       setFilters(prev => ({ ...prev, search: inputValue }));
+      setActiveZoneScreens(null);
+      setActiveZoneName(null);
     } else {
       setLat(undefined);
       setLng(undefined);
       setLocationBounds(null);
       setLocationType("city");
       setFilters(prev => ({ ...prev, search: "" }));
+      setActiveZoneScreens(null);
+      setActiveZoneName(null);
     }
   };
 
@@ -419,22 +478,79 @@ export default function DiscoverScreens() {
   };
 
   const toggleScreenSelection = (screen: Screen) => {
-    const newSet = new Set(selectedScreenIds);
-    if (newSet.has(screen.id)) {
-      newSet.delete(screen.id);
+    const next = new Set(selectedScreenIds);
+    if (next.has(screen.id)) {
+      next.delete(screen.id);
+      
+      // Cleanup zone price override if it exists
+      if (zonePriceOverrides.has(screen.id)) {
+        const newOverrides = new globalThis.Map(zonePriceOverrides);
+        newOverrides.delete(screen.id);
+        saveZoneOverrides(newOverrides);
+      }
       toast({ title: "Removed from Campaign", description: `${screen.name} removed.` });
     } else {
-      newSet.add(screen.id);
+      next.add(screen.id);
       toast({ title: "Added to Campaign", description: `${screen.name} added.` });
     }
-    setSelectedScreenIds(newSet);
-    localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(Array.from(newSet)));
+    setSelectedScreenIds(next);
+    localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(Array.from(next)));
 
     // Only prompt login if adding a screen
     if (!user && !selectedScreenIds.has(screen.id)) {
       setPendingAction(() => () => setLocation("/advertiser/quick-campaign"));
       setShowAuthModal(true);
     }
+  };
+
+  const handleViewZone = () => {
+    if (!zoneInfo || zoneScreens.length === 0) return;
+    setHighlightedZoneIds(new Set(zoneScreens.map(s => s.id)));
+    setDetailModalScreen(null);
+    
+    setActiveZoneScreens(zoneScreens);
+    setActiveZoneName(zoneInfo.zoneName);
+    
+    // Calculate bounding box of zone screens to fit map
+    if (zoneScreens.length > 0) {
+      let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+      zoneScreens.forEach(s => {
+        const lat = parseFloat(String(s.latitude));
+        const lng = parseFloat(String(s.longitude));
+        if (!isNaN(lat) && !isNaN(lng)) {
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+          if (lng < minLng) minLng = lng;
+          if (lng > maxLng) maxLng = lng;
+        }
+      });
+      setLocationBounds({ north: maxLat, south: minLat, east: maxLng, west: minLng });
+      setLat(undefined);
+      setLng(undefined);
+    }
+  };
+
+  const handleBookZone = () => {
+    if (!zoneInfo || zoneScreens.length === 0) return;
+    
+    const next = new Set(selectedScreenIds);
+    const newOverrides = new globalThis.Map(zonePriceOverrides);
+    
+    zoneScreens.forEach(s => {
+      next.add(s.id);
+      newOverrides.set(s.id, zoneInfo.pricePerDay / zoneScreens.length);
+    });
+    
+    setSelectedScreenIds(next);
+    localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(Array.from(next)));
+    saveZoneOverrides(newOverrides);
+    setDetailModalScreen(null);
+    setHighlightedZoneIds(new Set());
+    
+    toast({
+      title: "Zone Booked",
+      description: `Added all ${zoneScreens.length} screens in ${zoneInfo.zoneName} to campaign.`,
+    });
   };
 
   const proceedToCreateCampaign = () => {
@@ -485,9 +601,11 @@ export default function DiscoverScreens() {
   const renderCustomMarker = (screen: Screen, index: number) => {
     const isHovered = hoveredScreenId === screen.id;
     const isSelected = selectedScreenIds.has(screen.id);
+    const isHighlightedZone = highlightedZoneIds.has(screen.id);
     
+    // Use zone price override if we have one for this screen, else regular price
     const basePrice = calculateScreenPricePerDay(screen);
-    const price = basePrice || 0;
+    const price = zonePriceOverrides.get(screen.id) ?? basePrice ?? 0;
     let priceDisplay = `₹${price}`;
     if (price >= 1000) {
       priceDisplay = `₹${(price / 1000).toFixed(1).replace('.0', '')}k`;
@@ -514,7 +632,9 @@ export default function DiscoverScreens() {
           px-3 py-1.5 rounded-full font-bold text-[13px] shadow-lg border-2 whitespace-nowrap
           ${isSelected 
             ? 'bg-green-600 text-white border-white' 
-            : (isHovered ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-800 border-white hover:bg-slate-50')
+            : isHighlightedZone
+              ? 'bg-amber-500 text-white border-white'
+              : (isHovered ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-800 border-white hover:bg-slate-50')
           }
           ${isHovered && !isSelected ? 'shadow-xl font-extrabold' : 'shadow-md'}
         `}>
@@ -524,7 +644,7 @@ export default function DiscoverScreens() {
           border-l-[6px] border-l-transparent 
           border-r-[6px] border-r-transparent 
           border-t-[6px] 
-          ${isSelected ? 'border-t-green-600' : (isHovered ? 'border-t-slate-900' : 'border-t-white')}
+          ${isSelected ? 'border-t-green-600' : isHighlightedZone ? 'border-t-amber-500' : (isHovered ? 'border-t-slate-900' : 'border-t-white')}
         `}></div>
       </div>
     );
@@ -923,6 +1043,17 @@ export default function DiscoverScreens() {
               zoomControl={true}
               style={{ width: '100%', height: '100%' }}
             >
+              {activeZoneName && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2 rounded-full shadow-lg flex items-center gap-2 font-medium text-sm animate-in fade-in slide-in-from-top-4">
+                  Viewing Zone: {activeZoneName}
+                  <button 
+                    onClick={() => { setActiveZoneScreens(null); setActiveZoneName(null); setHighlightedZoneIds(new Set()); }}
+                    className="ml-1 hover:bg-amber-200 rounded-full p-1 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
               {mapScreens.map((screen, index) => (
                 <AdvancedMarker
                   key={screen.id}
@@ -1013,6 +1144,11 @@ export default function DiscoverScreens() {
         screen={detailModalScreen}
         onAdd={toggleScreenSelection}
         isAdded={detailModalScreen ? selectedScreenIds.has(detailModalScreen.id) : false}
+        zoneInfo={zoneInfo}
+        allZoneScreens={zoneScreens}
+        onViewZone={handleViewZone}
+        onBookZone={handleBookZone}
+        isZoneBooked={zoneInfo ? zoneInfo.screenIds.every(id => selectedScreenIds.has(id)) : false}
       />
 
       {/* Mobile Search Modal */}

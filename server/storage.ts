@@ -30,6 +30,7 @@ import {
   aiConversations, aiMessages, aiRateLimits,
   screenTags, screenTagAssignments,
   supportTickets, ticketMessages,
+  zoneScreens,
   type User, type InsertUser, 
   type Screen, type InsertScreen,
   type Campaign, type InsertCampaign,
@@ -44,7 +45,8 @@ import {
   type AiRateLimit, type InsertAiRateLimit,
   type ScreenTag, type ScreenTagAssignment,
   type SupportTicket, type InsertSupportTicket,
-  type TicketMessage, type InsertTicketMessage
+  type TicketMessage, type InsertTicketMessage,
+  type ZoneInfo
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, or, desc, asc, sql as drizzleSql, inArray, isNull, count, like } from "drizzle-orm";
@@ -158,6 +160,10 @@ export interface IStorage {
   getScreenTagAssignments(screenId: string): Promise<(ScreenTagAssignment & { tag: ScreenTag })[]>;
   addManualTagAssignment(screenId: string, tagId: string): Promise<ScreenTagAssignment>;
   removeTagAssignment(assignmentId: string): Promise<boolean>;
+
+  // Zone Screen methods
+  getZoneForScreen(screenId: string): Promise<ZoneInfo | null>;
+  getScreensInZone(zoneName: string): Promise<{ zone: ZoneInfo; screens: Screen[] }>;
 
   // Owner Payout methods
   createOwnerPayout(payout: InsertOwnerPayout): Promise<OwnerPayout>;
@@ -1693,8 +1699,7 @@ export class DatabaseStorage implements IStorage {
     sortBy?: 'distance' | 'price' | 'popularity' | 'newest';
     sortOrder?: 'asc' | 'desc';
   }): Promise<Screen[] | { screens: Screen[]; total: number }> {
-    // Build dynamic conditions using drizzle sql template fragments
-    const conditions: ReturnType<typeof drizzleSql>[] = [drizzleSql`status = 'active'`];
+    const conditions: ReturnType<typeof drizzleSql>[] = [drizzleSql`status IN ('active', 'approved')`];
 
     if (filters.city) {
       const normalizedCity = normalizeCityName(filters.city);
@@ -2162,6 +2167,74 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(ticketMessages)
       .where(eq(ticketMessages.ticketId, ticketId))
       .orderBy(asc(ticketMessages.createdAt));
+  }
+
+  // ── Zone Screen methods ─────────────────────────────────────────────────────
+
+  async getZoneForScreen(screenId: string): Promise<ZoneInfo | null> {
+    const rows = await db
+      .select()
+      .from(zoneScreens)
+      .where(
+        and(
+          eq(zoneScreens.screenId, screenId),
+          eq(zoneScreens.status, "active")
+        )
+      )
+      .limit(1);
+
+    if (!rows.length) return null;
+
+    const { zoneName, pricePerDay, minBookingDays } = rows[0];
+
+    // Fetch all screen IDs in this zone
+    const allRows = await db
+      .select({ screenId: zoneScreens.screenId })
+      .from(zoneScreens)
+      .where(
+        and(
+          eq(zoneScreens.zoneName, zoneName),
+          eq(zoneScreens.status, "active")
+        )
+      );
+
+    return {
+      zoneName,
+      pricePerDay,
+      minBookingDays,
+      screenIds: allRows.map((r) => r.screenId),
+    };
+  }
+
+  async getScreensInZone(zoneName: string): Promise<{ zone: ZoneInfo; screens: Screen[] }> {
+    // Get all zone rows for this zone
+    const zoneRows = await db
+      .select()
+      .from(zoneScreens)
+      .where(
+        and(
+          eq(zoneScreens.zoneName, zoneName),
+          eq(zoneScreens.status, "active")
+        )
+      );
+
+    if (!zoneRows.length) {
+      return { zone: { zoneName, pricePerDay: 0, minBookingDays: 1, screenIds: [] }, screens: [] };
+    }
+
+    const { pricePerDay, minBookingDays } = zoneRows[0];
+    const screenIds = zoneRows.map((r) => r.screenId);
+
+    // Fetch the actual screen records
+    const screenRecords = await db
+      .select()
+      .from(screens)
+      .where(inArray(screens.id, screenIds));
+
+    return {
+      zone: { zoneName, pricePerDay, minBookingDays, screenIds },
+      screens: screenRecords,
+    };
   }
 }
 

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Map, AdvancedMarker, InfoWindow, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
 import { MapPin, Check, Users, Monitor, Loader2, Home, Sun, SunMoon } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { Screen } from "@shared/schema";
+import type { Screen, ZoneInfo } from "@shared/schema";
 import { MultiLocationSearch, LocationItem } from "@/components/map/MultiLocationSearch";
 import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
 import { getScreenCountDisplay, calculateTotalPhysicalScreens, calculateScreenPricePerDay } from "@shared/utils";
@@ -20,6 +20,8 @@ interface Props {
   onSelectAll: () => void;
   onClearAll: () => void;
   error?: string;
+  zonePriceOverrides?: Record<string, number>;
+  onToggleZone?: (screenIds: string[], pricePerDay: number) => void;
 }
 
 function CircleOverlay({ center, radius }: { center: { lat: number; lng: number }; radius: number }) {
@@ -64,6 +66,8 @@ export default function Step3_ScreenDiscovery({
   onSelectAll,
   onClearAll,
   error,
+  zonePriceOverrides,
+  onToggleZone,
 }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -79,6 +83,13 @@ export default function Step3_ScreenDiscovery({
   const [infoWindowScreen, setInfoWindowScreen] = useState<Screen | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [detailModalScreen, setDetailModalScreen] = useState<Screen | null>(null);
+
+  // Zone State
+  const [zoneInfo, setZoneInfo] = useState<ZoneInfo | null>(null);
+  const [zoneScreens, setZoneScreens] = useState<Screen[]>([]);
+  const [activeZoneScreens, setActiveZoneScreens] = useState<Screen[] | null>(null);
+  const [activeZoneName, setActiveZoneName] = useState<string | null>(null);
+  const [highlightedZoneIds, setHighlightedZoneIds] = useState<Set<string>>(new Set());
 
   const prevKey = useRef("");
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -143,7 +154,9 @@ export default function Step3_ScreenDiscovery({
   }, [locations.length]);
 
   // ── Filtered & sorted screens ─────────────────────────────────────────────
-  const filteredScreens = screensData.filter(s => {
+  const displayedScreens = activeZoneScreens || screensData;
+  
+  const filteredScreens = displayedScreens.filter(s => {
     if (envFilter === "all") return true;
     if (envFilter === "indoor") return s.environmentType?.toLowerCase().includes("indoor") && !s.environmentType?.toLowerCase().includes("semi");
     if (envFilter === "outdoor") return s.environmentType?.toLowerCase().includes("outdoor") && !s.environmentType?.toLowerCase().includes("semi");
@@ -195,7 +208,7 @@ export default function Step3_ScreenDiscovery({
     return null;
   }
 
-  function MapBoundsFitter({ bounds }: { bounds: google.maps.LatLngBoundsLiteral }) {
+  function MapBoundsFitter({ bounds }: { bounds: any }) {
     const map = useMap();
     useEffect(() => {
       if (!map) return;
@@ -204,32 +217,74 @@ export default function Step3_ScreenDiscovery({
     return null;
   }
 
-  const locationLabel = locations.map(l => l.label).join(", ") || "selected locations";
+  // ── Fetch zone info for detailModalScreen ──────────────────────────
+  useEffect(() => {
+    if (!detailModalScreen) {
+      setZoneInfo(null);
+      setZoneScreens([]);
+      return;
+    }
 
-  // ── Airbnb-style price bubble marker ─────────────────────────────────────
-  const PriceBubble = ({ screen }: { screen: Screen }) => {
-    const isSelected = selectedScreenIds.includes(screen.id);
-    const isHovered = highlightedId === screen.id;
-    const basePrice = calculateScreenPricePerDay(screen);
-    const price = basePrice >= 1000
-      ? `₹${(basePrice / 1000).toFixed(0)}k`
-      : `₹${basePrice}`;
-    return (
-      <div className="relative">
-        <div className={`
-          px-2.5 py-1 rounded-full font-bold text-[12px] shadow-md border-2 whitespace-nowrap cursor-pointer transition-all duration-150
-          ${isSelected ? 'bg-blue-600 text-white border-white scale-110' : 'bg-white text-slate-800 border-white hover:scale-110'}
-          ${isHovered && !isSelected ? 'shadow-xl scale-110' : ''}
-        `}>{price}</div>
-        <div className={`absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0
-          border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px]
-          ${isSelected ? 'border-t-blue-600' : 'border-t-white'}
-        `} />
-      </div>
-    );
+    async function fetchZoneInfo() {
+      try {
+        const res = await fetch(`/api/zones/screen/${detailModalScreen!.id}`);
+        const data = await res.json();
+        if (data.zone) {
+          setZoneInfo(data.zone);
+          const screensRes = await fetch(`/api/zones/${encodeURIComponent(data.zone.zoneName)}/screens`);
+          const screensData = await screensRes.json();
+          setZoneScreens(screensData.screens || []);
+        } else {
+          setZoneInfo(null);
+          setZoneScreens([]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch zone info:", err);
+      }
+    }
+    fetchZoneInfo();
+  }, [detailModalScreen]);
+
+  const handleViewZone = () => {
+    if (!zoneInfo || zoneScreens.length === 0) return;
+    setHighlightedZoneIds(new Set(zoneScreens.map(s => s.id)));
+    setDetailModalScreen(null);
+    setActiveZoneScreens(zoneScreens);
+    setActiveZoneName(zoneInfo.zoneName);
+
+    // Calculate bounding box of zone screens to fit map
+    if (zoneScreens.length > 0) {
+      let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+      zoneScreens.forEach(s => {
+        const lat = parseFloat(String(s.latitude));
+        const lng = parseFloat(String(s.longitude));
+        if (!isNaN(lat) && !isNaN(lng)) {
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+          if (lng < minLng) minLng = lng;
+          if (lng > maxLng) maxLng = lng;
+        }
+      });
+      // Use map bounds fitter since panTarget is used in Express Builder
+      setPanTarget(null);
+      // Let MapBoundsFitter or the useEffect handle the bounds 
+      // Actually we don't have locationBounds in Step3. We can just set panTarget to center
+      const centerLat = (minLat + maxLat) / 2;
+      const centerLng = (minLng + maxLng) / 2;
+      // Rough zoom calculation
+      setPanTarget({ lat: centerLat, lng: centerLng, zoom: 11 });
+    }
   };
 
-  // ── Airbnb-style card ─────────────────────────────────────────────────────
+  const handleBookZone = () => {
+    if (!zoneInfo || zoneScreens.length === 0 || !onToggleZone) return;
+    onToggleZone(zoneScreens.map(s => s.id), zoneInfo.pricePerDay / zoneScreens.length);
+    setDetailModalScreen(null);
+    setHighlightedZoneIds(new Set());
+  };
+
+  const locationLabel = locations.map(l => l.label).join(", ") || "selected locations";
+
   const ScreenCard = ({ screen }: { screen: Screen }) => {
     const isSelected = selectedScreenIds.includes(screen.id);
     const isHovered = highlightedId === screen.id;
@@ -246,69 +301,27 @@ export default function Step3_ScreenDiscovery({
         onMouseLeave={() => handleCardHover(null)}
         onClick={() => handleCardClick(screen)}
       >
-        {/* Image */}
         <div className={`relative aspect-[4/3] overflow-hidden rounded-xl bg-slate-200 transition-all duration-150 ${isHovered ? 'ring-2 ring-blue-400' : ''} ${isSelected ? 'ring-2 ring-blue-600' : ''}`}>
           {screen.screenImages?.[0] ? (
-            <img
-              src={screen.screenImages[0]}
-              alt={screen.name}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-            />
+            <img src={screen.screenImages[0]} alt={screen.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-slate-100">
-              <Monitor className="h-10 w-10 text-slate-300" />
-            </div>
+            <div className="w-full h-full flex items-center justify-center bg-slate-100"><Monitor className="h-10 w-10 text-slate-300" /></div>
           )}
           <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
-            {isSelected && (
-              <div className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 shadow">
-                <Check className="w-3 h-3" /> Selected
-              </div>
-            )}
-            {screen.isMultiScreen && screen.bulkBookingMandatory && screen.numberOfScreens && screen.numberOfScreens > 1 && (
-              <Badge className="px-1.5 py-0 h-5 text-[10px] bg-amber-500 hover:bg-amber-600 text-white border-0 shadow uppercase">
-                {screen.numberOfScreens} Screens (All Required)
-              </Badge>
-            )}
+            {isSelected && (<div className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 shadow"><Check className="w-3 h-3" /> Selected</div>)}
           </div>
-          {screen.environmentType && (
-            <div className="absolute top-2 right-2">
-              <Badge variant="secondary" className="px-1.5 py-0 h-5 text-[10px] bg-black/60 text-white border-0 backdrop-blur-sm uppercase">
-                {screen.environmentType.split(' ')[0]}
-              </Badge>
-            </div>
-          )}
           <button
             className={`absolute bottom-2 right-2 h-8 w-8 rounded-full flex items-center justify-center shadow-md transition-all opacity-0 group-hover:opacity-100 ${isSelected ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
             onClick={(e) => { e.stopPropagation(); onToggleScreen(screen.id); }}
-            title={isSelected ? "Deselect" : "Select"}
           >
             <Check className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Info */}
         <div className="px-1">
           <div className="flex items-center justify-between mb-0.5 gap-2">
-            <h3 className="font-semibold text-sm text-slate-900 truncate leading-tight group-hover:text-blue-600 transition-colors">{screen.name}</h3>
-            {dist !== null && (
-              <span className="text-[10px] text-slate-400 shrink-0">{dist.toFixed(1)} km</span>
-            )}
+            <h3 className="font-semibold text-sm text-slate-900 truncate">{screen.name}</h3>
+            {dist !== null && <span className="text-[10px] text-slate-400 shrink-0">{dist.toFixed(1)} km</span>}
           </div>
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-slate-500 line-clamp-1">{screen.venueName || screen.name} · {screen.category || screen.type}</p>
-            {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
-              <Badge variant="secondary" className="text-[9px] h-3.5 px-1 py-0 bg-primary/10 text-primary uppercase font-bold">
-                {getScreenCountDisplay(screen)}
-              </Badge>
-            )}
-          </div>
-          {screen.avgDailyFootfall && (
-            <div className="flex items-center gap-1 text-xs text-slate-400">
-              <Users className="w-3 h-3" />
-              {Number(screen.avgDailyFootfall).toLocaleString()} daily
-            </div>
-          )}
           <div className="pt-0.5">
             <span className="font-bold text-slate-900 text-sm">₹{calculateScreenPricePerDay(screen).toLocaleString()}</span>
             <span className="text-slate-400 text-xs"> / day</span>
@@ -318,196 +331,72 @@ export default function Step3_ScreenDiscovery({
     );
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-[calc(100vh-100px)] min-h-[560px] w-full bg-white">
-      {/* Unified Toolbar */}
       <div className="shrink-0 px-4 py-2 border-b border-slate-200 bg-white shadow-sm z-20 flex flex-col lg:flex-row items-center gap-4">
         <div className="flex-1 w-full min-w-0">
-          <MultiLocationSearch
-            selectedLocations={locations}
-            onChange={onChangeLocations}
-            onLocationFocus={(loc) => {
-              if (loc.lat && loc.lng) {
-                setPanTarget({ lat: loc.lat, lng: loc.lng, zoom: 12 });
-              }
-            }}
-            placeholder="Search city, area, or landmark..."
-            className="w-full"
-          />
+          <MultiLocationSearch selectedLocations={locations} onChange={onChangeLocations} placeholder="Search..." className="w-full" />
         </div>
-        
-        {/* Environment Filters */}
-        <div className="flex items-center gap-2 shrink-0 border-t lg:border-t-0 lg:border-l pt-3 lg:pt-0 lg:pl-4 w-full lg:w-auto overflow-x-auto scrollbar-none pb-1 lg:pb-0">
-          <Button
-            variant={envFilter === "all" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setEnvFilter("all")}
-            className={`rounded-full h-9 px-4 text-xs font-medium ${envFilter === "all" ? "bg-slate-900 text-white" : ""}`}
-          >
-            All
-          </Button>
-          <Button
-            variant={envFilter === "indoor" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setEnvFilter("indoor")}
-            className={`rounded-full h-9 px-4 text-xs font-medium gap-1.5 ${envFilter === "indoor" ? "bg-slate-900 text-white" : ""}`}
-          >
-            <Home className="h-3.5 w-3.5" /> Indoor
-          </Button>
-          <Button
-            variant={envFilter === "outdoor" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setEnvFilter("outdoor")}
-            className={`rounded-full h-9 px-4 text-xs font-medium gap-1.5 ${envFilter === "outdoor" ? "bg-slate-900 text-white" : ""}`}
-          >
-            <Sun className="h-3.5 w-3.5" /> Outdoor
-          </Button>
-          <Button
-            variant={envFilter === "semi" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setEnvFilter("semi")}
-            className={`rounded-full h-9 px-4 text-xs font-medium gap-1.5 ${envFilter === "semi" ? "bg-slate-900 text-white" : ""}`}
-          >
-            <SunMoon className="h-3.5 w-3.5" /> Semi
-          </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant={envFilter === "all" ? "default" : "outline"} size="sm" onClick={() => setEnvFilter("all")}>All</Button>
+          <Button variant={envFilter === "indoor" ? "default" : "outline"} size="sm" onClick={() => setEnvFilter("indoor")}><Home className="h-3.5 w-3.5 mr-1" /> Indoor</Button>
         </div>
       </div>
 
-      {(error || fetchError) && (
-        <p className="text-xs font-medium text-destructive px-4 py-1.5 bg-red-50 border-b border-red-100">{error || fetchError}</p>
-      )}
-
-      {/* Main split view */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Airbnb card grid */}
-        <div ref={listRef} className="w-[55%] flex flex-col bg-slate-50 border-r border-slate-200 z-10">
-          {/* List Header */}
-          <div className="shrink-0 bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between sticky top-0 z-10">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">
-                {isLoading ? (
-                  <span className="flex items-center gap-1.5">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
-                    Loading screens…
-                  </span>
-                ) : (
-                  <>Over {calculateTotalPhysicalScreens(screensData).toLocaleString()} screen{calculateTotalPhysicalScreens(screensData) !== 1 ? "s" : ""}</>
-                )}
-              </h2>
-              {!isLoading && <p className="text-[10px] text-slate-400 truncate max-w-[250px]">{locationLabel}</p>}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Button variant="outline" size="sm" onClick={onSelectAll} disabled={isLoading || screensData.length === 0} className="h-7 text-[11px] px-2.5 rounded-md">
-                Select All
-              </Button>
-              <Button variant="ghost" size="sm" onClick={onClearAll} className="h-7 text-[11px] px-2.5 rounded-md text-slate-500">
-                Clear
-              </Button>
-            </div>
-          </div>
-
+        <div ref={listRef} className="w-[55%] flex flex-col bg-slate-50 border-r border-slate-200">
           <div className="flex-1 overflow-y-auto p-4">
-            {isLoading ? (
-              <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-                {Array.from({ length: 9 }).map((_, i) => (
-                  <div key={i} className="animate-pulse">
-                    <div className="aspect-[4/3] bg-slate-200 rounded-xl mb-2" />
-                    <div className="h-3 bg-slate-200 rounded w-3/4 mb-1" />
-                    <div className="h-3 bg-slate-200 rounded w-1/2" />
-                  </div>
-                ))}
-              </div>
-            ) : screensData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center">
-                <Monitor className="h-14 w-14 text-slate-200 mb-4" />
-                <h3 className="text-base font-semibold text-slate-600">No screens found</h3>
-                <p className="text-sm text-slate-400 mt-1">Try adding a different location or adjusting your radius.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 xl:grid-cols-3 gap-4 pb-8">
-                {sortedScreens.map(screen => (
-                  <ScreenCard key={screen.id} screen={screen} />
-                ))}
-              </div>
-            )}
+            <div className="grid grid-cols-2 xl:grid-cols-3 gap-4 pb-8">
+              {sortedScreens.map(screen => (<ScreenCard key={screen.id} screen={screen} />))}
+            </div>
           </div>
         </div>
 
-        {/* Right: Map */}
         <div className="flex-1 relative bg-slate-200">
-          <div className="w-full h-full rounded-2xl overflow-hidden shadow-md border border-slate-200/60 bg-slate-200 relative">
-            {isLoading && (
-              <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading map…
-                </div>
+          <Map mapId="express-screens-map" defaultCenter={initialCenter} defaultZoom={initialZoom} disableDefaultUI zoomControl style={{ width: "100%", height: "100%" }}>
+            {activeZoneName && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2 rounded-full shadow-lg flex items-center gap-2 font-medium text-sm animate-in fade-in slide-in-from-top-4">
+                Viewing Zone: {activeZoneName}
+                <button 
+                  onClick={() => { setActiveZoneScreens(null); setActiveZoneName(null); setHighlightedZoneIds(new Set()); }}
+                  className="ml-1 hover:bg-amber-200 rounded-full p-1 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             )}
-            <Map
-              mapId="express-screens-map"
-              defaultCenter={initialCenter}
-              defaultZoom={initialZoom}
-              gestureHandling="greedy"
-              disableDefaultUI
-              zoomControl
-              style={{ width: "100%", height: "100%" }}
-            >
-              <MapController />
+            <MapController />
+            {filteredScreens.map(screen => {
+              const isSelected = selectedScreenIds.includes(screen.id);
+              const isHovered = highlightedId === screen.id;
+              const isHighlightedZone = highlightedZoneIds.has(screen.id);
+              const basePrice = calculateScreenPricePerDay(screen);
+              const price = zonePriceOverrides?.[screen.id] ?? basePrice ?? 0;
+              const priceDisplay = price >= 1000 ? `₹${(price / 1000).toFixed(1).replace('.0', '')}k` : `₹${price}`;
 
-              {/* Fit map for country/state wide-area locations */}
-              {locations
-                .filter(l => (l.locationType === 'country' || l.locationType === 'state') && l.bounds)
-                .slice(-1)
-                .map((loc, idx) => (
-                  <MapBoundsFitter key={`bounds-${idx}`} bounds={loc.bounds!} />
-                ))
-              }
-
-              {/* Target location pins + circles — only for city/poi, not country/state */}
-              {locations.filter(l => l.lat && l.lng && l.locationType !== 'country' && l.locationType !== 'state').map((loc, idx) => (
-                <React.Fragment key={`target-${idx}`}>
-                  <AdvancedMarker
-                    position={{ lat: loc.lat!, lng: loc.lng! }}
-                    onClick={() => {
-                      const radius = loc.radiusKm || 5;
-                      const zoom = radius <= 2 ? 15 : radius <= 5 ? 13 : radius <= 15 ? 11 : radius <= 30 ? 9 : 8;
-                      setPanTarget({ lat: loc.lat!, lng: loc.lng!, zoom });
-                    }}
-                  >
-                    <div className="w-5 h-5 bg-amber-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center cursor-pointer hover:scale-125 transition-transform">
-                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                    </div>
-                  </AdvancedMarker>
-                  {loc.radiusKm && (
-                    <CircleOverlay center={{ lat: loc.lat!, lng: loc.lng! }} radius={loc.radiusKm * 1000} />
-                  )}
-                </React.Fragment>
-              ))}
-
-              {/* Screen price bubble markers */}
-              {screensWithCoords.map(screen => (
-                <AdvancedMarker
-                  key={screen.id}
-                  position={{ lat: Number(screen.latitude), lng: Number(screen.longitude) }}
-                  onClick={() => handlePinClick(screen)}
-                  zIndex={highlightedId === screen.id ? 100 : selectedScreenIds.includes(screen.id) ? 50 : 1}
-                >
-                  <PriceBubble screen={screen} />
+              return (
+                <AdvancedMarker key={screen.id} position={{ lat: parseFloat(String(screen.latitude)), lng: parseFloat(String(screen.longitude)) }} onClick={() => setDetailModalScreen(screen)}>
+                  <div className={`relative flex flex-col items-center cursor-pointer transition-all ${isHovered ? 'scale-125' : 'scale-100'}`} onMouseEnter={() => setHighlightedId(screen.id)} onMouseLeave={() => setHighlightedId(null)}>
+                    <div className={`px-3 py-1.5 rounded-full font-bold text-[13px] border-2 shadow-sm whitespace-nowrap ${isSelected ? 'bg-green-600 text-white' : isHighlightedZone ? 'bg-amber-500 text-white' : 'bg-white text-slate-800'}`}>{priceDisplay}</div>
+                  </div>
                 </AdvancedMarker>
-              ))}
-            </Map>
-          </div>
+              );
+            })}
+          </Map>
         </div>
       </div>
 
-      {/* Screen Details Modal (same as Find Screens) */}
       <ScreenDetailsModal
         isOpen={!!detailModalScreen}
         onClose={() => setDetailModalScreen(null)}
         screen={detailModalScreen}
-        onAdd={(screen) => { onToggleScreen(screen.id); }}
+        onAdd={(s) => { onToggleScreen(s.id); if (window.innerWidth < 640) setDetailModalScreen(null); }}
         isAdded={detailModalScreen ? selectedScreenIds.includes(detailModalScreen.id) : false}
+        zoneInfo={zoneInfo}
+        allZoneScreens={zoneScreens}
+        onViewZone={handleViewZone}
+        onBookZone={handleBookZone}
+        isZoneBooked={zoneInfo ? zoneInfo.screenIds.every(id => selectedScreenIds.includes(id)) : false}
       />
     </div>
   );

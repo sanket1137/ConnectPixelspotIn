@@ -232,7 +232,16 @@ export function registerAgencyRoutes(
         (new Date(plan.endDate).getTime() - new Date(plan.startDate).getTime()) / (1000 * 60 * 60 * 24)
       ));
       const numDays = days || planDays;
-      const pricePerDay = screen.pricePerDay;
+      let pricePerDay = screen.pricePerDay;
+
+      // Handle zone bundle pricing
+      const zoneInfo = await storage.getZoneForScreen(screen.id);
+      if (zoneInfo) {
+        const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
+        const count = zoneScreensRes.screens.length || 1;
+        pricePerDay = zoneInfo.pricePerDay / count;
+      }
+
       const totalPrice = pricePerDay * numDays;
 
       const [item] = await db

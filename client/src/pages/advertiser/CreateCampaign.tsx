@@ -181,6 +181,35 @@ export default function CreateCampaign() {
   const [activeScreenIndex, setActiveScreenIndex] = useState<number | null>(null);
   const [hoveredScreenId, setHoveredScreenId] = useState<string | null>(null);
 
+  // Zone State
+  const [zonePriceOverrides, setZonePriceOverrides] = useState<globalThis.Map<string, number>>(new globalThis.Map());
+
+  // Load cart from Discover Screens
+  useEffect(() => {
+    const saved = localStorage.getItem("selectedScreenIds");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setSelectedScreenIds(parsed);
+        }
+      } catch (e) {
+        console.error("Failed to parse selected screens", e);
+      }
+    }
+    const savedOverrides = localStorage.getItem("zonePriceOverrides");
+    if (savedOverrides) {
+      try {
+        const parsed = JSON.parse(savedOverrides);
+        if (Array.isArray(parsed)) {
+          setZonePriceOverrides(new globalThis.Map(parsed));
+        }
+      } catch (e) {
+        console.error("Failed to parse zone prices", e);
+      }
+    }
+  }, []);
+
   // Filter State
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({
     cities: [],
@@ -368,11 +397,23 @@ export default function CreateCampaign() {
   });
 
   const toggleScreenSelection = (screenId: string) => {
-    setSelectedScreenIds(prev => 
-      prev.includes(screenId) 
+    setSelectedScreenIds(prev => {
+      const next = prev.includes(screenId)
         ? prev.filter(id => id !== screenId)
-        : [...prev, screenId]
-    );
+        : [...prev, screenId];
+      
+      localStorage.setItem("selectedScreenIds", JSON.stringify(next));
+      
+      // Cleanup zone price if removing
+      if (prev.includes(screenId) && zonePriceOverrides.has(screenId)) {
+        const newOverrides = new globalThis.Map(zonePriceOverrides);
+        newOverrides.delete(screenId);
+        setZonePriceOverrides(newOverrides);
+        localStorage.setItem("zonePriceOverrides", JSON.stringify(Array.from(newOverrides.entries())));
+      }
+      
+      return next;
+    });
   };
 
   const handleFilterChange = (key: keyof ActiveFilters, value: any) => {
@@ -408,7 +449,9 @@ export default function CreateCampaign() {
   
   const selectedScreensFull = screens.filter(s => selectedScreenIds.includes(s.id));
   const estimatedCost = selectedScreensFull.reduce((sum, s) => {
-    return sum + (calculateScreenPricePerDay(s) * durationDays);
+    const basePrice = calculateScreenPricePerDay(s);
+    const price = zonePriceOverrides.get(s.id) ?? basePrice ?? 0;
+    return sum + (price * durationDays);
   }, 0);
   
   const totalReach = selectedScreensFull.reduce((sum, s) => sum + (s.avgDailyFootfall || 0) * durationDays, 0);
@@ -945,7 +988,10 @@ export default function CreateCampaign() {
                   {screens.map((screen) => {
                     const isSelected = selectedScreenIds.includes(screen.id);
                     const isHovered = hoveredScreenId === screen.id;
-                    const price = calculateScreenPricePerDay(screen) || 0;
+                    
+                    const basePrice = calculateScreenPricePerDay(screen);
+                    const price = zonePriceOverrides.get(screen.id) ?? basePrice ?? 0;
+                    
                     const priceDisplay = price >= 1000
                       ? `₹${(price / 1000).toFixed(1).replace('.0', '')}k`
                       : `₹${price}`;
@@ -1208,7 +1254,10 @@ export default function CreateCampaign() {
                       {selectedScreensFull.map((screen, idx) => (
                         <div key={screen.id} className="relative group rounded-lg overflow-hidden border hover:border-primary/50 transition-colors shadow-sm">
                           <div className="pointer-events-none">
-                            <ScreenCard screen={screen} />
+                            <ScreenCard 
+                              screen={screen} 
+                              priceOverride={zonePriceOverrides.get(screen.id)} 
+                            />
                           </div>
                           <button 
                            onClick={() => toggleScreenSelection(screen.id)}

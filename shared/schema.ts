@@ -902,3 +902,46 @@ export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
 
 export type TicketMessage = typeof ticketMessages.$inferSelect;
 export type InsertTicketMessage = z.infer<typeof insertTicketMessageSchema>;
+
+// ========== ZONE SCREENS ==========
+// A Zone groups multiple physical screens sold as one inventory at one price.
+// Multiple rows share the same zone_name — one row per screen in the zone.
+
+export const zoneScreens = pgTable("zone_screens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  zoneName: text("zone_name").notNull(),           // e.g. "East Bangalore Zone"
+  screenId: varchar("screen_id").notNull(),         // FK → screens.id
+  pricePerDay: integer("price_per_day").notNull(),  // zone-level daily price (same for all rows in a zone)
+  minBookingDays: integer("min_booking_days").notNull().default(1),
+  status: text("status").notNull().default("active"), // active | inactive
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_zone_screens_zone_name").on(table.zoneName),
+  index("idx_zone_screens_screen_id").on(table.screenId),
+  index("idx_zone_screens_status").on(table.status),
+]);
+
+export const zoneScreensRelations = relations(zoneScreens, ({ one }) => ({
+  screen: one(screens, {
+    fields: [zoneScreens.screenId],
+    references: [screens.id],
+  }),
+}));
+
+export const insertZoneScreenSchema = createInsertSchema(zoneScreens).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type ZoneScreen = typeof zoneScreens.$inferSelect;
+export type InsertZoneScreen = z.infer<typeof insertZoneScreenSchema>;
+
+// Derived type used throughout the app to describe a zone
+export type ZoneInfo = {
+  zoneName: string;
+  pricePerDay: number;
+  minBookingDays: number;
+  screenIds: string[];
+};

@@ -40,6 +40,7 @@ interface ExpressState {
   campaignDays: number;
   startDate: string;
   creativeUrl: string;
+  zonePriceOverrides: Record<string, number>;
 }
 
 const DEFAULT_STATE: ExpressState = {
@@ -54,6 +55,7 @@ const DEFAULT_STATE: ExpressState = {
     return d.toISOString().split("T")[0];
   })(),
   creativeUrl: "",
+  zonePriceOverrides: {},
 };
 
 /** Returns a version of the state safe to serialize (no circular refs) */
@@ -269,8 +271,11 @@ export default function ExpressCampaignBuilder() {
       const totalCost = state.screensData
         .filter((s) => state.selectedScreenIds.includes(s.id))
         .reduce(
-          (sum, s) =>
-            sum + calculateScreenPricePerDay(s) * state.campaignDays,
+          (sum, s) => {
+            const basePrice = calculateScreenPricePerDay(s);
+            const price = state.zonePriceOverrides[s.id] ?? basePrice;
+            return sum + (price * state.campaignDays);
+          },
           0
         );
 
@@ -301,7 +306,9 @@ export default function ExpressCampaignBuilder() {
       const bookingPromises = state.screensData
         .filter((s) => state.selectedScreenIds.includes(s.id))
         .map((screen) => {
-          const price = calculateScreenPricePerDay(screen) * state.campaignDays;
+          const basePrice = calculateScreenPricePerDay(screen);
+          const overridePrice = state.zonePriceOverrides[screen.id] ?? basePrice;
+          const price = overridePrice * state.campaignDays;
           return apiRequest("POST", "/api/advertiser/bookings", {
             screenId: screen.id,
             campaignId: campaign.id,
@@ -421,7 +428,32 @@ export default function ExpressCampaignBuilder() {
             const ids = state.selectedScreenIds.includes(id)
               ? state.selectedScreenIds.filter((x) => x !== id)
               : [...state.selectedScreenIds, id];
-            update({ selectedScreenIds: ids });
+            const nextOverrides = { ...state.zonePriceOverrides };
+            if (state.selectedScreenIds.includes(id)) {
+              delete nextOverrides[id];
+            }
+            update({ selectedScreenIds: ids, zonePriceOverrides: nextOverrides });
+            clearError("screens");
+          }}
+          zonePriceOverrides={state.zonePriceOverrides}
+          onToggleZone={(screenIds, pricePerDay) => {
+            // Adds or removes all screens in the zone
+            const isAdding = !screenIds.every(id => state.selectedScreenIds.includes(id));
+            let nextIds = [...state.selectedScreenIds];
+            const nextOverrides = { ...state.zonePriceOverrides };
+
+            if (isAdding) {
+              screenIds.forEach(id => {
+                if (!nextIds.includes(id)) nextIds.push(id);
+                nextOverrides[id] = pricePerDay;
+              });
+            } else {
+              nextIds = nextIds.filter(id => !screenIds.includes(id));
+              screenIds.forEach(id => {
+                delete nextOverrides[id];
+              });
+            }
+            update({ selectedScreenIds: nextIds, zonePriceOverrides: nextOverrides });
             clearError("screens");
           }}
           onSelectAll={() => update({ selectedScreenIds: state.screensData.map((s) => s.id) })}
@@ -517,7 +549,10 @@ export default function ExpressCampaignBuilder() {
                  </span>
                  <span className="text-slate-400 text-sm">•</span>
                  <span className="text-sm font-medium text-slate-600">
-                   ₹{state.screensData.filter(s => state.selectedScreenIds.includes(s.id)).reduce((sum, s) => sum + calculateScreenPricePerDay(s), 0).toLocaleString()}/day
+                   ₹{state.screensData.filter(s => state.selectedScreenIds.includes(s.id)).reduce((sum, s) => {
+                     const basePrice = calculateScreenPricePerDay(s);
+                     return sum + (state.zonePriceOverrides[s.id] ?? basePrice);
+                   }, 0).toLocaleString()}/day
                  </span>
               </div>
             )}

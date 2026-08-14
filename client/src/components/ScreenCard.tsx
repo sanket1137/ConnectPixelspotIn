@@ -13,6 +13,8 @@ interface ScreenCardProps {
   onMouseLeave?: () => void;
   /** Show distance badge (for nearby screens) */
   showDistance?: boolean;
+  /** Optional price override (e.g. for zone pricing) */
+  priceOverride?: number;
 }
 
 export default function ScreenCard({
@@ -21,7 +23,10 @@ export default function ScreenCard({
   onMouseEnter,
   onMouseLeave,
   showDistance = false,
+  priceOverride,
 }: ScreenCardProps) {
+  const displayPrice = priceOverride ?? calculateScreenPricePerDay(screen);
+
   return (
     <Card
       id={`screen-${screen.id}`}
@@ -78,7 +83,7 @@ export default function ScreenCard({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
           <div className="flex items-center gap-1">
             <Users className="w-3 h-3" />
             <span className="text-xs">{screen.avgDailyFootfall?.toLocaleString()}/day</span>
@@ -88,12 +93,16 @@ export default function ScreenCard({
             <Monitor className="w-3 h-3" />
             <span className="text-xs">{screen.displayFormat}</span>
           </div>
+          <span>•</span>
+          <div className="flex items-center gap-1">
+            <span className="text-xs">{screen.size}</span>
+          </div>
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t">
           <div>
             <p className="text-xs text-muted-foreground">Per day</p>
-            <p className="font-bold text-lg sm:text-xl text-primary">₹{calculateScreenPricePerDay(screen).toLocaleString()}</p>
+            <p className="font-bold text-lg sm:text-xl text-primary">₹{displayPrice.toLocaleString()}</p>
           </div>
           <Link href="/register?role=advertiser">
             <Button size="sm" data-testid={`button-book-${screen.id}`}>

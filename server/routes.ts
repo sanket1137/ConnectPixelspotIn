@@ -212,6 +212,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Zone Screen Routes (public — no auth required) ──────────────────────────
+
+  // Get zone info for a specific screen
+  app.get("/api/zones/screen/:screenId", async (req, res) => {
+    try {
+      const zone = await storage.getZoneForScreen(req.params.screenId);
+      res.json({ zone });
+    } catch (error) {
+      console.error("Get zone for screen error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get all screens in a zone
+  app.get("/api/zones/:zoneName/screens", async (req, res) => {
+    try {
+      const result = await storage.getScreensInZone(decodeURIComponent(req.params.zoneName));
+      res.json(result);
+    } catch (error) {
+      console.error("Get screens in zone error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Get public screens (approved only, no contact info)
   app.get("/api/public/screens", async (req, res) => {
     try {
@@ -3031,7 +3057,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let serverPrice: number;
       let screensRequested: number | null = null;
 
-      if (screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1) {
+      // ── Zone price override ──────────────────────────────────────────────────
+      // If the screen belongs to a zone, use the zone price instead of the
+      // individual screen price. The client may send zoneName as a hint; we
+      // verify it server-side to prevent spoofing.
+      const zoneInfo = await storage.getZoneForScreen(screen.id);
+      if (zoneInfo) {
+        // Zone screens: price = zone price / number of screens in zone × days
+        const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
+        const count = zoneScreensRes.screens.length || 1;
+        serverPrice = (zoneInfo.pricePerDay / count) * days;
+      } else if (screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1) {
         const requestedScreens = req.body.screensRequested ? parseInt(req.body.screensRequested) : null;
 
         if (screen.bulkBookingMandatory) {

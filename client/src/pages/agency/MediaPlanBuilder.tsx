@@ -57,6 +57,39 @@ function ScreenPickerModal({
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // Zone State
+  const [zoneInfo, setZoneInfo] = useState<any>(null);
+  const [zoneScreens, setZoneScreens] = useState<any[]>([]);
+  const [activeZoneScreens, setActiveZoneScreens] = useState<any[] | null>(null);
+  const [activeZoneName, setActiveZoneName] = useState<string | null>(null);
+  const [highlightedZoneIds, setHighlightedZoneIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!detailModalScreen) {
+      setZoneInfo(null);
+      setZoneScreens([]);
+      return;
+    }
+    async function fetchZoneInfo() {
+      try {
+        const res = await apiRequest("GET", `/api/zones/screen/${detailModalScreen!.id}`);
+        const data = await res.json();
+        if (data.zone) {
+          setZoneInfo(data.zone);
+          const screensRes = await apiRequest("GET", `/api/zones/${encodeURIComponent(data.zone.zoneName)}/screens`);
+          const screensData = await screensRes.json();
+          setZoneScreens(screensData.screens || []);
+        } else {
+          setZoneInfo(null);
+          setZoneScreens([]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch zone info:", err);
+      }
+    }
+    fetchZoneInfo();
+  }, [detailModalScreen]);
+
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
     if (lat !== undefined && lng !== undefined) {
@@ -77,7 +110,8 @@ function ScreenPickerModal({
     enabled: open,
   });
 
-  const screens = Array.isArray(screensData) ? screensData : (screensData.screens || []);
+  const fetchedScreens = Array.isArray(screensData) ? screensData : (screensData.screens || []);
+  const screens = activeZoneScreens || fetchedScreens;
 
   const envTypes = ["all", ...Array.from(new Set(screens.map((s: any) => s.environmentType).filter(Boolean))).sort()];
   // Extract unique gender orientations from userIntents
@@ -120,6 +154,7 @@ function ScreenPickerModal({
 
   const PriceBubble = ({ screen }: { screen: any }) => {
     const isSelected = existingIds.has(screen.id);
+    const isHighlightedZone = highlightedZoneIds.has(screen.id);
     const isHovered = highlightedId === screen.id;
     const price = screen.pricePerDay >= 1000
       ? `₹${(screen.pricePerDay / 1000).toFixed(0)}k`
@@ -130,6 +165,7 @@ function ScreenPickerModal({
           px-2.5 py-1 rounded-full font-bold text-[12px] shadow-md border-2 whitespace-nowrap cursor-pointer transition-all duration-150
           ${isSelected ? 'bg-violet-600 text-white border-white scale-110' : 'bg-white text-slate-800 border-white hover:scale-110'}
           ${isHovered && !isSelected ? 'shadow-xl scale-110 ring-2 ring-violet-400' : ''}
+          ${isHighlightedZone ? 'ring-4 ring-orange-400 border-orange-400' : ''}
         `}
         onClick={() => setDetailModalScreen(screen)}
         >{price}</div>
@@ -170,6 +206,9 @@ function ScreenPickerModal({
           <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
           <SearchAutocomplete 
             onPlaceSelect={(place, inputValue) => {
+              setActiveZoneScreens(null);
+              setActiveZoneName(null);
+              setHighlightedZoneIds(new Set());
               if (place?.geometry?.location) {
                 setLat(place.geometry.location.lat());
                 setLng(place.geometry.location.lng());
@@ -232,6 +271,7 @@ function ScreenPickerModal({
             onClick={() => { 
               setLat(undefined); setLng(undefined); setLocationName("");
               setVenueCategory("all"); setEnvType("all"); setGenderOrientation("all"); 
+              setActiveZoneScreens(null); setActiveZoneName(null); setHighlightedZoneIds(new Set());
             }}
           >
             Clear filters
@@ -341,6 +381,23 @@ function ScreenPickerModal({
             mapId="agency-screen-picker-map"
           >
             <MapController />
+            
+            {activeZoneName && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-lg border border-orange-200 flex items-center gap-3">
+                <span className="text-sm font-semibold text-slate-800">Viewing Zone: <span className="text-orange-600">{activeZoneName}</span></span>
+                <button 
+                  onClick={() => {
+                    setActiveZoneScreens(null);
+                    setActiveZoneName(null);
+                    setHighlightedZoneIds(new Set());
+                  }}
+                  className="hover:bg-slate-200 p-1 rounded-full text-slate-500 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {mapScreens.map((s: any) => (
               <AdvancedMarker
                 key={s.id}
@@ -367,6 +424,40 @@ function ScreenPickerModal({
           setDetailModalScreen(null);
         }}
         isAdded={detailModalScreen ? existingIds.has(detailModalScreen.id) : false}
+        zoneInfo={zoneInfo}
+        allZoneScreens={zoneScreens}
+        onViewZone={() => {
+          if (!zoneInfo || zoneScreens.length === 0) return;
+          setHighlightedZoneIds(new Set(zoneScreens.map(s => s.id)));
+          setDetailModalScreen(null);
+          setActiveZoneScreens(zoneScreens);
+          setActiveZoneName(zoneInfo.zoneName);
+
+          let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+          zoneScreens.forEach(s => {
+            const lat = parseFloat(String(s.latitude));
+            const lng = parseFloat(String(s.longitude));
+            if (!isNaN(lat) && !isNaN(lng)) {
+              if (lat < minLat) minLat = lat;
+              if (lat > maxLat) maxLat = lat;
+              if (lng < minLng) minLng = lng;
+              if (lng > maxLng) maxLng = lng;
+            }
+          });
+          const centerLat = (minLat + maxLat) / 2;
+          const centerLng = (minLng + maxLng) / 2;
+          setPanTarget({ lat: centerLat, lng: centerLng, zoom: 11 });
+        }}
+        onBookZone={() => {
+          if (!zoneInfo || zoneScreens.length === 0) return;
+          zoneScreens.forEach(s => {
+            if (!existingIds.has(s.id)) {
+              handleAddScreen(s);
+            }
+          });
+          setDetailModalScreen(null);
+          setHighlightedZoneIds(new Set());
+        }}
       />
     </div>
   );
