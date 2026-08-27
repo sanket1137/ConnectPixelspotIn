@@ -30,7 +30,7 @@ import {
   aiConversations, aiMessages, aiRateLimits,
   screenTags, screenTagAssignments,
   supportTickets, ticketMessages,
-  zoneScreens,
+  zoneScreens, zones,
   type User, type InsertUser, 
   type Screen, type InsertScreen,
   type Campaign, type InsertCampaign,
@@ -2173,19 +2173,27 @@ export class DatabaseStorage implements IStorage {
 
   async getZoneForScreen(screenId: string): Promise<ZoneInfo | null> {
     const rows = await db
-      .select()
+      .select({
+        zoneName: zones.name,
+        pricePerDay: zones.pricePerDay,
+        minBookingDays: zones.minBookingDays,
+        status: zones.status,
+        zoneId: zones.id
+      })
       .from(zoneScreens)
+      .innerJoin(zones, eq(zoneScreens.zoneId, zones.id))
       .where(
         and(
           eq(zoneScreens.screenId, screenId),
-          eq(zoneScreens.status, "active")
+          eq(zoneScreens.status, "active"),
+          eq(zones.status, "active")
         )
       )
       .limit(1);
 
     if (!rows.length) return null;
 
-    const { zoneName, pricePerDay, minBookingDays } = rows[0];
+    const { zoneName, pricePerDay, minBookingDays, status, zoneId } = rows[0];
 
     // Fetch all screen IDs in this zone
     const allRows = await db
@@ -2193,7 +2201,7 @@ export class DatabaseStorage implements IStorage {
       .from(zoneScreens)
       .where(
         and(
-          eq(zoneScreens.zoneName, zoneName),
+          eq(zoneScreens.zoneId, zoneId),
           eq(zoneScreens.status, "active")
         )
       );
@@ -2202,37 +2210,58 @@ export class DatabaseStorage implements IStorage {
       zoneName,
       pricePerDay,
       minBookingDays,
+      status,
       screenIds: allRows.map((r) => r.screenId),
     };
   }
 
   async getScreensInZone(zoneName: string): Promise<{ zone: ZoneInfo; screens: Screen[] }> {
-    // Get all zone rows for this zone
     const zoneRows = await db
-      .select()
+      .select({
+        zoneId: zones.id,
+        pricePerDay: zones.pricePerDay,
+        minBookingDays: zones.minBookingDays,
+        status: zones.status
+      })
+      .from(zones)
+      .where(
+        and(
+          eq(zones.name, zoneName),
+          eq(zones.status, "active")
+        )
+      )
+      .limit(1);
+
+    if (!zoneRows.length) {
+      return { zone: { zoneName, pricePerDay: 0, minBookingDays: 1, status: "inactive", screenIds: [] }, screens: [] };
+    }
+
+    const { zoneId, pricePerDay, minBookingDays, status } = zoneRows[0];
+
+    // Get all screen IDs mapped to this zone
+    const mappingRows = await db
+      .select({ screenId: zoneScreens.screenId })
       .from(zoneScreens)
       .where(
         and(
-          eq(zoneScreens.zoneName, zoneName),
+          eq(zoneScreens.zoneId, zoneId),
           eq(zoneScreens.status, "active")
         )
       );
-
-    if (!zoneRows.length) {
-      return { zone: { zoneName, pricePerDay: 0, minBookingDays: 1, screenIds: [] }, screens: [] };
+      
+    const screenIds = mappingRows.map(r => r.screenId);
+    
+    // Fetch the actual screen records
+    let screenRecords: Screen[] = [];
+    if (screenIds.length > 0) {
+      screenRecords = await db
+        .select()
+        .from(screens)
+        .where(inArray(screens.id, screenIds));
     }
 
-    const { pricePerDay, minBookingDays } = zoneRows[0];
-    const screenIds = zoneRows.map((r) => r.screenId);
-
-    // Fetch the actual screen records
-    const screenRecords = await db
-      .select()
-      .from(screens)
-      .where(inArray(screens.id, screenIds));
-
     return {
-      zone: { zoneName, pricePerDay, minBookingDays, screenIds },
+      zone: { zoneName, pricePerDay, minBookingDays, status, screenIds },
       screens: screenRecords,
     };
   }
