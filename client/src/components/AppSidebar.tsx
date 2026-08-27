@@ -41,6 +41,8 @@ export function AppSidebar() {
 
   const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
+    { title: "Find Screens", url: "/admin/discover", icon: MapPin },
+    { title: "Create Campaign", url: "/admin/campaigns/new", icon: PlusCircle },
     { title: "Manage Users", url: "/admin/users", icon: Users },
     { title: "Manage Screens", url: "/admin/screens", icon: Monitor },
     { title: "Campaigns & Bookings", url: "/admin/bookings", icon: FileText },

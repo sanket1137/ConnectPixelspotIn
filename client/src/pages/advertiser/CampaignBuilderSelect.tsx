@@ -2,60 +2,64 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Zap, Bot, SlidersHorizontal, ArrowRight, Clock, Sparkles, Settings2 } from "lucide-react";
-
-const modes = [
-  {
-    id: "express",
-    icon: Zap,
-    iconColor: "text-amber-500",
-    iconBg: "bg-amber-500/10",
-    borderHover: "hover:border-amber-500/50",
-    title: "Express Campaign",
-    tagline: "Launch in minutes",
-    description:
-      "You already know which screens you want. Pick your location, choose screens, set dates, and go live fast.",
-    features: ["Choose city or drop a pin", "Browse & select screens", "Min booking validation", "No guesswork"],
-    cta: "Start Express",
-    route: "/advertiser/campaigns/new/express",
-    available: true,
-    highlight: true,
-  },
-  {
-    id: "ai",
-    icon: Bot,
-    iconColor: "text-purple-500",
-    iconBg: "bg-purple-500/10",
-    borderHover: "hover:border-purple-500/50",
-    title: "AI Campaign Builder",
-    tagline: "Smart recommendations",
-    description:
-      "Tell the AI your goal and budget. It analyses footfall data, audience demographics, and picks the best screens for you.",
-    features: ["Goal-based planning", "AI screen recommendations", "Audience optimisation", "Budget maximisation"],
-    cta: "Start AI Builder",
-    route: "/advertiser/campaigns/new/ai",
-    available: true,
-    highlight: false,
-  },
-  {
-    id: "advanced",
-    icon: SlidersHorizontal,
-    iconColor: "text-sky-500",
-    iconBg: "bg-sky-500/10",
-    borderHover: "hover:border-sky-500/50",
-    title: "Advanced Expert Builder",
-    tagline: "Full control",
-    description:
-      "Set every parameter—budget, audience demographics, venue types, time preferences, and smart screen matching.",
-    features: ["Budget-first planning", "Demographic targeting", "Venue & time filters", "Smart plan generator"],
-    cta: "Advanced Builder",
-    route: "/advertiser/campaigns/new/advanced",
-    available: true,
-    highlight: false,
-  },
-];
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function CampaignBuilderSelect() {
   const [, setLocation] = useLocation();
+  const { isAdmin, isAgency } = useAuth();
+  
+  const basePath = isAdmin ? "/admin" : isAgency ? "/agency" : "/advertiser";
+
+  const modes = [
+    {
+      id: "express",
+      icon: Zap,
+      iconColor: "text-amber-500",
+      iconBg: "bg-amber-500/10",
+      borderHover: "hover:border-amber-500/50",
+      title: "Express Campaign",
+      tagline: "Launch in minutes",
+      description:
+        "You already know which screens you want. Pick your location, choose screens, set dates, and go live fast.",
+      features: ["Choose city or drop a pin", "Browse & select screens", "Min booking validation", "No guesswork"],
+      cta: "Start Express",
+      route: `${basePath}/campaigns/new/express`,
+      available: true,
+      highlight: true,
+    },
+    {
+      id: "ai",
+      icon: Bot,
+      iconColor: "text-purple-500",
+      iconBg: "bg-purple-500/10",
+      borderHover: "hover:border-purple-500/50",
+      title: "AI Campaign Builder",
+      tagline: "Smart recommendations",
+      description:
+        "Tell the AI your goal and budget. It analyses footfall data, audience demographics, and picks the best screens for you.",
+      features: ["Goal-based planning", "AI screen recommendations", "Audience optimisation", "Budget maximisation"],
+      cta: "Start AI Builder",
+      route: `${basePath}/campaigns/new/ai`,
+      available: true,
+      highlight: false,
+    },
+    {
+      id: "advanced",
+      icon: SlidersHorizontal,
+      iconColor: "text-sky-500",
+      iconBg: "bg-sky-500/10",
+      borderHover: "hover:border-sky-500/50",
+      title: "Advanced Expert Builder",
+      tagline: "Full control",
+      description:
+        "Set every parameter—budget, audience demographics, venue types, time preferences, and smart screen matching.",
+      features: ["Budget-first planning", "Demographic targeting", "Venue & time filters", "Smart plan generator"],
+      cta: "Advanced Builder",
+      route: `${basePath}/campaigns/new/advanced`,
+      available: true,
+      highlight: false,
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-background">

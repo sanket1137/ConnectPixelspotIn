@@ -77,6 +77,14 @@ const AgencyDiscover = lazy(() => import("@/pages/advertiser/DiscoverScreens"));
 const AgencyCampaigns = lazy(() => import("@/pages/advertiser/CampaignsList"));
 const AgencyPayments = lazy(() => import("@/pages/advertiser/AdvertiserPayments"));
 
+// Admin reuses the same advertiser components for creating/exploring campaigns
+const AdminDiscover = lazy(() => import("@/pages/advertiser/DiscoverScreens"));
+const AdminCampaignBuilderSelect = lazy(() => import("@/pages/advertiser/CampaignBuilderSelect"));
+const AdminExpressCampaignBuilder = lazy(() => import("@/pages/advertiser/express/ExpressCampaignBuilder"));
+const AdminCreateCampaign = lazy(() => import("@/pages/advertiser/CreateCampaign"));
+const AdminAICampaignBuilder = lazy(() => import("@/pages/advertiser/ai/AICampaignBuilder"));
+
+
 // Loading fallback for code-split pages
 function PageLoader() {
   return (
@@ -116,6 +124,27 @@ function Router() {
       <Route path="/admin">
         <AuthGuard allowedRoles={["admin"]}>
           <AdminDashboard />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/discover" component={AdminDiscover} />
+      <Route path="/admin/campaigns/new">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminCampaignBuilderSelect />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/campaigns/new/express">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminExpressCampaignBuilder />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/campaigns/new/ai">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminAICampaignBuilder />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/campaigns/new/advanced">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminCreateCampaign mode="advanced" />
         </AuthGuard>
       </Route>
       <Route path="/admin/users">
