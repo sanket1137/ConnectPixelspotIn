@@ -30,7 +30,7 @@ import {
   aiConversations, aiMessages, aiRateLimits,
   screenTags, screenTagAssignments,
   supportTickets, ticketMessages,
-  zoneScreens, zones,
+  zones,
   type User, type InsertUser, 
   type Screen, type InsertScreen,
   type Campaign, type InsertCampaign,
@@ -2180,12 +2180,11 @@ export class DatabaseStorage implements IStorage {
         status: zones.status,
         zoneId: zones.id
       })
-      .from(zoneScreens)
-      .innerJoin(zones, eq(zoneScreens.zoneId, zones.id))
+      .from(screens)
+      .innerJoin(zones, eq(screens.zoneId, zones.id))
       .where(
         and(
-          eq(zoneScreens.screenId, screenId),
-          eq(zoneScreens.status, "active"),
+          eq(screens.id, screenId),
           eq(zones.status, "active")
         )
       )
@@ -2197,14 +2196,9 @@ export class DatabaseStorage implements IStorage {
 
     // Fetch all screen IDs in this zone
     const allRows = await db
-      .select({ screenId: zoneScreens.screenId })
-      .from(zoneScreens)
-      .where(
-        and(
-          eq(zoneScreens.zoneId, zoneId),
-          eq(zoneScreens.status, "active")
-        )
-      );
+      .select({ screenId: screens.id })
+      .from(screens)
+      .where(eq(screens.zoneId, zoneId));
 
     return {
       zoneName,
@@ -2237,28 +2231,14 @@ export class DatabaseStorage implements IStorage {
     }
 
     const { zoneId, pricePerDay, minBookingDays, status } = zoneRows[0];
-
-    // Get all screen IDs mapped to this zone
-    const mappingRows = await db
-      .select({ screenId: zoneScreens.screenId })
-      .from(zoneScreens)
-      .where(
-        and(
-          eq(zoneScreens.zoneId, zoneId),
-          eq(zoneScreens.status, "active")
-        )
-      );
-      
-    const screenIds = mappingRows.map(r => r.screenId);
     
     // Fetch the actual screen records
-    let screenRecords: Screen[] = [];
-    if (screenIds.length > 0) {
-      screenRecords = await db
-        .select()
-        .from(screens)
-        .where(inArray(screens.id, screenIds));
-    }
+    const screenRecords = await db
+      .select()
+      .from(screens)
+      .where(eq(screens.zoneId, zoneId));
+      
+    const screenIds = screenRecords.map(r => r.id);
 
     return {
       zone: { zoneName, pricePerDay, minBookingDays, status, screenIds },

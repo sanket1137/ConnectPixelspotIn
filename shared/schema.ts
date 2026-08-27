@@ -64,6 +64,7 @@ export const users = pgTable("users", {
 export const screens = pgTable("screens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   ownerId: varchar("owner_id"), // nullable for admin-owned screens
+  zoneId: varchar("zone_id"), // FK to zones.id
   
   // SECTION 1 — Screen Identity
   name: text("name").notNull(),
@@ -415,6 +416,10 @@ export const screensRelations = relations(screens, ({ one, many }) => ({
   owner: one(users, {
     fields: [screens.ownerId],
     references: [users.id],
+  }),
+  zone: one(zones, {
+    fields: [screens.zoneId],
+    references: [zones.id],
   }),
   bookings: many(bookings),
   tagAssignments: many(screenTagAssignments),
@@ -916,7 +921,7 @@ export const zones = pgTable("zones", {
 });
 
 export const zonesRelations = relations(zones, ({ many }) => ({
-  zoneScreens: many(zoneScreens),
+  screens: many(screens),
 }));
 
 export const insertZoneSchema = createInsertSchema(zones).omit({
@@ -927,41 +932,6 @@ export const insertZoneSchema = createInsertSchema(zones).omit({
 
 export type Zone = typeof zones.$inferSelect;
 export type InsertZone = z.infer<typeof insertZoneSchema>;
-
-// ========== ZONE SCREENS (MAPPING) ==========
-// A pure mapping table linking a zoneId to a screenId.
-export const zoneScreens = pgTable("zone_screens", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  zoneId: varchar("zone_id").notNull(),             // FK → zones.id
-  screenId: varchar("screen_id").notNull(),         // FK → screens.id
-  status: text("status").notNull().default("active"), // active | inactive
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => [
-  index("idx_zone_screens_zone_id").on(table.zoneId),
-  index("idx_zone_screens_screen_id").on(table.screenId),
-  index("idx_zone_screens_status").on(table.status),
-]);
-
-export const zoneScreensRelations = relations(zoneScreens, ({ one }) => ({
-  screen: one(screens, {
-    fields: [zoneScreens.screenId],
-    references: [screens.id],
-  }),
-  zone: one(zones, {
-    fields: [zoneScreens.zoneId],
-    references: [zones.id],
-  }),
-}));
-
-export const insertZoneScreenSchema = createInsertSchema(zoneScreens).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type ZoneScreen = typeof zoneScreens.$inferSelect;
-export type InsertZoneScreen = z.infer<typeof insertZoneScreenSchema>;
 
 // Derived type used throughout the app to describe a zone's info
 export type ZoneInfo = {
