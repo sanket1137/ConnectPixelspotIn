@@ -328,7 +328,19 @@ export default function ExpressCampaignBuilder() {
       setTimeout(() => setLocation("/advertiser/campaigns"), 2500);
     },
     onError: (err: Error) => {
-      toast({ title: "Error", description: err.message || "Failed to create campaign", variant: "destructive" });
+      // apiRequest throws "<status>: <raw response body>" — the body is usually
+      // `{"error":"..."}` from our API, so pull that message out when present.
+      let description = err.message || "Failed to create campaign";
+      const bodyStart = description.indexOf(": ");
+      if (bodyStart !== -1) {
+        try {
+          const parsed = JSON.parse(description.slice(bodyStart + 2));
+          if (parsed?.error) description = parsed.error;
+        } catch {
+          // not JSON — fall back to the raw message
+        }
+      }
+      toast({ title: "Error", description, variant: "destructive" });
     },
   });
 

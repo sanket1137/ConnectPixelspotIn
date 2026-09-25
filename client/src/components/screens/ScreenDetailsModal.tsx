@@ -5,7 +5,7 @@ import { Screen, ZoneInfo } from '@shared/schema';
 import { MapPin, Users, Monitor, Clock, PlayCircle, Eye, CalendarDays, ExternalLink, X, PlusCircle, CheckCircle2, Layers, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { getScreenCountDisplay } from "@shared/utils";
+import { getScreenCountDisplay, calculateScreenPricePerDay } from "@shared/utils";
 
 interface ScreenDetailsModalProps {
   isOpen: boolean;
@@ -279,9 +279,14 @@ export function ScreenDetailsModal({
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <div className="text-2xl font-bold text-slate-900">
-                    ₹{(screen.pricePerDay || 0).toLocaleString()}
+                    ₹{calculateScreenPricePerDay(screen).toLocaleString()}
                     <span className="text-sm font-normal text-slate-500"> /day</span>
                   </div>
+                  {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && screen.bulkBookingMandatory && (
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      ₹{(screen.bundlePricePerDay ? screen.bundlePricePerDay / screen.numberOfScreens : screen.pricePerDay).toLocaleString()}/screen × {screen.numberOfScreens} screens
+                    </div>
+                  )}
                   <div className="text-xs font-medium text-slate-500 flex items-center mt-1">
                     <CalendarDays className="h-3 w-3 mr-1" />
                     Min. {screen.minBookingDays} days booking

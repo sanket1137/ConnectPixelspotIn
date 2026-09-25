@@ -12,6 +12,7 @@ import {
   MapPin, Globe, Phone, Building2, Eye, Shield, CreditCard, FileText, ChevronLeft, ChevronRight
 } from "lucide-react";
 import type { User } from "@shared/schema";
+import { ROLE_LABELS, type UserRole } from "@shared/constants";
 import {
   Select,
   SelectContent,
@@ -144,7 +145,7 @@ function UserDetailDialog({ user, open, onClose }: { user: User; open: boolean; 
           <div className="grid grid-cols-2 gap-x-6">
             <DetailRow label="Role" value={
               <Badge variant={user.role === "admin" ? "default" : user.role === "screen_owner" ? "secondary" : "outline"}>
-                {user.role === "screen_owner" ? "Screen Owner" : user.role === "advertiser" ? "Advertiser" : "Admin"}
+                {ROLE_LABELS[user.role as UserRole] ?? user.role}
               </Badge>
             } />
             <DetailRow label="Status" value={
@@ -316,8 +317,7 @@ export default function ManageUsers() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge variant={getRoleBadgeVariant(user.role)}>
-                    {user.role === "screen_owner" ? "Screen Owner" : 
-                     user.role === "advertiser" ? "Advertiser" : "Admin"}
+                    {ROLE_LABELS[user.role as UserRole] ?? user.role}
                   </Badge>
                   <Select
                     value={user.role}
@@ -332,6 +332,7 @@ export default function ManageUsers() {
                     <SelectContent>
                       <SelectItem value="advertiser">Advertiser</SelectItem>
                       <SelectItem value="screen_owner">Screen Owner</SelectItem>
+                      <SelectItem value="agency">Agency</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>

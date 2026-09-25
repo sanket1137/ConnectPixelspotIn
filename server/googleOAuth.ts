@@ -53,7 +53,7 @@ function generateCodeChallenge(): { codeVerifier: string; codeChallenge: string 
  */
 export function getAuthorizationUrl(
   redirectUri: string,
-  role?: 'screen_owner' | 'advertiser'
+  role?: 'screen_owner' | 'advertiser' | 'agency'
 ): string {
   // Generate PKCE parameters
   const { codeVerifier, codeChallenge } = generateCodeChallenge();
@@ -107,7 +107,7 @@ export async function getTokensFromCode(
     picture?: string;
     emailVerified: boolean;
   };
-  role?: 'screen_owner' | 'advertiser';
+  role?: 'screen_owner' | 'advertiser' | 'agency';
 }> {
   // Validate state (CSRF protection)
   const stateData = stateStore.get(state);

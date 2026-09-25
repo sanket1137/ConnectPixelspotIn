@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
 import { VENUE_CATEGORIES } from "@shared/constants";
 import { ArrowLeft, Target, MapPin, Filter as FilterIcon, Check, Map as MapIcon, Image as ImageIcon, X, Trash2, Search, SlidersHorizontal, ChevronRight, ChevronLeft, AlertTriangle, ArrowRight, LayoutGrid, Users } from "lucide-react";
@@ -31,6 +32,8 @@ import React from "react";
 import { Map, AdvancedMarker, InfoWindow, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Slider } from "@/components/ui/slider";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 
 const defaultCenter = {
   lat: 12.9716,
@@ -130,7 +133,7 @@ const createCampaignSchema = z.object({
   objective: z.string().default("advanced"),
   // budget is auto-calculated based on selected screens and duration
   budget: z.number().optional(),
-  
+
   // Dates
   startDate: z.string().min(1, "Start date is required").refine((date) => {
     const selectedDate = new Date(date);
@@ -146,10 +149,10 @@ const createCampaignSchema = z.object({
     tomorrow.setDate(tomorrow.getDate() + 1);
     return selectedDate > tomorrow;
   }, "End date must be after start date"),
-  
+
   // Creative URL
   creativeUrl: z.string().url("Please enter a valid URL").min(1, "Creative link is required"),
-  
+
   // Campaign summary
   summary: z.string().max(500, "Summary must be under 500 characters").optional(),
 });
@@ -168,11 +171,12 @@ export default function CreateCampaign() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+  const isMobile = useIsMobile(1024);
+
   // Step Management
   // Now simpler: 1 = Build (Select Screens), 2 = Review & Confirm
   const [currentStep, setCurrentStep] = useState(1);
-  
+
   // Screen and Map State
   const [screens, setScreens] = useState<Screen[]>([]);
   const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>([]);
@@ -218,8 +222,8 @@ export default function CreateCampaign() {
     tags: []
   });
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(defaultFilters);
-  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(true);
-  const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(true);
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 1024);
+  const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 1024);
   const [mapCenter, setMapCenter] = useState(defaultCenter);
 
   // Load Filters from API
@@ -264,10 +268,10 @@ export default function CreateCampaign() {
 
         if (wideLocation && wideLocation.bounds) {
           // Country/State: use bounding-box — same as Discover Screens
-          params.append("boundsN", wideLocation.bounds.north.toString());
-          params.append("boundsS", wideLocation.bounds.south.toString());
-          params.append("boundsE", wideLocation.bounds.east.toString());
-          params.append("boundsW", wideLocation.bounds.west.toString());
+          if (wideLocation.bounds.north != null) params.append("boundsN", String(wideLocation.bounds.north));
+          if (wideLocation.bounds.south != null) params.append("boundsS", String(wideLocation.bounds.south));
+          if (wideLocation.bounds.east != null) params.append("boundsE", String(wideLocation.bounds.east));
+          if (wideLocation.bounds.west != null) params.append("boundsW", String(wideLocation.bounds.west));
           params.append("sortBy", "popularity");
           params.append("sortOrder", "desc");
           // Append any other filters below, then use /api/screens
@@ -310,14 +314,14 @@ export default function CreateCampaign() {
         if (activeFilters.incomeLevels.length > 0) {
           activeFilters.incomeLevels.forEach(v => params.append("incomeLevels", v));
         }
-        if (activeFilters.priceRange[0] > 0) {
-          params.append("minPrice", activeFilters.priceRange[0].toString());
+        if (activeFilters.priceRange && activeFilters.priceRange[0] > 0) {
+          params.append("minPrice", String(activeFilters.priceRange[0]));
         }
-        if (activeFilters.priceRange[1] < 100000) {
-          params.append("maxPrice", activeFilters.priceRange[1].toString());
+        if (activeFilters.priceRange && activeFilters.priceRange[1] < 100000) {
+          params.append("maxPrice", String(activeFilters.priceRange[1]));
         }
         if (activeFilters.minBookingDays < 90) {
-          params.append('minBookingDays', activeFilters.minBookingDays.toString());
+          params.append('minBookingDays', String(activeFilters.minBookingDays));
         }
 
         const queryString = params.toString();
@@ -349,19 +353,25 @@ export default function CreateCampaign() {
           // fitBounds is handled by MapController below via mapPanTarget
           // set center to bounds center
           const b = wideLocation.bounds;
-          setMapCenter({
-            lat: (b.north + b.south) / 2,
-            lng: (b.east + b.west) / 2,
-          });
+          if (b.north != null && b.south != null && b.east != null && b.west != null) {
+            setMapCenter({
+              lat: (b.north + b.south) / 2,
+              lng: (b.east + b.west) / 2,
+            });
+          }
         } else if (hasLocations && screenList.length > 0) {
-          const firstScreen = screenList[0];
-          setMapCenter({
-            lat: parseFloat(firstScreen.latitude.toString()),
-            lng: parseFloat(firstScreen.longitude.toString())
-          });
+          const firstScreen = screenList.find(s => s.latitude != null && s.longitude != null && !isNaN(parseFloat(String(s.latitude))) && !isNaN(parseFloat(String(s.longitude))));
+          if (firstScreen) {
+            setMapCenter({
+              lat: parseFloat(String(firstScreen.latitude)),
+              lng: parseFloat(String(firstScreen.longitude))
+            });
+          }
         } else if (hasLocations) {
-          const mapLoc = activeFilters.locations.find(l => l.lat);
-          if (mapLoc) setMapCenter({ lat: mapLoc.lat!, lng: mapLoc.lng! });
+          const mapLoc = activeFilters.locations.find(l => l.lat != null && l.lng != null);
+          if (mapLoc && mapLoc.lat != null && mapLoc.lng != null) {
+            setMapCenter({ lat: mapLoc.lat, lng: mapLoc.lng });
+          }
         }
       } catch (error) {
         console.error("❌ Error fetching filtered screens:", error);
@@ -401,9 +411,9 @@ export default function CreateCampaign() {
       const next = prev.includes(screenId)
         ? prev.filter(id => id !== screenId)
         : [...prev, screenId];
-      
+
       localStorage.setItem("selectedScreenIds", JSON.stringify(next));
-      
+
       // Cleanup zone price if removing
       if (prev.includes(screenId) && zonePriceOverrides.has(screenId)) {
         const newOverrides = new globalThis.Map(zonePriceOverrides);
@@ -411,7 +421,7 @@ export default function CreateCampaign() {
         setZonePriceOverrides(newOverrides);
         localStorage.setItem("zonePriceOverrides", JSON.stringify(Array.from(newOverrides.entries())));
       }
-      
+
       return next;
     });
   };
@@ -432,7 +442,7 @@ export default function CreateCampaign() {
       return { ...prev, [key]: newArray };
     });
   };
-  
+
   const clearFilters = () => {
     setActiveFilters(defaultFilters);
   };
@@ -446,14 +456,14 @@ export default function CreateCampaign() {
   };
 
   const durationDays = calculateDays();
-  
+
   const selectedScreensFull = screens.filter(s => selectedScreenIds.includes(s.id));
   const estimatedCost = selectedScreensFull.reduce((sum, s) => {
     const basePrice = calculateScreenPricePerDay(s);
     const price = zonePriceOverrides.get(s.id) ?? basePrice ?? 0;
     return sum + (price * durationDays);
   }, 0);
-  
+
   const totalReach = selectedScreensFull.reduce((sum, s) => sum + (s.avgDailyFootfall || 0) * durationDays, 0);
 
 
@@ -464,7 +474,7 @@ export default function CreateCampaign() {
       }
 
       // Create campaign with targeted screens
-      const targetArea = activeFilters.locations.length > 0 
+      const targetArea = activeFilters.locations.length > 0
         ? { type: "multiple" as const, locations: activeFilters.locations }
         : { type: "india" as const };
 
@@ -490,7 +500,7 @@ export default function CreateCampaign() {
         creativeUrl: data.creativeUrl || null,
         summary: data.summary || null,
       });
-      
+
       const campaign = await campaignResponse.json();
 
       // Create bookings for each selected screen
@@ -520,9 +530,22 @@ export default function CreateCampaign() {
       }, 2000);
     },
     onError: (error: Error) => {
+      // apiRequest throws "<status>: <raw response body>" — the body is usually
+      // `{"error":"..."}` from our API, so pull that message out when present
+      // instead of showing the raw status/JSON blob (e.g. a min-booking-days rejection).
+      let description = error.message || "Failed to create campaign.";
+      const bodyStart = description.indexOf(": ");
+      if (bodyStart !== -1) {
+        try {
+          const parsed = JSON.parse(description.slice(bodyStart + 2));
+          if (parsed?.error) description = parsed.error;
+        } catch {
+          // not JSON — fall back to the raw message
+        }
+      }
       toast({
         title: "Error",
-        description: error.message || "Failed to create campaign.",
+        description,
         variant: "destructive",
       });
     },
@@ -531,7 +554,7 @@ export default function CreateCampaign() {
   const onSubmitBuild = async () => {
     // Set final calculated budget before validation/submission
     form.setValue("budget", estimatedCost);
-    
+
     // We only need to gather minimum info to proceed to the review screen.
     if (selectedScreenIds.length === 0) {
       toast({
@@ -541,16 +564,16 @@ export default function CreateCampaign() {
       });
       return;
     }
-    
+
     // Validate form details (name, dates) needed before moving on
     const isValid = await form.trigger(["name", "startDate", "endDate"]);
-    
+
     if (!isValid) {
       const errors = form.control._formState.errors;
       const missingFields = Object.keys(errors)
         .filter(k => ["name", "startDate", "endDate"].includes(k))
         .map(k => k === 'startDate' ? 'Start Date' : k === 'endDate' ? 'End Date' : k.charAt(0).toUpperCase() + k.slice(1));
-      
+
       toast({
         title: "Campaign Details Required",
         description: `Please fill in the following: ${missingFields.join(", ")}`,
@@ -558,7 +581,7 @@ export default function CreateCampaign() {
       });
       return;
     }
-    
+
     setCurrentStep(2);
   };
 
@@ -576,303 +599,430 @@ export default function CreateCampaign() {
     createCampaignMutation.mutate(data);
   };
 
+  const renderFilterPanelContent = () => (
+    <>
+      <div className="p-4 border-b flex justify-between items-center bg-card">
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="h-4 w-4 text-primary" />
+          <h2 className="font-semibold">Screen Filters</h2>
+        </div>
+        {Object.entries(activeFilters).some(([k, v]) => Array.isArray(v) ? v.length > 0 : v !== defaultFilters[k as keyof ActiveFilters]) && (
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs text-muted-foreground hover:text-foreground">
+            Clear all
+          </Button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <Accordion type="multiple" defaultValue={["city", "venue", "price"]} className="w-full">
+
+          {/* Location Search */}
+          <AccordionItem value="city" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+              Location Target
+              {activeFilters.locations.length > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                  {activeFilters.locations.length}
+                </Badge>
+              )}
+            </AccordionTrigger>
+            <AccordionContent className="pt-2 pb-0 px-2">
+              <MultiLocationSearch
+                selectedLocations={activeFilters.locations}
+                onChange={(locs) => handleFilterChange('locations', locs)}
+                onLocationFocus={(loc) => {
+                  if (loc.lat && loc.lng) {
+                    const radius = loc.radiusKm || 5;
+                    const zoom = radius <= 2 ? 15 : radius <= 5 ? 13 : radius <= 15 ? 11 : radius <= 30 ? 9 : 8;
+                    setMapPanTarget({ lat: loc.lat, lng: loc.lng, zoom });
+                  }
+                }}
+                placeholder="Search locations..."
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Price Filter */}
+          <AccordionItem value="price" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+               Price Range / Day (₹)
+            </AccordionTrigger>
+            <AccordionContent className="pt-4 pb-2 px-3">
+              <Slider
+                min={0}
+                max={100000}
+                step={100}
+                value={activeFilters.priceRange}
+                onValueChange={(val) => handleFilterChange('priceRange', val as [number, number])}
+                className="mb-6"
+              />
+              <div className="flex items-center justify-between mt-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">Min</span>
+                  <Input
+                    type="number"
+                    value={activeFilters.priceRange[0]}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0;
+                      handleFilterChange('priceRange', [val, Math.max(val, activeFilters.priceRange[1])])
+                    }}
+                    className="w-full h-8 text-xs"
+                  />
+                </div>
+                <span className="text-muted-foreground text-sm self-end pb-1">-</span>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">Max</span>
+                  <Input
+                    type="number"
+                    value={activeFilters.priceRange[1]}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0;
+                      handleFilterChange('priceRange', [Math.min(val, activeFilters.priceRange[0]), val])
+                    }}
+                    className="w-full h-8 text-xs"
+                  />
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Min Booking Days Filter */}
+          <AccordionItem value="minBooking" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+              Min Booking Days (Up to)
+              <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 p-1 px-2 flex items-center justify-center rounded-full text-[10px]">
+                {activeFilters.minBookingDays >= 90 ? 'Any' : `${activeFilters.minBookingDays}d`}
+              </Badge>
+            </AccordionTrigger>
+            <AccordionContent className="pt-4 pb-2 px-3">
+              <Slider
+                min={1}
+                max={90}
+                step={1}
+                value={[activeFilters.minBookingDays]}
+                onValueChange={(val) => handleFilterChange('minBookingDays', val[0])}
+                className="mb-6"
+              />
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>1 day</span>
+                <span>Any (90+)</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2 italic">At max (90), all screens are shown regardless of booking duration. Drag left to restrict to shorter-booking screens only.</p>
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Venue Type Filter */}
+          <AccordionItem value="venue" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+              Venue Type
+              {activeFilters.venueTypes.length > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                  {activeFilters.venueTypes.length}
+                </Badge>
+              )}
+            </AccordionTrigger>
+            <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
+              <MultiSelect
+                options={(filterConfig.venueTypes || []).map(v => ({ value: v, label: v }))}
+                selected={activeFilters.venueTypes}
+                onChange={(val) => handleFilterChange('venueTypes', val)}
+                placeholder="Select venue types..."
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Environment Type Filter */}
+          <AccordionItem value="environment" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+              Environment
+              {activeFilters.environmentTypes.length > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                  {activeFilters.environmentTypes.length}
+                </Badge>
+              )}
+            </AccordionTrigger>
+            <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
+              <MultiSelect
+                options={(filterConfig.environmentTypes || []).map(v => ({ value: v, label: v }))}
+                selected={activeFilters.environmentTypes}
+                onChange={(val) => handleFilterChange('environmentTypes', val)}
+                placeholder="Select environments..."
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Advanced Target Filters */}
+          {/* Screen Type */}
+          <AccordionItem value="types" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+              Screen Type
+              {activeFilters.types.length > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                  {activeFilters.types.length}
+                </Badge>
+              )}
+            </AccordionTrigger>
+            <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
+              <MultiSelect
+                options={(filterConfig.types || []).map(v => ({ value: v, label: v }))}
+                selected={activeFilters.types}
+                onChange={(val) => handleFilterChange('types', val)}
+                placeholder="Select screen types..."
+                emptyText="No screen types found."
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Audience Type */}
+          <AccordionItem value="occupationMixes" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+              Audience Type
+              {activeFilters.occupationMixes.length > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                  {activeFilters.occupationMixes.length}
+                </Badge>
+              )}
+            </AccordionTrigger>
+            <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
+              <MultiSelect
+                options={(filterConfig.occupationMixes || []).map(v => ({ value: v, label: v }))}
+                selected={activeFilters.occupationMixes}
+                onChange={(val) => handleFilterChange('occupationMixes', val)}
+                placeholder="Select audience types..."
+                emptyText="No audience types found."
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Audience Intent */}
+          <AccordionItem value="userIntents" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+              Audience Intent
+              {activeFilters.userIntents.length > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                  {activeFilters.userIntents.length}
+                </Badge>
+              )}
+            </AccordionTrigger>
+            <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
+              <MultiSelect
+                options={(filterConfig.userIntents || []).map(v => ({ value: v, label: v }))}
+                selected={activeFilters.userIntents}
+                onChange={(val) => handleFilterChange('userIntents', val)}
+                placeholder="Select intents..."
+                emptyText="No intents found."
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* User Mood */}
+          <AccordionItem value="userMoods" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+              User Mood
+              {activeFilters.userMoods.length > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                  {activeFilters.userMoods.length}
+                </Badge>
+              )}
+            </AccordionTrigger>
+            <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
+              <MultiSelect
+                options={(filterConfig.userMoods || []).map(v => ({ value: v, label: v }))}
+                selected={activeFilters.userMoods}
+                onChange={(val) => handleFilterChange('userMoods', val)}
+                placeholder="Select user moods..."
+                emptyText="No moods found."
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Gender Orientation */}
+          <AccordionItem value="genderOrientations" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+              Gender Orientation
+              {activeFilters.genderOrientations.length > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                  {activeFilters.genderOrientations.length}
+                </Badge>
+              )}
+            </AccordionTrigger>
+            <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
+              <MultiSelect
+                options={(filterConfig.genderOrientations || []).map(v => ({ value: v, label: v }))}
+                selected={activeFilters.genderOrientations}
+                onChange={(val) => handleFilterChange('genderOrientations', val)}
+                placeholder="Select gender orientations..."
+                emptyText="No orientations found."
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Income Level */}
+          <AccordionItem value="incomeLevels" className="border-b-0 mb-2">
+            <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
+              Income Level
+              {activeFilters.incomeLevels.length > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
+                  {activeFilters.incomeLevels.length}
+                </Badge>
+              )}
+            </AccordionTrigger>
+            <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
+              <MultiSelect
+                options={(filterConfig.incomeLevels || []).map(v => ({ value: v, label: v }))}
+                selected={activeFilters.incomeLevels}
+                onChange={(val) => handleFilterChange('incomeLevels', val)}
+                placeholder="Select income levels..."
+                emptyText="No income levels found."
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+        </Accordion>
+      </div>
+    </>
+  );
+
+  const renderWorkspaceContent = () => (
+    <>
+      <div className="p-4 border-b flex flex-col gap-2 bg-card sticky top-0 z-10">
+        <div className="flex justify-between items-center">
+          <h2 className="font-bold font-serif text-lg">Campaign Setup</h2>
+        </div>
+
+        <Form {...form}>
+          <div className="space-y-4 mt-2">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Campaign Name</label>
+                  <FormControl>
+                    <Input placeholder="E.g. Summer Sale 2024" className="h-8 text-sm" {...field} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={form.control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Start Date</label>
+                      <FormControl>
+                        <Input type="date" className="h-8 text-sm px-2" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="endDate"
+                  render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">End Date</label>
+                      <FormControl>
+                        <Input type="date" className="h-8 text-sm px-2" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+            </div>
+          </div>
+        </Form>
+      </div>
+
+      <div className="flex-1 overflow-y-auto bg-muted/20">
+        <div className="p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm flex items-center gap-1.5"><Target className="h-4 w-4 text-primary"/> Selected Inventory</h3>
+            <Badge variant="secondary" className="bg-primary hover:bg-primary text-white text-xs">{calculateTotalPhysicalScreens(screens.filter(s => selectedScreenIds.includes(s.id)))} Screens</Badge>
+          </div>
+
+          {selectedScreensFull.length === 0 ? (
+            <div className="text-center py-10 px-4 border-2 border-dashed border-muted-foreground/20 rounded-xl bg-background">
+              <MapIcon className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">No screens selected</p>
+              <p className="text-xs text-muted-foreground mt-2 px-6">Click map markers or use <span className="font-bold text-primary">"Select All"</span> to build your network.</p>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {selectedScreensFull.map((screen, idx) => (
+                <div key={screen.id} className="relative group rounded-lg overflow-hidden border hover:border-primary/50 transition-colors shadow-sm">
+                  <div className="pointer-events-none">
+                    <ScreenCard
+                      screen={screen}
+                      priceOverride={zonePriceOverrides.get(screen.id)}
+                    />
+                  </div>
+                  <button
+                   onClick={() => toggleScreenSelection(screen.id)}
+                   className="absolute top-2 right-2 bg-destructive/90 text-destructive-foreground p-1.5 rounded-full hover:bg-destructive opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md pointer-events-auto"
+                   title="Remove from campaign"
+                  >
+                     <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4 bg-background border-t shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
+        <div className="flex justify-between items-end mb-4">
+          <div>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Est. Cost ({durationDays} days)</p>
+            <p className="text-2xl font-bold font-serif text-primary leading-none">₹{estimatedCost.toLocaleString()}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground mb-0.5">Reach</p>
+            <p className="text-sm font-semibold leading-none">{totalReach >= 1000 ? (totalReach/1000).toFixed(1) + 'k' : totalReach}</p>
+          </div>
+        </div>
+        <Button
+          className="w-full font-bold shadow-md"
+          size="lg"
+          onClick={onSubmitBuild}
+          disabled={selectedScreenIds.length === 0}
+        >
+           Review & Launch
+           <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+    </>
+  );
+
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden">
-      
+    <div className="flex h-[calc(100dvh-56px)] overflow-hidden">
+
       {/* ------------------------------------------------------------- */}
       {/* LEFT PANEL: FILTERS (Only in Step 1)                           */}
       {/* ------------------------------------------------------------- */}
-      {currentStep === 1 && (
-        <div 
+      {currentStep === 1 && !isMobile && (
+        <div
           className={`flex-shrink-0 bg-background border-r flex flex-col transition-all duration-300 ${isFilterPanelOpen ? "w-80" : "w-0"} overflow-hidden`}
         >
-          <div className="p-4 border-b flex justify-between items-center bg-card">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4 text-primary" />
-              <h2 className="font-semibold">Screen Filters</h2>
-            </div>
-            {Object.entries(activeFilters).some(([k, v]) => Array.isArray(v) ? v.length > 0 : v !== defaultFilters[k as keyof ActiveFilters]) && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs text-muted-foreground hover:text-foreground">
-                Clear all
-              </Button>
-            )}
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <Accordion type="multiple" defaultValue={["city", "venue", "price"]} className="w-full">
-              
-              {/* Location Search */}
-              <AccordionItem value="city" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                  Location Target
-                  {activeFilters.locations.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
-                      {activeFilters.locations.length}
-                    </Badge>
-                  )}
-                </AccordionTrigger>
-                <AccordionContent className="pt-2 pb-0 px-2">
-                  <MultiLocationSearch
-                    selectedLocations={activeFilters.locations}
-                    onChange={(locs) => handleFilterChange('locations', locs)}
-                    onLocationFocus={(loc) => {
-                      if (loc.lat && loc.lng) {
-                        const radius = loc.radiusKm || 5;
-                        const zoom = radius <= 2 ? 15 : radius <= 5 ? 13 : radius <= 15 ? 11 : radius <= 30 ? 9 : 8;
-                        setMapPanTarget({ lat: loc.lat, lng: loc.lng, zoom });
-                      }
-                    }}
-                    placeholder="Search locations..."
-                  />
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* Price Filter */}
-              <AccordionItem value="price" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                   Price Range / Day (₹)
-                </AccordionTrigger>
-                <AccordionContent className="pt-4 pb-2 px-3">
-                  <Slider
-                    min={0}
-                    max={100000}
-                    step={100}
-                    value={activeFilters.priceRange}
-                    onValueChange={(val) => handleFilterChange('priceRange', val as [number, number])}
-                    className="mb-6"
-                  />
-                  <div className="flex items-center justify-between mt-2 gap-2">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">Min</span>
-                      <Input 
-                        type="number" 
-                        value={activeFilters.priceRange[0]} 
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value) || 0;
-                          handleFilterChange('priceRange', [val, Math.max(val, activeFilters.priceRange[1])])
-                        }}
-                        className="w-full h-8 text-xs" 
-                      />
-                    </div>
-                    <span className="text-muted-foreground text-sm self-end pb-1">-</span>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">Max</span>
-                      <Input 
-                        type="number" 
-                        value={activeFilters.priceRange[1]} 
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value) || 0;
-                          handleFilterChange('priceRange', [Math.min(val, activeFilters.priceRange[0]), val])
-                        }}
-                        className="w-full h-8 text-xs" 
-                      />
-                    </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* Min Booking Days Filter */}
-              <AccordionItem value="minBooking" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                  Min Booking Days (Up to)
-                  <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 p-1 px-2 flex items-center justify-center rounded-full text-[10px]">
-                    {activeFilters.minBookingDays >= 90 ? 'Any' : `${activeFilters.minBookingDays}d`}
-                  </Badge>
-                </AccordionTrigger>
-                <AccordionContent className="pt-4 pb-2 px-3">
-                  <Slider
-                    min={1}
-                    max={90}
-                    step={1}
-                    value={[activeFilters.minBookingDays]}
-                    onValueChange={(val) => handleFilterChange('minBookingDays', val[0])}
-                    className="mb-6"
-                  />
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>1 day</span>
-                    <span>Any (90+)</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-2 italic">At max (90), all screens are shown regardless of booking duration. Drag left to restrict to shorter-booking screens only.</p>
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* Venue Type Filter */}
-              <AccordionItem value="venue" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                  Venue Type
-                  {activeFilters.venueTypes.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
-                      {activeFilters.venueTypes.length}
-                    </Badge>
-                  )}
-                </AccordionTrigger>
-                <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
-                  <MultiSelect
-                    options={(filterConfig.venueTypes || []).map(v => ({ value: v, label: v }))}
-                    selected={activeFilters.venueTypes}
-                    onChange={(val) => handleFilterChange('venueTypes', val)}
-                    placeholder="Select venue types..."
-                  />
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* Environment Type Filter */}
-              <AccordionItem value="environment" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                  Environment
-                  {activeFilters.environmentTypes.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
-                      {activeFilters.environmentTypes.length}
-                    </Badge>
-                  )}
-                </AccordionTrigger>
-                <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
-                  <MultiSelect
-                    options={(filterConfig.environmentTypes || []).map(v => ({ value: v, label: v }))}
-                    selected={activeFilters.environmentTypes}
-                    onChange={(val) => handleFilterChange('environmentTypes', val)}
-                    placeholder="Select environments..."
-                  />
-                </AccordionContent>
-              </AccordionItem>
-              
-              {/* Advanced Target Filters */}
-              {/* Screen Type */}
-              <AccordionItem value="types" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                  Screen Type
-                  {activeFilters.types.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
-                      {activeFilters.types.length}
-                    </Badge>
-                  )}
-                </AccordionTrigger>
-                <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
-                  <MultiSelect
-                    options={(filterConfig.types || []).map(v => ({ value: v, label: v }))}
-                    selected={activeFilters.types}
-                    onChange={(val) => handleFilterChange('types', val)}
-                    placeholder="Select screen types..."
-                    emptyText="No screen types found."
-                  />
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* Audience Type */}
-              <AccordionItem value="occupationMixes" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                  Audience Type
-                  {activeFilters.occupationMixes.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
-                      {activeFilters.occupationMixes.length}
-                    </Badge>
-                  )}
-                </AccordionTrigger>
-                <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
-                  <MultiSelect
-                    options={(filterConfig.occupationMixes || []).map(v => ({ value: v, label: v }))}
-                    selected={activeFilters.occupationMixes}
-                    onChange={(val) => handleFilterChange('occupationMixes', val)}
-                    placeholder="Select audience types..."
-                    emptyText="No audience types found."
-                  />
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* Audience Intent */}
-              <AccordionItem value="userIntents" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                  Audience Intent
-                  {activeFilters.userIntents.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
-                      {activeFilters.userIntents.length}
-                    </Badge>
-                  )}
-                </AccordionTrigger>
-                <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
-                  <MultiSelect
-                    options={(filterConfig.userIntents || []).map(v => ({ value: v, label: v }))}
-                    selected={activeFilters.userIntents}
-                    onChange={(val) => handleFilterChange('userIntents', val)}
-                    placeholder="Select intents..."
-                    emptyText="No intents found."
-                  />
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* User Mood */}
-              <AccordionItem value="userMoods" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                  User Mood
-                  {activeFilters.userMoods.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
-                      {activeFilters.userMoods.length}
-                    </Badge>
-                  )}
-                </AccordionTrigger>
-                <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
-                  <MultiSelect
-                    options={(filterConfig.userMoods || []).map(v => ({ value: v, label: v }))}
-                    selected={activeFilters.userMoods}
-                    onChange={(val) => handleFilterChange('userMoods', val)}
-                    placeholder="Select user moods..."
-                    emptyText="No moods found."
-                  />
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* Gender Orientation */}
-              <AccordionItem value="genderOrientations" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                  Gender Orientation
-                  {activeFilters.genderOrientations.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
-                      {activeFilters.genderOrientations.length}
-                    </Badge>
-                  )}
-                </AccordionTrigger>
-                <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
-                  <MultiSelect
-                    options={(filterConfig.genderOrientations || []).map(v => ({ value: v, label: v }))}
-                    selected={activeFilters.genderOrientations}
-                    onChange={(val) => handleFilterChange('genderOrientations', val)}
-                    placeholder="Select gender orientations..."
-                    emptyText="No orientations found."
-                  />
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* Income Level */}
-              <AccordionItem value="incomeLevels" className="border-b-0 mb-2">
-                <AccordionTrigger className="py-2 hover:no-underline text-sm font-semibold bg-muted/50 px-3 rounded-md">
-                  Income Level
-                  {activeFilters.incomeLevels.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary h-5 w-5 p-0 flex items-center justify-center rounded-full">
-                      {activeFilters.incomeLevels.length}
-                    </Badge>
-                  )}
-                </AccordionTrigger>
-                <AccordionContent className="pt-2 pb-0 px-2 max-h-64 overflow-visible">
-                  <MultiSelect
-                    options={(filterConfig.incomeLevels || []).map(v => ({ value: v, label: v }))}
-                    selected={activeFilters.incomeLevels}
-                    onChange={(val) => handleFilterChange('incomeLevels', val)}
-                    placeholder="Select income levels..."
-                    emptyText="No income levels found."
-                  />
-                </AccordionContent>
-              </AccordionItem>
-
-            </Accordion>
-          </div>
+          {renderFilterPanelContent()}
         </div>
+      )}
+
+      {currentStep === 1 && isMobile && (
+        <Sheet open={isFilterPanelOpen} onOpenChange={setIsFilterPanelOpen}>
+          <SheetContent side="left" className="w-[85vw] sm:w-80 p-0 flex flex-col overflow-y-auto">
+            {renderFilterPanelContent()}
+          </SheetContent>
+        </Sheet>
       )}
 
       {/* Panel Toggle Button (When closed) */}
       {currentStep === 1 && !isFilterPanelOpen && (
-        <Button 
-          variant="outline" 
-          size="icon" 
+        <Button
+          variant="outline"
+          size="icon"
           className="absolute left-4 top-[80px] z-10 bg-background shadow-md h-9 w-9 rounded-full"
           onClick={() => setIsFilterPanelOpen(true)}
         >
@@ -883,25 +1033,25 @@ export default function CreateCampaign() {
       {/* ------------------------------------------------------------- */}
       {/* CENTER PANEL: MAP                                             */}
       {/* ------------------------------------------------------------- */}
-      <div className={`flex-1 relative ${currentStep === 2 ? "px-8 py-8 overflow-y-auto" : ""}`}>
-        
+      <div className={`flex-1 relative ${currentStep === 2 ? "px-8 py-8 overflow-y-auto" : ""} ${currentStep === 1 && isMobile ? "pb-20" : ""}`}>
+
         {currentStep === 1 ? (
           <>
             {/* Header Overlay */}
             <div className="absolute top-4 left-4 right-4 z-10 flex justify-between items-start pointer-events-none">
               <div className="bg-background/90 backdrop-blur-sm p-3 rounded-xl shadow-lg border pointer-events-auto">
-                <div className="flex items-center gap-3 mb-1">
+                <div className="flex items-center gap-3 mb-1 flex-wrap">
                   <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setLocation("/advertiser")}>
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
                   <h1 className="font-bold text-lg font-serif">Advanced Builder</h1>
                   <Badge variant="secondary" className="ml-2 bg-primary/10 text-primary border-primary/20">{screens.length} Screens Found</Badge>
                 </div>
-                <div className="flex items-center justify-between ml-11">
+                <div className="flex items-center justify-between ml-11 flex-wrap gap-2">
                   <p className="text-xs text-muted-foreground">Select highly targeted screens from the map or list.</p>
-                  <Button 
-                    size="sm" 
-                    variant="default" 
+                  <Button
+                    size="sm"
+                    variant="default"
                     className="h-7 rounded-full px-3 font-bold text-[10px] uppercase tracking-wider ml-4"
                     onClick={selectAllFiltered}
                     disabled={screens.length === 0}
@@ -914,29 +1064,33 @@ export default function CreateCampaign() {
             </div>
 
             {/* Panel Collapse Toggles */}
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 z-10 flex">
-              {isFilterPanelOpen && (
-                <Button 
-                  variant="outline" 
-                   className="h-16 w-6 rounded-l-none rounded-r-md bg-background/90 backdrop-blur border-l-0 shadow-md p-0 flex items-center justify-center hover:bg-background group"
-                  onClick={() => setIsFilterPanelOpen(false)}
-                >
-                  <ChevronLeft className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-                </Button>
-              )}
-            </div>
+            {!isMobile && (
+              <>
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 z-10 flex">
+                  {isFilterPanelOpen && (
+                    <Button
+                      variant="outline"
+                       className="h-16 w-6 rounded-l-none rounded-r-md bg-background/90 backdrop-blur border-l-0 shadow-md p-0 flex items-center justify-center hover:bg-background group"
+                      onClick={() => setIsFilterPanelOpen(false)}
+                    >
+                      <ChevronLeft className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                    </Button>
+                  )}
+                </div>
 
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex pr-[400px]">
-               {isWorkspaceOpen && (
-                <Button 
-                  variant="outline" 
-                  className="h-16 w-6 rounded-r-none rounded-l-md bg-background/90 backdrop-blur border-r-0 shadow-md p-0 flex items-center justify-center hover:bg-background group translate-x-[400px]"
-                  onClick={() => setIsWorkspaceOpen(false)}
-                >
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-                </Button>
-              )}
-            </div>
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex pr-[400px]">
+                   {isWorkspaceOpen && (
+                    <Button
+                      variant="outline"
+                      className="h-16 w-6 rounded-r-none rounded-l-md bg-background/90 backdrop-blur border-r-0 shadow-md p-0 flex items-center justify-center hover:bg-background group translate-x-[400px]"
+                      onClick={() => setIsWorkspaceOpen(false)}
+                    >
+                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Map Container */}
             <div className="w-full h-full">
@@ -985,13 +1139,15 @@ export default function CreateCampaign() {
                   ))}
 
                   {/* Render price bubble markers — same style as Discover Screens */}
-                  {screens.map((screen) => {
+                  {screens
+                    .filter((screen) => screen.latitude != null && screen.longitude != null && !isNaN(parseFloat(String(screen.latitude))) && !isNaN(parseFloat(String(screen.longitude))))
+                    .map((screen) => {
                     const isSelected = selectedScreenIds.includes(screen.id);
                     const isHovered = hoveredScreenId === screen.id;
-                    
+
                     const basePrice = calculateScreenPricePerDay(screen);
                     const price = zonePriceOverrides.get(screen.id) ?? basePrice ?? 0;
-                    
+
                     const priceDisplay = price >= 1000
                       ? `₹${(price / 1000).toFixed(1).replace('.0', '')}k`
                       : `₹${price}`;
@@ -1000,8 +1156,8 @@ export default function CreateCampaign() {
                       <AdvancedMarker
                         key={screen.id}
                         position={{
-                          lat: parseFloat(screen.latitude.toString()),
-                          lng: parseFloat(screen.longitude.toString()),
+                          lat: parseFloat(String(screen.latitude)),
+                          lng: parseFloat(String(screen.longitude)),
                         }}
                         onClick={() => setSelectedMapScreen(screen)}
                         zIndex={isSelected ? 20 : isHovered ? 15 : 1}
@@ -1075,9 +1231,9 @@ export default function CreateCampaign() {
                         />
                          {form.watch("creativeUrl") && (
                             <div className="border rounded-lg overflow-hidden relative aspect-video bg-muted flex flex-col justify-center items-center">
-                              <img 
-                                src={form.watch("creativeUrl")} 
-                                alt="Creative preview" 
+                              <img
+                                src={form.watch("creativeUrl")}
+                                alt="Creative preview"
                                 className="w-full h-full object-contain"
                                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
                               />
@@ -1126,12 +1282,12 @@ export default function CreateCampaign() {
                             </div>
 
                             <Separator />
-                            
+
                             <div className="flex justify-between items-center text-sm">
                               <span className="text-muted-foreground">Screens Targeted</span>
                               <Badge variant="secondary" className="font-semibold text-sm">{calculateTotalPhysicalScreens(screens.filter(s => selectedScreenIds.includes(s.id)))} Screens</Badge>
                             </div>
-                            
+
                             <div className="flex justify-between items-center text-sm">
                               <span className="text-muted-foreground">Estimated Est. Reach</span>
                               <span className="font-semibold">{totalReach.toLocaleString()} views</span>
@@ -1168,10 +1324,10 @@ export default function CreateCampaign() {
       </div>
 
        {/* Panel Toggle Button (When closed) */}
-       {currentStep === 1 && !isWorkspaceOpen && (
-        <Button 
-          variant="outline" 
-          size="icon" 
+       {currentStep === 1 && !isWorkspaceOpen && !isMobile && (
+        <Button
+          variant="outline"
+          size="icon"
           className="absolute right-4 top-[80px] z-10 bg-background shadow-md h-9 w-9 rounded-full"
           onClick={() => setIsWorkspaceOpen(true)}
         >
@@ -1182,119 +1338,38 @@ export default function CreateCampaign() {
       {/* ------------------------------------------------------------- */}
       {/* RIGHT PANEL: WORKSPACE (Only in Step 1)                        */}
       {/* ------------------------------------------------------------- */}
-      {currentStep === 1 && (
-        <div 
+      {currentStep === 1 && !isMobile && (
+        <div
            className={`flex-shrink-0 bg-background border-l flex flex-col transition-all duration-300 ${isWorkspaceOpen ? "w-[400px]" : "w-0"} overflow-hidden z-20 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.1)]`}
         >
-           <div className="p-4 border-b flex flex-col gap-2 bg-card sticky top-0 z-10">
-              <div className="flex justify-between items-center">
-                 <h2 className="font-bold font-serif text-lg">Campaign Setup</h2>
-              </div>
-              
-              <Form {...form}>
-                 <div className="space-y-4 mt-2">
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Campaign Name</label>
-                          <FormControl>
-                            <Input placeholder="E.g. Summer Sale 2024" className="h-8 text-sm" {...field} />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <div className="grid grid-cols-2 gap-3">
-                        <FormField
-                          control={form.control}
-                          name="startDate"
-                          render={({ field }) => (
-                            <FormItem className="space-y-1">
-                              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Start Date</label>
-                              <FormControl>
-                                <Input type="date" className="h-8 text-sm px-2" {...field} />
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="endDate"
-                          render={({ field }) => (
-                            <FormItem className="space-y-1">
-                              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">End Date</label>
-                              <FormControl>
-                                <Input type="date" className="h-8 text-sm px-2" {...field} />
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                    </div>
-                 </div>
-              </Form>
-           </div>
-
-           <div className="flex-1 overflow-y-auto bg-muted/20">
-              <div className="p-4 space-y-4">
-                 <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-sm flex items-center gap-1.5"><Target className="h-4 w-4 text-primary"/> Selected Inventory</h3>
-                    <Badge variant="secondary" className="bg-primary hover:bg-primary text-white text-xs">{calculateTotalPhysicalScreens(screens.filter(s => selectedScreenIds.includes(s.id)))} Screens</Badge>
-                 </div>
-                 
-                 {selectedScreensFull.length === 0 ? (
-                    <div className="text-center py-10 px-4 border-2 border-dashed border-muted-foreground/20 rounded-xl bg-background">
-                       <MapIcon className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                       <p className="text-sm font-medium text-muted-foreground">No screens selected</p>
-                       <p className="text-xs text-muted-foreground mt-2 px-6">Click map markers or use <span className="font-bold text-primary">"Select All"</span> to build your network.</p>
-                    </div>
-                 ) : (
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                      {selectedScreensFull.map((screen, idx) => (
-                        <div key={screen.id} className="relative group rounded-lg overflow-hidden border hover:border-primary/50 transition-colors shadow-sm">
-                          <div className="pointer-events-none">
-                            <ScreenCard 
-                              screen={screen} 
-                              priceOverride={zonePriceOverrides.get(screen.id)} 
-                            />
-                          </div>
-                          <button 
-                           onClick={() => toggleScreenSelection(screen.id)}
-                           className="absolute top-2 right-2 bg-destructive/90 text-destructive-foreground p-1.5 rounded-full hover:bg-destructive opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md pointer-events-auto"
-                           title="Remove from campaign"
-                          >
-                             <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                 )}
-              </div>
-           </div>
-
-           <div className="p-4 bg-background border-t shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
-              <div className="flex justify-between items-end mb-4">
-                 <div>
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Est. Cost ({durationDays} days)</p>
-                    <p className="text-2xl font-bold font-serif text-primary leading-none">₹{estimatedCost.toLocaleString()}</p>
-                 </div>
-                 <div className="text-right">
-                    <p className="text-xs text-muted-foreground mb-0.5">Reach</p>
-                    <p className="text-sm font-semibold leading-none">{totalReach >= 1000 ? (totalReach/1000).toFixed(1) + 'k' : totalReach}</p>
-                 </div>
-              </div>
-              <Button 
-                className="w-full font-bold shadow-md" 
-                size="lg"
-                onClick={onSubmitBuild}
-                disabled={selectedScreenIds.length === 0}
-              >
-                 Review & Launch
-                 <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-           </div>
+          {renderWorkspaceContent()}
         </div>
+      )}
+
+      {currentStep === 1 && isMobile && (
+        <>
+          {/* Sticky bottom bar: condensed summary + its own Review & Launch button, always visible on mobile step 1 (not gated by isWorkspaceOpen — isWorkspaceOpen now controls the Drawer instead) */}
+          <div className="fixed bottom-0 left-0 right-0 z-30 bg-background border-t shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.08)] p-3 flex items-center justify-between gap-3">
+            <button type="button" onClick={() => setIsWorkspaceOpen(true)} className="text-left flex-1 min-w-0">
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider leading-none mb-0.5">
+                {selectedScreenIds.length} Screens · Est. Cost ({durationDays}d)
+              </p>
+              <p className="text-lg font-bold font-serif text-primary leading-none">₹{estimatedCost.toLocaleString()}</p>
+            </button>
+            <Button className="font-bold shadow-md shrink-0" onClick={onSubmitBuild} disabled={selectedScreenIds.length === 0}>
+              Review & Launch <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+
+          <Drawer open={isWorkspaceOpen} onOpenChange={setIsWorkspaceOpen}>
+            <DrawerContent className="max-h-[85vh]">
+              <DrawerTitle className="sr-only">Campaign Setup</DrawerTitle>
+              <div className="overflow-y-auto">
+                {renderWorkspaceContent()}
+              </div>
+            </DrawerContent>
+          </Drawer>
+        </>
       )}
       <ScreenDetailsModal
         isOpen={!!selectedMapScreen}

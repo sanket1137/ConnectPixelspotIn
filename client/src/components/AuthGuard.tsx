@@ -16,6 +16,14 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
       setLocation("/login");
     }
     
+    // Admins bypass verification checks
+    if (!loading && user && user.role === "admin") {
+      if (allowedRoles && !allowedRoles.includes("admin")) {
+        setLocation("/admin");
+      }
+      return;
+    }
+
     // Redirect to email verification if email is not verified
     if (!loading && user && !user.emailVerified) {
       setLocation("/verify-email");

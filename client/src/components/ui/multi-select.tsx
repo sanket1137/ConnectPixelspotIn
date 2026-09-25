@@ -28,6 +28,7 @@ interface MultiSelectProps {
   onChange: (selected: string[]) => void;
   placeholder?: string;
   className?: string;
+  emptyText?: string;
 }
 
 export function MultiSelect({
@@ -36,6 +37,7 @@ export function MultiSelect({
   onChange,
   placeholder = "Select options...",
   className,
+  emptyText = "No option found.",
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
 
@@ -94,7 +96,7 @@ export function MultiSelect({
       <PopoverContent className="w-[300px] p-0" align="start">
         <Command>
           <CommandInput placeholder={`Search ${placeholder.toLowerCase()}...`} />
-          <CommandEmpty>No option found.</CommandEmpty>
+          <CommandEmpty>{emptyText}</CommandEmpty>
           <CommandGroup className="max-h-64 overflow-auto">
             <CommandList>
               {options.map((option) => {

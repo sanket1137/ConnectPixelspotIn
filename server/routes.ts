@@ -21,7 +21,7 @@ import { registerAgencyRoutes } from "./routes-agency";
 import { registerSupportRoutes } from "./routes-support";
 import { geolocationService } from "./services/geolocation";
 // import { serveSitemap, serveRobotsTxt } from "./sitemap";
-import { fromCitySlug, fromVenueSlug, toSlug, normalizeCityName } from "@shared/constants";
+import { fromCitySlug, fromVenueSlug, toSlug, normalizeCityName, USER_ROLES } from "@shared/constants";
 
 // Extend Express Request to include user
 declare global {
@@ -471,11 +471,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Google OAuth - Initiate
   app.get("/auth/google", (req, res) => {
     try {
-      const role = req.query.role as 'screen_owner' | 'advertiser' | undefined;
+      const role = req.query.role as 'screen_owner' | 'advertiser' | 'agency' | undefined;
       
       // Validate role if provided
-      if (role && role !== 'screen_owner' && role !== 'advertiser') {
-        return res.status(400).send('Invalid role. Must be "screen_owner" or "advertiser".');
+      if (role && role !== 'screen_owner' && role !== 'advertiser' && role !== 'agency') {
+        return res.status(400).send('Invalid role. Must be "screen_owner", "advertiser", or "agency".');
       }
       
       // Build redirect URI dynamically based on request
@@ -918,9 +918,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`🔐 OTP verification attempt for mobile: ${mobile}, user: ${req.user!.id}`);
 
-      // Check if user is already verified
-      if (req.user!.mobileVerified) {
-        console.log(`✅ User ${req.user!.id} mobile already verified, skipping OTP check`);
+      // Check if user is already verified with this exact mobile number
+      if (req.user!.mobileVerified && req.user!.mobileNumber && req.user!.mobileNumber === mobile.trim()) {
+        console.log(`✅ User ${req.user!.id} mobile already verified with ${mobile}, skipping OTP check`);
         return res.json({ success: true, message: "Mobile verified successfully" });
       }
 
@@ -933,11 +933,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`✅ Valid OTP for mobile: ${mobile}, marking user as verified`);
       
-      // Mark mobile as verified
-      await storage.verifyUserMobile(req.user!.id);
+      // Mark mobile as verified and save the mobile number
+      const updatedUser = await storage.verifyUserMobile(req.user!.id, mobile.trim());
 
       console.log(`✅ Mobile verified successfully for user: ${req.user!.id}`);
-      res.json({ success: true, message: "Mobile verified successfully" });
+      res.json({ success: true, message: "Mobile verified successfully", user: updatedUser });
     } catch (error) {
       console.error("Verify mobile OTP error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -966,53 +966,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // So we trust it's valid and available (or already belongs to this user)
 
       const updateData: any = {};
-      if (name) updateData.name = name;
-      if (companyName) updateData.companyName = companyName;
-      if (industry) updateData.industry = industry;
-      if (gstNumber) updateData.gstNumber = gstNumber;
-      if (address) updateData.address = address;
-      if (city) updateData.city = city;
-      if (state) updateData.state = state;
-      if (mobileNumber) updateData.mobileNumber = mobileNumber;
+      const resolvedName = (name || req.user!.name || companyName || (req.user!.email ? req.user!.email.split('@')[0] : 'User'))?.trim();
+      if (resolvedName) updateData.name = resolvedName;
+      if (companyName !== undefined) updateData.companyName = companyName?.trim() || null;
+      if (industry !== undefined) updateData.industry = industry?.trim() || null;
+      if (gstNumber !== undefined) updateData.gstNumber = gstNumber?.trim() || null;
+      if (address !== undefined) updateData.address = address?.trim() || null;
+      if (city !== undefined) updateData.city = city?.trim() || null;
+      if (state !== undefined) updateData.state = state?.trim() || null;
+      
+      const resolvedMobile = (mobileNumber || req.user!.mobileNumber)?.trim();
+      if (resolvedMobile) updateData.mobileNumber = resolvedMobile;
       
       // For advertisers only: handle account type
       if (req.user!.role === "advertiser") {
-        if (accountType) {
-          updateData.accountType = accountType;
+        const effectiveAccountType = accountType || req.user!.accountType;
+        if (effectiveAccountType) {
+          updateData.accountType = effectiveAccountType;
           
           // Validate that brand/agency name is provided based on account type
-          if (accountType === "brand") {
-            if (!brandName) {
+          if (effectiveAccountType === "brand") {
+            const effectiveBrandName = (brandName || req.user!.brandName)?.trim();
+            if (!effectiveBrandName) {
               return res.status(400).json({ error: "Brand name is required for brands" });
             }
-            updateData.brandName = brandName;
+            updateData.brandName = effectiveBrandName;
             updateData.agencyName = null; // Clear agency name if switching
-          } else if (accountType === "agency") {
-            if (!agencyName) {
+          } else if (effectiveAccountType === "agency") {
+            const effectiveAgencyName = (agencyName || req.user!.agencyName)?.trim();
+            if (!effectiveAgencyName) {
               return res.status(400).json({ error: "Agency name is required for agencies" });
             }
-            updateData.agencyName = agencyName;
+            updateData.agencyName = effectiveAgencyName;
             updateData.brandName = null; // Clear brand name if switching
           }
         }
       }
 
       // Check if profile is complete — requires mobile verification via OTP
-      let isComplete = !!(name && mobileNumber && companyName && city && state && address);
+      const effectiveName = updateData.name || req.user!.name;
+      const effectiveMobile = updateData.mobileNumber || req.user!.mobileNumber;
+      const effectiveCompany = updateData.companyName !== undefined ? updateData.companyName : req.user!.companyName;
+      const effectiveCity = updateData.city !== undefined ? updateData.city : req.user!.city;
+      const effectiveState = updateData.state !== undefined ? updateData.state : req.user!.state;
+      const effectiveAddress = updateData.address !== undefined ? updateData.address : req.user!.address;
+      const effectiveIndustry = updateData.industry !== undefined ? updateData.industry : req.user!.industry;
+
+      let isComplete = !!(effectiveName && effectiveMobile && effectiveCompany && effectiveCity && effectiveState && effectiveAddress && effectiveIndustry);
       
       // For advertisers, also require account type and corresponding name
       if (req.user!.role === "advertiser") {
-        isComplete = isComplete && !!(accountType && (
-          (accountType === "brand" && brandName) || 
-          (accountType === "agency" && agencyName)
+        const accType = updateData.accountType || req.user!.accountType;
+        const bName = updateData.brandName || req.user!.brandName;
+        const aName = updateData.agencyName || req.user!.agencyName;
+        isComplete = isComplete && !!(accType && (
+          (accType === "brand" && bName) || 
+          (accType === "agency" && aName)
         ));
       }
       
-      // Only mark profile as complete if mobile number has been verified via OTP
-      if (isComplete && req.user!.mobileVerified) {
+      // Mobile verification status
+      const isMobileVerified = !!(req.user!.mobileVerified || updateData.mobileVerified);
+
+      if (isComplete && isMobileVerified) {
         updateData.profileCompleted = true;
-      } else if (isComplete && !req.user!.mobileVerified) {
-        // All fields filled but mobile not verified — don't complete profile
+      } else if (isComplete && !isMobileVerified) {
         console.warn(`⚠️ User ${req.user!.id} (${req.user!.email}) submitted complete profile but mobile is not verified`);
       }
 
@@ -1447,7 +1465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { role } = req.body;
 
-      if (!["admin", "screen_owner", "advertiser"].includes(role)) {
+      if (!USER_ROLES.includes(role)) {
         return res.status(400).json({ error: "Invalid role" });
       }
 
@@ -1652,6 +1670,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(booking);
     } catch (error) {
       console.error("Admin update booking dates error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get screens for image manager (admin only) — extended filters
+  app.get("/api/admin/screens/image-manager", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { page, pageSize, venueCategory, venueName, host, environmentType, category, city, state, status, hasImages, search } = req.query;
+      const result = await storage.getScreensForImageManager({
+        venueCategory: venueCategory as string | undefined,
+        venueName: venueName as string | undefined,
+        host: host as string | undefined,
+        environmentType: environmentType as string | undefined,
+        category: category as string | undefined,
+        city: city as string | undefined,
+        state: state as string | undefined,
+        status: status as string | undefined,
+        hasImages: (hasImages as 'yes' | 'no' | 'all') || 'all',
+        search: search as string | undefined,
+        page: Math.max(1, parseInt(page as string) || 1),
+        pageSize: Math.min(100, Math.max(1, parseInt(pageSize as string) || 20)),
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Admin image manager screens error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Bulk assign images to screens (admin only)
+  app.patch("/api/admin/screens/bulk-images", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { screenIds, imageUrls, mode } = req.body;
+
+      if (!Array.isArray(screenIds) || screenIds.length === 0) {
+        return res.status(400).json({ error: "screenIds is required and must be a non-empty array" });
+      }
+      if (!Array.isArray(imageUrls) || imageUrls.length === 0) {
+        return res.status(400).json({ error: "imageUrls is required and must be a non-empty array" });
+      }
+      if (!['single', 'random', 'all'].includes(mode)) {
+        return res.status(400).json({ error: "mode must be 'single', 'random', or 'all'" });
+      }
+
+      let updated = 0;
+
+      if (mode === 'single') {
+        // Same single image to all selected screens
+        const singleImage = [imageUrls[0]];
+        for (const id of screenIds) {
+          const result = await storage.updateScreen(id, { screenImages: singleImage } as any);
+          if (result) updated++;
+        }
+      } else if (mode === 'random') {
+        // Randomly assign one image from the pool to each screen (round-robin for even distribution)
+        const shuffled = [...imageUrls].sort(() => Math.random() - 0.5);
+        for (let i = 0; i < screenIds.length; i++) {
+          const assignedImage = [shuffled[i % shuffled.length]];
+          const result = await storage.updateScreen(screenIds[i], { screenImages: assignedImage } as any);
+          if (result) updated++;
+        }
+      } else if (mode === 'all') {
+        // All images to every selected screen
+        for (const id of screenIds) {
+          const result = await storage.updateScreen(id, { screenImages: imageUrls } as any);
+          if (result) updated++;
+        }
+      }
+
+      res.json({ updated });
+    } catch (error) {
+      console.error("Admin bulk images error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -3054,6 +3144,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Server-side price calculation based on booking mode
       const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+      // Enforce the screen's minimum booking duration (never trust the client to have checked this)
+      if (screen.minBookingDays && days < screen.minBookingDays) {
+        return res.status(400).json({
+          error: `This screen requires a minimum booking of ${screen.minBookingDays} day${screen.minBookingDays === 1 ? '' : 's'} (you selected ${days}).`,
+        });
+      }
+
       let serverPrice: number;
       let screensRequested: number | null = null;
 
@@ -3088,10 +3186,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             serverPrice = screen.pricePerDay * requestedScreens * days;
           }
         } else {
-          // Flexible mode but no screens specified — default to all screens with bundle
-          screensRequested = screen.numberOfScreens;
-          const dailyPrice = screen.bundlePricePerDay || (screen.pricePerDay * screen.numberOfScreens);
-          serverPrice = dailyPrice * days;
+          // Flexible mode, not mandatory, no explicit quantity — this listing is priced and
+          // booked as a single direct-priced unit, regardless of how many physical screens
+          // happen to be installed at the venue (bulkBookingMandatory=false means no × or ÷)
+          serverPrice = (screen.pricePerDay || 0) * days;
         }
       } else {
         // Single screen

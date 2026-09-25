@@ -22,6 +22,7 @@ import {
   ClipboardList,
   Menu,
   LifeBuoy,
+  ImagePlus,
 } from "lucide-react";
 
 import logo from "@assets/pixelspot-logo.png";
@@ -45,6 +46,7 @@ export function AppSidebar() {
     { title: "Create Campaign", url: "/admin/campaigns/new", icon: PlusCircle },
     { title: "Manage Users", url: "/admin/users", icon: Users },
     { title: "Manage Screens", url: "/admin/screens", icon: Monitor },
+    { title: "Screen Images", url: "/admin/screen-images", icon: ImagePlus },
     { title: "Campaigns & Bookings", url: "/admin/bookings", icon: FileText },
     { title: "Agency Media Plans", url: "/admin/media-plans", icon: ClipboardList },
     { title: "Payments & Payouts", url: "/admin/payments", icon: CreditCard },

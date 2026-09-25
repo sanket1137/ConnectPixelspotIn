@@ -74,7 +74,7 @@ export default function AIStep3_ScreenResults({
 
   const selectedCost = screens
     .filter((s) => selectedScreenIds.includes(s.id))
-    .reduce((sum, s) => sum + s.pricePerDay, 0);
+    .reduce((sum, s) => sum + calculateScreenPricePerDay(s), 0);
 
   const overBudget = budget > 0 && selectedCost > budget / 30; // rough daily check
 
@@ -320,7 +320,7 @@ export default function AIStep3_ScreenResults({
               })()}
             </p>
             <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
-              ₹{screens.filter((s) => selectedScreenIds.includes(s.id)).reduce((sum, s) => sum + s.pricePerDay, 0).toLocaleString()}/day
+              ₹{screens.filter((s) => selectedScreenIds.includes(s.id)).reduce((sum, s) => sum + calculateScreenPricePerDay(s), 0).toLocaleString()}/day
             </Badge>
           </div>
         </div>

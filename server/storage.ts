@@ -50,7 +50,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, or, desc, asc, sql as drizzleSql, inArray, isNull, count, like } from "drizzle-orm";
-import { normalizeCityName } from "@shared/constants";
+import { normalizeCityName, getVenueCategoryVariants, normalizeVenueCategory, VENUE_CATEGORY_ALIASES } from "@shared/constants";
 import { notifyUser } from "./websocket";
 
 /** Convert a raw DB row (snake_case keys) to camelCase to match drizzle schema types.
@@ -80,7 +80,7 @@ export interface IStorage {
   updateUserRole(id: string, role: string): Promise<User | undefined>;
   updateUserLogin(id: string, ip: string): Promise<void>;
   verifyUserEmail(id: string): Promise<User | undefined>;
-  verifyUserMobile(id: string): Promise<User | undefined>;
+  verifyUserMobile(id: string, mobileNumber?: string): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
   getUsersByRole(role: string): Promise<User[]>;
   
@@ -104,6 +104,20 @@ export interface IStorage {
   updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined>;
   updateScreenStatus(id: string, status: string, rejectionReason?: string): Promise<Screen | undefined>;
   deleteScreen(id: string): Promise<boolean>;
+  getScreensForImageManager(params: {
+    venueCategory?: string;
+    venueName?: string;
+    host?: string;
+    environmentType?: string;
+    category?: string;
+    city?: string;
+    state?: string;
+    status?: string;
+    hasImages?: 'yes' | 'no' | 'all';
+    search?: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ screens: Screen[]; total: number }>;
   
   // Campaign methods
   getCampaign(id: string): Promise<Campaign | undefined>;
@@ -354,8 +368,12 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async verifyUserMobile(id: string): Promise<User | undefined> {
-    const [user] = await db.update(users).set({ mobileVerified: true }).where(eq(users.id, id)).returning();
+  async verifyUserMobile(id: string, mobileNumber?: string): Promise<User | undefined> {
+    const updateObj: Partial<InsertUser> = { mobileVerified: true };
+    if (mobileNumber) {
+      updateObj.mobileNumber = mobileNumber;
+    }
+    const [user] = await db.update(users).set(updateObj).where(eq(users.id, id)).returning();
     return user || undefined;
   }
 
@@ -1727,8 +1745,12 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (filters.venueCategories && filters.venueCategories.length > 0) {
-      const venueArrStr = `{${filters.venueCategories.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
-      conditions.push(drizzleSql`venue_category = ANY(${venueArrStr}::text[])`);
+      // Expand each canonical category to all known DB alias variants (case-insensitive).
+      // e.g. "Apartment" → also matches "Residential Building", "Residential Society", etc.
+      const allVariants = filters.venueCategories.flatMap(v => getVenueCategoryVariants(v));
+      const uniqueVariants = [...new Set(allVariants)];
+      const ilikeConditions = uniqueVariants.map(v => drizzleSql`LOWER(venue_category) = LOWER(${v})`);
+      conditions.push(drizzleSql`(${drizzleSql.join(ilikeConditions, drizzleSql` OR `)})`);
     }
     
     if (filters.environmentTypes && filters.environmentTypes.length > 0) {
@@ -1966,6 +1988,79 @@ export class DatabaseStorage implements IStorage {
     return { screens: (dataResult.rows as any[]).map(r => mapRowToCamel<Screen>(r)), total };
   }
 
+  async getScreensForImageManager(params: {
+    venueCategory?: string;
+    venueName?: string;
+    host?: string;
+    environmentType?: string;
+    category?: string;
+    city?: string;
+    state?: string;
+    status?: string;
+    hasImages?: 'yes' | 'no' | 'all';
+    search?: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ screens: Screen[]; total: number }> {
+    const conditions: ReturnType<typeof drizzleSql>[] = [];
+
+    if (params.venueCategory) {
+      conditions.push(drizzleSql`LOWER(venue_category) = LOWER(${params.venueCategory})`);
+    }
+    if (params.venueName) {
+      conditions.push(drizzleSql`LOWER(venue_name) LIKE LOWER(${`%${params.venueName}%`})`);
+    }
+    if (params.host) {
+      conditions.push(drizzleSql`LOWER(host) LIKE LOWER(${`%${params.host}%`})`);
+    }
+    if (params.environmentType) {
+      conditions.push(drizzleSql`LOWER(environment_type) = LOWER(${params.environmentType})`);
+    }
+    if (params.category) {
+      conditions.push(drizzleSql`LOWER(category) = LOWER(${params.category})`);
+    }
+    if (params.city) {
+      const normalizedCity = normalizeCityName(params.city);
+      conditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${normalizedCity}%`})`);
+    }
+    if (params.state) {
+      conditions.push(drizzleSql`LOWER(state) = LOWER(${params.state})`);
+    }
+    if (params.status) {
+      conditions.push(drizzleSql`status = ${params.status}`);
+    }
+    if (params.hasImages === 'no') {
+      conditions.push(drizzleSql`(screen_images IS NULL OR array_length(screen_images, 1) IS NULL OR array_length(screen_images, 1) = 0)`);
+    } else if (params.hasImages === 'yes') {
+      conditions.push(drizzleSql`screen_images IS NOT NULL AND array_length(screen_images, 1) > 0`);
+    }
+    if (params.search) {
+      conditions.push(drizzleSql`(
+        LOWER(name) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(location) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(city) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(venue_name) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(host) LIKE LOWER(${`%${params.search}%`})
+      )`);
+    }
+
+    const whereClause = conditions.length > 0
+      ? drizzleSql`WHERE ${drizzleSql.join(conditions, drizzleSql` AND `)}`
+      : drizzleSql``;
+
+    const countResult = await db.execute(
+      drizzleSql`SELECT COUNT(*)::int AS total FROM screens ${whereClause}`
+    );
+    const total = (countResult.rows[0] as any)?.total ?? 0;
+
+    const offset = (params.page - 1) * params.pageSize;
+    const dataResult = await db.execute(
+      drizzleSql`SELECT * FROM screens ${whereClause} ORDER BY created_at DESC LIMIT ${params.pageSize} OFFSET ${offset}`
+    );
+
+    return { screens: (dataResult.rows as any[]).map(r => mapRowToCamel<Screen>(r)), total };
+  }
+
   /**
    * Get nearby active screens sorted by distance from a given lat/lng.
    * Uses Haversine formula for precise distance calculation.
@@ -2032,11 +2127,19 @@ export class DatabaseStorage implements IStorage {
     `);
     const cities = (cityResult.rows as any[]).map(r => r.city).filter(Boolean);
 
-    // 2. Unique Venue Types
+    // 2. Unique Venue Types — normalized to canonical names (deduped)
     const venueResult = await db.execute(drizzleSql`
       SELECT DISTINCT venue_category as venue_type FROM screens WHERE status = 'active' AND venue_category IS NOT NULL ORDER BY venue_category
     `);
-    const venueTypes = (venueResult.rows as any[]).map(r => r.venue_type).filter(Boolean);
+    const venueTypes = [
+      ...new Set(
+        (venueResult.rows as any[])
+          .map(r => r.venue_type)
+          .filter(Boolean)
+          .map((v: string) => normalizeVenueCategory(v))
+      )
+    ].sort();
+
 
     // 3. Unique Environment Types (Indoor/Outdoor)
     const envResult = await db.execute(drizzleSql`

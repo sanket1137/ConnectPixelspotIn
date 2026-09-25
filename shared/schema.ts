@@ -133,6 +133,7 @@ export const screens = pgTable("screens", {
   status: text("status").notNull().default("pending"), // pending, active, inactive
   rejectionReason: text("rejection_reason"), // Admin's reason for rejecting the screen
   ownedByAdmin: boolean("owned_by_admin").notNull().default(false),
+  host: text("host"), // Provider/network host code e.g. 'IND-06-PVR'
   createdAt: timestamp("created_at").defaultNow().notNull(),
 
   // Auto-tagging metadata

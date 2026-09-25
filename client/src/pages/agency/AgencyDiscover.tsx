@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, Search, Plus, ClipboardList } from "lucide-react";
+import { calculateScreenPricePerDay, getScreenCountDisplay } from "@shared/utils";
 
 function fmt(n: number) { return `₹${n.toLocaleString("en-IN")}`; }
 
@@ -105,10 +106,15 @@ export default function AgencyDiscover() {
                   {screen.venueCategory && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{screen.venueCategory}</Badge>}
                   {screen.environmentType && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{screen.environmentType}</Badge>}
                   {screen.category && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{screen.category}</Badge>}
+                  {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-300 text-violet-700">
+                      {getScreenCountDisplay(screen)}{screen.bulkBookingMandatory ? " (All Required)" : ""}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center justify-between pt-1">
                   <div>
-                    <p className="text-base font-bold text-violet-700">{fmt(screen.pricePerDay)}<span className="text-xs font-normal text-muted-foreground">/day</span></p>
+                    <p className="text-base font-bold text-violet-700">{fmt(calculateScreenPricePerDay(screen))}<span className="text-xs font-normal text-muted-foreground">/day</span></p>
                     <p className="text-[10px] text-muted-foreground">{screen.avgDailyFootfall?.toLocaleString("en-IN")} daily footfall</p>
                   </div>
                   {draftPlans.length > 0 ? (

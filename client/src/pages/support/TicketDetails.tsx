@@ -14,7 +14,8 @@ import type { SupportTicket, TicketMessage } from "@shared/schema";
 
 export default function TicketDetails() {
   const [, params] = useRoute("/tickets/:id");
-  const ticketId = params?.id;
+  const [, adminParams] = useRoute("/admin/tickets/:id");
+  const ticketId = params?.id ?? adminParams?.id;
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();

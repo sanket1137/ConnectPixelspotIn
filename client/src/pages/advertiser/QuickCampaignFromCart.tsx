@@ -204,9 +204,22 @@ export default function QuickCampaignFromCart() {
       }, 2000);
     },
     onError: (error: Error) => {
+      // apiRequest throws "<status>: <raw response body>" — the body is usually
+      // `{"error":"..."}` from our API, so pull that message out when present
+      // instead of showing the raw status/JSON blob (e.g. a min-booking-days rejection).
+      let description = error.message || "Failed to create campaign.";
+      const bodyStart = description.indexOf(": ");
+      if (bodyStart !== -1) {
+        try {
+          const parsed = JSON.parse(description.slice(bodyStart + 2));
+          if (parsed?.error) description = parsed.error;
+        } catch {
+          // not JSON — fall back to the raw message
+        }
+      }
       toast({
         title: "Error",
-        description: error.message || "Failed to create campaign.",
+        description,
         variant: "destructive",
       });
     },
@@ -233,7 +246,7 @@ export default function QuickCampaignFromCart() {
 
   if (selectedScreens.length === 0) {
     return (
-      <div className="p-8 max-w-3xl mx-auto">
+      <div className="p-4 sm:p-8 max-w-3xl mx-auto">
         <Card>
           <CardContent className="pt-6">
             <p className="text-center text-muted-foreground">Loading screens...</p>
@@ -244,7 +257,7 @@ export default function QuickCampaignFromCart() {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 sm:p-8 max-w-4xl mx-auto space-y-6">
       <div>
         <Button variant="ghost" onClick={() => setLocation("/advertiser/discover")} data-testid="button-back">
           <ArrowLeft className="mr-2 h-4 w-4" />

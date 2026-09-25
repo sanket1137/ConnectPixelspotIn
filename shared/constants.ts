@@ -31,20 +31,89 @@ export const VENUE_CATEGORIES = [
 
 export type VenueCategory = typeof VENUE_CATEGORIES[number];
 
+// ========== USER ROLES ==========
+// Canonical list of all valid user roles.
+// This is the single source of truth — used in UI dropdowns/badges and API validation.
+export const USER_ROLES = ['admin', 'screen_owner', 'advertiser', 'agency'] as const;
+
+export type UserRole = typeof USER_ROLES[number];
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Admin',
+  screen_owner: 'Screen Owner',
+  advertiser: 'Advertiser',
+  agency: 'Agency',
+};
+
 /**
  * Maps non-standard venue category values found in DB to canonical ones.
  * Key = lowercase non-standard value, Value = canonical value from VENUE_CATEGORIES.
  */
 export const VENUE_CATEGORY_ALIASES: Record<string, string> = {
   'cafe': 'Café',
+  'café': 'Café',
+  'cafe ': 'Café',
+  ' café': 'Café',
   'cinema lobby': 'Cinema',
+  'multiplex': 'Cinema',
   'food court': 'Restaurant',
   'healthcare': 'Hospital',
+  'hospital': 'Hospital',
   'hotel/restaurant': 'Hotel',
   'metro station': 'Metro',
+  'metro': 'Metro',
   'office complex': 'Office Building',
+  'office building': 'Office Building',
+  'corporate office': 'Corporate Park',
+  'corporate tech park': 'Corporate Park',
+  'corporate park': 'Corporate Park',
   'residential society': 'Apartment',
+  'residential building': 'Apartment',
+  'apartment': 'Apartment',
+  'coworking space': 'Co-working',
+  'co-working space': 'Co-working',
+  'co working': 'Co-working',
   'shopping mall': 'Mall',
+  'hypermarket': 'Mall',
+  'roadside': 'Road Side',
+  'road side': 'Road Side',
+  'outdoor': 'Road Side',
+  'bus station': 'Bus Stop',
+  'bus stop': 'Bus Stop',
+  'railway station': 'Road Side',
+  'saloon': 'Salon',
+  'salon ': 'Salon',
+  ' salon': 'Salon',
+  'salon & spa': 'Salon',
+  'transit hub': 'Transit Hub',
+  'fitness': 'Gym',
+  'sports complex': 'Stadium',
+  'sports centre': 'Stadium',
+  'theater': 'Cinema',
+  'theatre': 'Cinema',
+  'theater company': 'Cinema',
+  'clinic': 'Hospital',
+  ' clinic': 'Hospital',
+  'dental clinic': 'Hospital',
+  'dental': 'Hospital',
+  'pet clinic': 'Hospital',
+  'physiotherapy': 'Hospital',
+  'skin clinic': 'Hospital',
+  'skin & hair clinic': 'Hospital',
+  'skin & hair': 'Hospital',
+  'restobar': 'Restaurant',
+  'resto bar': 'Restaurant',
+  'bar & kitchen': 'Restaurant',
+  ' restaurant': 'Restaurant',
+  'restaurant': 'Restaurant',
+  'highway': 'Highway',
+  'petrol bunk': 'Petrol Bunk',
+  'road junction': 'Road Junction',
+  'retail store': 'Retail Store',
+  'supermarket': 'Retail Store',
+  'super market': 'Retail Store',
+  'super market ': 'Retail Store',
+  'hotel': 'Hotel',
 };
 
 /**
@@ -53,11 +122,31 @@ export const VENUE_CATEGORY_ALIASES: Record<string, string> = {
  */
 export function normalizeVenueCategory(raw: string): string {
   if (!raw) return raw;
-  const alias = VENUE_CATEGORY_ALIASES[raw.toLowerCase()];
+  const alias = VENUE_CATEGORY_ALIASES[raw.toLowerCase().trim()];
   if (alias) return alias;
   // Check if it's already a canonical value (case-insensitive)
-  const match = VENUE_CATEGORIES.find(v => v.toLowerCase() === raw.toLowerCase());
+  const match = VENUE_CATEGORIES.find(v => v.toLowerCase() === raw.toLowerCase().trim());
   return match || raw;
+}
+
+/**
+ * Given a canonical venue category, return ALL DB values that map to it
+ * (including the canonical itself and any aliases).
+ * Used by getFilteredScreens to do a broad match.
+ */
+export function getVenueCategoryVariants(canonical: string): string[] {
+  const variants = new Set<string>();
+  // Always include the canonical itself
+  variants.add(canonical);
+  // Add all aliases that resolve to this canonical
+  for (const [alias, target] of Object.entries(VENUE_CATEGORY_ALIASES)) {
+    if (target.toLowerCase() === canonical.toLowerCase()) {
+      // Add the alias in its original casing (as stored in DB)
+      // We store aliases lowercase, DB may have any case — match is done case-insensitively in SQL
+      variants.add(alias);
+    }
+  }
+  return Array.from(variants);
 }
 
 // ========== CITY NAME NORMALIZATION ==========

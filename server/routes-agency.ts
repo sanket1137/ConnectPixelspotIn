@@ -7,6 +7,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { storage } from "./storage";
 import { db } from "./db";
 import { mediaPlans, mediaPlanItems, users } from "@shared/schema";
+import { calculateScreenPricePerDay } from "@shared/utils";
 import { eq, and, sql } from "drizzle-orm";
 
 export function registerAgencyRoutes(
@@ -232,14 +233,24 @@ export function registerAgencyRoutes(
         (new Date(plan.endDate).getTime() - new Date(plan.startDate).getTime()) / (1000 * 60 * 60 * 24)
       ));
       const numDays = days || planDays;
-      let pricePerDay = screen.pricePerDay;
 
-      // Handle zone bundle pricing
+      // Enforce the screen's minimum booking duration (never trust the client to have checked this)
+      if (screen.minBookingDays && numDays < screen.minBookingDays) {
+        return res.status(400).json({
+          error: `This screen requires a minimum booking of ${screen.minBookingDays} day${screen.minBookingDays === 1 ? '' : 's'} (plan is ${numDays}).`,
+        });
+      }
+
+      // Handle zone bundle pricing, else fall back to the screen's own rate — which already
+      // accounts for isMultiScreen/numberOfScreens/bulkBookingMandatory correctly
       const zoneInfo = await storage.getZoneForScreen(screen.id);
+      let pricePerDay: number;
       if (zoneInfo) {
         const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
         const count = zoneScreensRes.screens.length || 1;
         pricePerDay = zoneInfo.pricePerDay / count;
+      } else {
+        pricePerDay = calculateScreenPricePerDay(screen);
       }
 
       const totalPrice = pricePerDay * numDays;
@@ -290,6 +301,13 @@ export function registerAgencyRoutes(
           .where(eq(mediaPlanItems.id, req.params.itemId));
 
         if (existingItem) {
+          const itemScreen = await storage.getScreen(existingItem.screenId);
+          if (itemScreen?.minBookingDays && days < itemScreen.minBookingDays) {
+            return res.status(400).json({
+              error: `This screen requires a minimum booking of ${itemScreen.minBookingDays} day${itemScreen.minBookingDays === 1 ? '' : 's'} (you set ${days}).`,
+            });
+          }
+
           updateData.days = days;
           updateData.totalPrice = existingItem.pricePerDay * days;
         }
@@ -379,6 +397,20 @@ export function registerAgencyRoutes(
 
       if (items.length === 0) {
         return res.status(400).json({ error: "Plan has no screens to book" });
+      }
+
+      // Enforce each screen's minimum booking duration against the plan's actual date range —
+      // the bookings created below all use plan.startDate/endDate, not each item's own `days`
+      const planDurationDays = Math.max(1, Math.round(
+        (new Date(plan.endDate).getTime() - new Date(plan.startDate).getTime()) / (1000 * 60 * 60 * 24)
+      ));
+      for (const item of items) {
+        const itemScreen = await storage.getScreen(item.screenId);
+        if (itemScreen?.minBookingDays && planDurationDays < itemScreen.minBookingDays) {
+          return res.status(400).json({
+            error: `"${itemScreen.name}" requires a minimum booking of ${itemScreen.minBookingDays} day${itemScreen.minBookingDays === 1 ? '' : 's'} (plan is ${planDurationDays}).`,
+          });
+        }
       }
 
       // Calculate margin-adjusted total budget

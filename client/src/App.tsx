@@ -36,6 +36,7 @@ const AIConversations = lazy(() => import("@/pages/admin/AIConversations"));
 const AISecurityDashboard = lazy(() => import("@/pages/admin/AISecurityDashboard"));
 const Settings = lazy(() => import("@/pages/admin/Settings"));
 const AdminMediaPlans = lazy(() => import("@/pages/admin/AdminMediaPlans"));
+const BulkImageManager = lazy(() => import("@/pages/admin/BulkImageManager"));
 const OwnerDashboard = lazy(() => import("@/pages/owner/OwnerDashboard"));
 const ScreensList = lazy(() => import("@/pages/owner/ScreensList"));
 const AddScreen = lazy(() => import("@/pages/owner/AddScreen"));
@@ -162,6 +163,11 @@ function Router() {
           <AddScreenForOwner />
         </AuthGuard>
       </Route>
+      <Route path="/admin/screen-images">
+        <AuthGuard allowedRoles={["admin"]}>
+          <BulkImageManager />
+        </AuthGuard>
+      </Route>
       <Route path="/admin/bookings">
         <AuthGuard allowedRoles={["admin"]}>
           <ManageBookings />
@@ -205,6 +211,11 @@ function Router() {
       <Route path="/admin/support">
         <AuthGuard allowedRoles={["admin"]}>
           <AdminSupportTickets />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/tickets/:id">
+        <AuthGuard allowedRoles={["admin"]}>
+          <TicketDetails />
         </AuthGuard>
       </Route>
       

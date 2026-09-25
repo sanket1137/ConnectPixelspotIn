@@ -5,7 +5,7 @@ import { Map, AdvancedMarker, useMap, useMapsLibrary } from "@vis.gl/react-googl
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, ShoppingCart, List, Map as MapIcon, SlidersHorizontal, Check, Loader2, Star, Menu, Users, Search, X, Coffee, Utensils, Bus, ShoppingBag, Building2, Plane, Monitor, Train, Briefcase, Activity, Store, Hotel, Ticket, MonitorPlay, Dumbbell, GraduationCap, Scissors, Car } from "lucide-react";
+import { MapPin, ShoppingCart, List, Map as MapIcon, SlidersHorizontal, Check, Loader2, Star, Menu, Users, Search, X, Coffee, Utensils, Bus, ShoppingBag, Building2, Plane, Monitor, Train, Briefcase, Activity, Store, Hotel, Ticket, MonitorPlay, Dumbbell, GraduationCap, Scissors, Car, Layers, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { Screen, ZoneInfo } from "@shared/schema";
@@ -13,18 +13,156 @@ import { VENUE_CATEGORIES } from "@shared/constants";
 import { getScreenCountDisplay, calculateScreenPricePerDay } from "@shared/utils";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { useLocationAutocomplete } from "@/hooks/use-location-autocomplete";
 import { SearchAutocomplete } from "@/components/map/SearchAutocomplete";
 import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { DiscoverAuthModal } from "@/components/DiscoverAuthModal";
 import useEmblaCarousel from "embla-carousel-react";
+import { VenuePanel } from "@/components/map/VenuePanel";
+import { VenueMarker } from "@/components/map/VenueMarker";
+import { groupScreensByVenue, venueKeyFor, type VenueGroup } from "@/lib/venueGroups";
 
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
 
 type ViewMode = "desktop" | "mobile_list" | "mobile_map";
+
+function VenueIconFallback({ category, name }: { category: string, name: string }) {
+  const normalized = (category || "").toLowerCase();
+
+  let Icon = Monitor;
+  if (normalized.includes("cafe") || normalized.includes("coffee")) Icon = Coffee;
+  else if (normalized.includes("restaurant") || normalized.includes("food")) Icon = Utensils;
+  else if (normalized.includes("bus") || normalized.includes("transit")) Icon = Bus;
+  else if (normalized.includes("mall") || normalized.includes("retail") || normalized.includes("shopping")) Icon = Store;
+  else if (normalized.includes("corporate") || normalized.includes("office") || normalized.includes("apartment") || normalized.includes("building")) Icon = Building2;
+  else if (normalized.includes("airport") || normalized.includes("plane")) Icon = Plane;
+  else if (normalized.includes("metro") || normalized.includes("train") || normalized.includes("railway")) Icon = Train;
+  else if (normalized.includes("cinema") || normalized.includes("movie")) Icon = MonitorPlay;
+  else if (normalized.includes("gym") || normalized.includes("fitness")) Icon = Dumbbell;
+  else if (normalized.includes("college") || normalized.includes("school")) Icon = GraduationCap;
+  else if (normalized.includes("hospital") || normalized.includes("clinic")) Icon = Activity;
+  else if (normalized.includes("hotel") || normalized.includes("resort")) Icon = Hotel;
+  else if (normalized.includes("salon")) Icon = Scissors;
+  else if (normalized.includes("road") || normalized.includes("highway") || normalized.includes("junction") || normalized.includes("flyover")) Icon = MapPin;
+
+  return (
+    <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center text-slate-400 group-hover:bg-slate-200 transition-colors">
+      <Icon className="w-10 h-10 mb-2 opacity-50" />
+      <span className="text-[10px] font-medium uppercase tracking-wider opacity-60 text-center px-2 line-clamp-1">{category || "Digital Screen"}</span>
+    </div>
+  );
+}
+
+// Airbnb-style Screen Card Component — module scope so hovering a marker doesn't remount every
+// sidebar card on each render (it also holds the ref used to scroll a card into view)
+function ScreenListCard({
+  screen,
+  isAdded,
+  isHighlighted,
+  onHoverStart,
+  onHoverEnd,
+  onOpenDetails,
+  onToggleAdd,
+  cardRef,
+  venueListingCount = 1,
+  venueScreenCount = 1,
+  onOpenVenue,
+}: {
+  screen: Screen & { distanceKm?: number };
+  isAdded: boolean;
+  isHighlighted: boolean;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
+  onOpenDetails: () => void;
+  onToggleAdd: () => void;
+  cardRef: (el: HTMLDivElement | null) => void;
+  venueListingCount?: number;
+  venueScreenCount?: number;
+  onOpenVenue?: () => void;
+}) {
+  return (
+    <div
+      ref={cardRef}
+      className="group cursor-pointer flex flex-col gap-3"
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
+      onClick={onOpenDetails}
+    >
+      <div className={`relative aspect-[4/3] overflow-hidden rounded-xl bg-slate-200 transition-shadow ${isHighlighted ? 'ring-2 ring-offset-2 ring-primary' : ''}`}>
+        {(screen.screenImages?.[0] || screen.images?.[0]) ? (
+          <img
+            src={screen.screenImages?.[0] || screen.images?.[0]}
+            alt={screen.name}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <VenueIconFallback category={screen.category || ""} name={screen.name} />
+        )}
+        {isAdded && (
+          <div className="absolute top-3 left-3 bg-green-500 text-white px-2 py-1 rounded-full shadow-sm text-xs font-semibold flex items-center">
+            <Check className="w-3 h-3 mr-1" /> Added
+          </div>
+        )}
+        <div className="absolute top-3 right-3">
+          <Button
+            size="icon"
+            variant="secondary"
+            className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleAdd();
+            }}
+          >
+            {isAdded ? <Check className="w-4 h-4 text-green-600" /> : <ShoppingCart className="w-4 h-4" />}
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-col">
+        <div className="flex justify-between items-start">
+          <h3 className="font-semibold text-slate-900 line-clamp-1">{screen.venueName}, {screen.city}</h3>
+          {screen.distanceKm !== undefined && (
+            <span className="text-sm text-slate-500 whitespace-nowrap ml-2">
+              {Number(screen.distanceKm).toFixed(1)} km
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-slate-500 line-clamp-1">{screen.name} • {screen.category}</p>
+          {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+            <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-primary/10 text-primary">
+              {getScreenCountDisplay(screen)}
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center text-sm text-slate-500 mt-0.5">
+          <Users className="w-3 h-3 mr-1" />
+          {((screen.avgDailyFootfall || 0) / 1000).toFixed(1)}k daily footfall
+        </div>
+        <div className="mt-1">
+          <span className="font-bold text-slate-900">₹{calculateScreenPricePerDay(screen).toLocaleString()}</span>
+          <span className="text-slate-500 text-sm"> / day</span>
+        </div>
+        {venueListingCount > 1 && onOpenVenue && (
+          <button
+            type="button"
+            className="self-start mt-1.5 text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenVenue();
+            }}
+          >
+            <Layers className="w-3 h-3" />
+            See all {venueScreenCount} screens at this venue
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function DiscoverScreens() {
   const map = useMap("discover-screens-map");
@@ -46,12 +184,14 @@ export default function DiscoverScreens() {
   const [zonePriceOverrides, setZonePriceOverrides] = useState<globalThis.Map<string, number>>(new globalThis.Map());
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
-  
+
   const [emblaRef, emblaApi] = useEmblaCarousel({ startIndex: 0, align: "center", skipSnaps: false });
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [bottomSheetSnap, setBottomSheetSnap] = useState(0);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
+  // Venue side panel — key of the venue (map pin) whose screens are listed in the panel
+  const [activeVenueKey, setActiveVenueKey] = useState<string | null>(null);
 
   // Search State
   const [lat, setLat] = useState<number | undefined>();
@@ -99,23 +239,18 @@ export default function DiscoverScreens() {
   const [sortBy, setSortBy] = useState<string>("popularity");
   const [sortOrder, setSortOrder] = useState<string>("desc");
   const [viewMode, setViewMode] = useState<ViewMode>("desktop");
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile();
   const [page, setPage] = useState(1);
-  
+
   // Ref for map circle
   const circleRef = useRef<google.maps.Circle | null>(null);
+  // Refs for sidebar list cards, keyed by screen id — lets a hovered/selected map marker scroll its card into view
+  const listItemRefs = useRef(new globalThis.Map<string, HTMLDivElement | null>());
 
   useEffect(() => {
-    const handleResize = () => {
-      const mobile = window.innerWidth < 1024;
-      setIsMobile(mobile);
-      if (!mobile) setViewMode("desktop");
-      else if (viewMode === "desktop") setViewMode("mobile_map");
-    };
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [viewMode]);
+    if (!isMobile) setViewMode("desktop");
+    else if (viewMode === "desktop") setViewMode("mobile_map");
+  }, [isMobile, viewMode]);
 
   useEffect(() => {
     const saved = localStorage.getItem(SELECTED_SCREENS_KEY);
@@ -309,6 +444,43 @@ export default function DiscoverScreens() {
     return screens.filter(s => !isNaN(parseFloat(String(s.latitude))) && !isNaN(parseFloat(String(s.longitude))));
   }, [screens]);
 
+  // One map pin per venue: listings at the same spot (e.g. a PVR lobby package + its audi screens)
+  const venueGroups = useMemo(() => groupScreensByVenue(mapScreens), [mapScreens]);
+  const venueByKey = useMemo(() => {
+    const m = new globalThis.Map<string, VenueGroup>();
+    venueGroups.forEach(g => m.set(g.key, g));
+    return m;
+  }, [venueGroups]);
+  const activeVenue = activeVenueKey ? venueByKey.get(activeVenueKey) || null : null;
+
+  // Close the panel if a new search no longer contains that venue
+  useEffect(() => {
+    if (activeVenueKey && !venueByKey.has(activeVenueKey)) setActiveVenueKey(null);
+  }, [activeVenueKey, venueByKey]);
+
+  // Esc closes the venue panel (but not while a dialog on top of it is open)
+  useEffect(() => {
+    if (!activeVenueKey) return;
+    const dialogOpen = !!detailModalScreen || showAuthModal || showAdvancedFilters || showMobileSearch;
+    if (dialogOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActiveVenueKey(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeVenueKey, detailModalScreen, showAuthModal, showAdvancedFilters, showMobileSearch]);
+
+  const openVenue = (key: string) => {
+    const venue = venueByKey.get(key);
+    if (!venue) return;
+    setActiveVenueKey(key);
+    setIsBottomSheetOpen(false);
+    if (map) {
+      map.panTo({ lat: venue.lat, lng: venue.lng });
+      if ((map.getZoom() || 0) < 14) map.setZoom(15);
+    }
+  };
+
   useEffect(() => {
     if (!emblaApi) return;
     const onSelect = () => {
@@ -322,6 +494,13 @@ export default function DiscoverScreens() {
     emblaApi.on('select', onSelect);
     return () => { emblaApi.off('select', onSelect); };
   }, [emblaApi, mapScreens, isBottomSheetOpen, bottomSheetSnap]);
+
+  // Scroll the sidebar list to whichever screen is hovered/selected on the map (desktop only —
+  // list and map are mutually exclusive full-screen views on mobile)
+  useEffect(() => {
+    if (isMobile || !hoveredScreenId) return;
+    listItemRefs.current.get(hoveredScreenId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [hoveredScreenId, isMobile]);
 
   const { data: locations } = useQuery<{
     states: string[];
@@ -503,6 +682,19 @@ export default function DiscoverScreens() {
     }
   };
 
+  const addScreensToCampaign = (toAdd: Screen[]) => {
+    if (toAdd.length === 0) return;
+    const next = new Set(selectedScreenIds);
+    toAdd.forEach(s => next.add(s.id));
+    setSelectedScreenIds(next);
+    localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(Array.from(next)));
+    toast({ title: "Added to Campaign", description: `${toAdd.length} ${toAdd.length === 1 ? "listing" : "listings"} added.` });
+    if (!user) {
+      setPendingAction(() => () => setLocation("/advertiser/quick-campaign"));
+      setShowAuthModal(true);
+    }
+  };
+
   const handleViewZone = () => {
     if (!zoneInfo || zoneScreens.length === 0) return;
     setHighlightedZoneIds(new Set(zoneScreens.map(s => s.id)));
@@ -570,54 +762,55 @@ export default function DiscoverScreens() {
     setLocation("/advertiser/quick-campaign");
   };
 
-  const VenueIconFallback = ({ category, name }: { category: string, name: string }) => {
-    const normalized = (category || "").toLowerCase();
-    
-    let Icon = Monitor;
-    if (normalized.includes("cafe") || normalized.includes("coffee")) Icon = Coffee;
-    else if (normalized.includes("restaurant") || normalized.includes("food")) Icon = Utensils;
-    else if (normalized.includes("bus") || normalized.includes("transit")) Icon = Bus;
-    else if (normalized.includes("mall") || normalized.includes("retail") || normalized.includes("shopping")) Icon = Store;
-    else if (normalized.includes("corporate") || normalized.includes("office") || normalized.includes("apartment") || normalized.includes("building")) Icon = Building2;
-    else if (normalized.includes("airport") || normalized.includes("plane")) Icon = Plane;
-    else if (normalized.includes("metro") || normalized.includes("train") || normalized.includes("railway")) Icon = Train;
-    else if (normalized.includes("cinema") || normalized.includes("movie")) Icon = MonitorPlay;
-    else if (normalized.includes("gym") || normalized.includes("fitness")) Icon = Dumbbell;
-    else if (normalized.includes("college") || normalized.includes("school")) Icon = GraduationCap;
-    else if (normalized.includes("hospital") || normalized.includes("clinic")) Icon = Activity;
-    else if (normalized.includes("hotel") || normalized.includes("resort")) Icon = Hotel;
-    else if (normalized.includes("salon")) Icon = Scissors;
-    else if (normalized.includes("road") || normalized.includes("highway") || normalized.includes("junction") || normalized.includes("flyover")) Icon = MapPin;
-
-    return (
-      <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center text-slate-400 group-hover:bg-slate-200 transition-colors">
-        <Icon className="w-10 h-10 mb-2 opacity-50" />
-        <span className="text-[10px] font-medium uppercase tracking-wider opacity-60 text-center px-2 line-clamp-1">{category || "Digital Screen"}</span>
-      </div>
-    );
-  };
-
-  // Custom Map Marker Content
+  // Custom Map Marker Content — single screen
   const renderCustomMarker = (screen: Screen, index: number) => {
     const isHovered = hoveredScreenId === screen.id;
     const isSelected = selectedScreenIds.has(screen.id);
     const isHighlightedZone = highlightedZoneIds.has(screen.id);
-    
+    const hasMultiScreen = !!(screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1);
+    const isBulkMandatory = !!screen.bulkBookingMandatory;
+
     // Use zone price override if we have one for this screen, else regular price
+    const hasZoneOverride = zonePriceOverrides.has(screen.id);
     const basePrice = calculateScreenPricePerDay(screen);
     const price = zonePriceOverrides.get(screen.id) ?? basePrice ?? 0;
-    let priceDisplay = `₹${price}`;
-    if (price >= 1000) {
-      priceDisplay = `₹${(price / 1000).toFixed(1).replace('.0', '')}k`;
+    const formatPrice = (p: number) => p >= 1000 ? `₹${(p / 1000).toFixed(1).replace('.0', '')}k` : `₹${p}`;
+
+    // Bulk-mandatory venues are priced per screen × how many screens the booking spans, so
+    // show that breakdown directly instead of a single collapsed total
+    let priceDisplay = formatPrice(price);
+    if (hasMultiScreen && isBulkMandatory && !hasZoneOverride && screen.numberOfScreens) {
+      const unitPrice = Math.round(price / screen.numberOfScreens);
+      priceDisplay = `${formatPrice(unitPrice)} × ${screen.numberOfScreens}`;
     }
 
+    const pillColor = isSelected
+      ? 'bg-green-600 text-white border-white'
+      : isHighlightedZone
+        ? 'bg-amber-500 text-white border-white'
+        : isHovered
+          ? 'bg-slate-900 text-white border-slate-900'
+          : 'bg-white text-slate-800 border-white hover:bg-slate-50';
+
+    const caretColor = isSelected
+      ? 'border-t-green-600'
+      : isHighlightedZone
+        ? 'border-t-amber-500'
+        : isHovered
+          ? 'border-t-slate-900'
+          : 'border-t-white';
+
     return (
-      <div 
-        className={`relative flex items-center justify-center transition-all duration-300 cursor-pointer 
-          ${isHovered ? 'scale-125 z-50' : 'scale-100 z-10'}
-        `}
+      <div
+        className={`relative flex flex-col items-center transition-all duration-300 cursor-pointer ${
+          isHovered ? 'scale-125 z-50' : 'scale-100 z-10'
+        }`}
         onMouseEnter={() => setHoveredScreenId(screen.id)}
-        onMouseLeave={() => setHoveredScreenId(null)}
+        onMouseLeave={() => {
+          // Keep the sidebar highlight while this screen's detail modal is open, so it doesn't
+          // drop the instant the mouse leaves the marker en route to the modal
+          if (detailModalScreen?.id !== screen.id) setHoveredScreenId(null);
+        }}
         onClick={() => {
           if (isMobile) {
             setIsBottomSheetOpen(true);
@@ -628,100 +821,74 @@ export default function DiscoverScreens() {
           }
         }}
       >
-        <div className={`
-          px-3 py-1.5 rounded-full font-bold text-[13px] shadow-lg border-2 whitespace-nowrap
-          ${isSelected 
-            ? 'bg-green-600 text-white border-white' 
-            : isHighlightedZone
-              ? 'bg-amber-500 text-white border-white'
-              : (isHovered ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-800 border-white hover:bg-slate-50')
-          }
-          ${isHovered && !isSelected ? 'shadow-xl font-extrabold' : 'shadow-md'}
-        `}>
+        {/* Price pill */}
+        <div className={`px-3 py-1.5 rounded-full font-bold text-[13px] shadow-lg border-2 whitespace-nowrap ${
+          pillColor
+        } ${isHovered && !isSelected ? 'shadow-xl font-extrabold' : 'shadow-md'}`}>
           {priceDisplay}
         </div>
-        <div className={`absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 
-          border-l-[6px] border-l-transparent 
-          border-r-[6px] border-r-transparent 
-          border-t-[6px] 
-          ${isSelected ? 'border-t-green-600' : isHighlightedZone ? 'border-t-amber-500' : (isHovered ? 'border-t-slate-900' : 'border-t-white')}
-        `}></div>
+
+        {/* Multi-screen / bulk-mandatory badges — combined into one row to keep the marker compact */}
+        {(hasMultiScreen || isBulkMandatory) && (
+          <div className="mt-0.5 flex items-center gap-1 justify-center flex-wrap">
+            {/* When bulk-mandatory, the price pill above already shows "×N" as part of the price
+                breakdown — skip the redundant count badge here and only flag the "All required" state */}
+            {hasMultiScreen && !isBulkMandatory && (
+              <div className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shadow-sm border ${
+                isSelected ? 'bg-green-700 text-white border-green-700' : 'bg-violet-600 text-white border-violet-600'
+              }`}>
+                <Layers className="w-2.5 h-2.5" />
+                <span>×{screen.numberOfScreens}</span>
+              </div>
+            )}
+
+            {isBulkMandatory && (
+              <div className="flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shadow-sm bg-amber-500 text-white border border-amber-500">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                <span>All required</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Caret */}
+        <div className={`w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] ${caretColor}`} />
       </div>
     );
   };
 
-  // Airbnb-style Screen Card Component
-  const ScreenListCard = ({ screen }: { screen: Screen & { distanceKm?: number } }) => {
-    const isAdded = selectedScreenIds.has(screen.id);
-    
-    return (
-      <div 
-        className="group cursor-pointer flex flex-col gap-3"
-        onMouseEnter={() => setHoveredScreenId(screen.id)}
-        onMouseLeave={() => setHoveredScreenId(null)}
-        onClick={() => setDetailModalScreen(screen)}
-      >
-        <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-slate-200">
-          {(screen.screenImages?.[0] || screen.images?.[0]) ? (
-            <img 
-              src={screen.screenImages?.[0] || screen.images?.[0]} 
-              alt={screen.name}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-            />
-          ) : (
-            <VenueIconFallback category={screen.category || ""} name={screen.name} />
-          )}
-          {isAdded && (
-            <div className="absolute top-3 left-3 bg-green-500 text-white px-2 py-1 rounded-full shadow-sm text-xs font-semibold flex items-center">
-              <Check className="w-3 h-3 mr-1" /> Added
-            </div>
-          )}
-          <div className="absolute top-3 right-3">
-            <Button 
-              size="icon" 
-              variant="secondary" 
-              className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleScreenSelection(screen);
-              }}
-            >
-              {isAdded ? <Check className="w-4 h-4 text-green-600" /> : <ShoppingCart className="w-4 h-4" />}
-            </Button>
-          </div>
-        </div>
-        
-        <div className="flex flex-col">
-          <div className="flex justify-between items-start">
-            <h3 className="font-semibold text-slate-900 line-clamp-1">{screen.venueName}, {screen.city}</h3>
-            {screen.distanceKm !== undefined && (
-              <span className="text-sm text-slate-500 whitespace-nowrap ml-2">
-                {Number(screen.distanceKm).toFixed(1)} km
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-slate-500 line-clamp-1">{screen.name} • {screen.category}</p>
-            {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
-              <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-primary/10 text-primary">
-                {getScreenCountDisplay(screen)}
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center text-sm text-slate-500 mt-0.5">
-            <Users className="w-3 h-3 mr-1" />
-            {((screen.avgDailyFootfall || 0) / 1000).toFixed(1)}k daily footfall
-          </div>
-          <div className="mt-1">
-            <span className="font-bold text-slate-900">₹{calculateScreenPricePerDay(screen).toLocaleString()}</span>
-            <span className="text-slate-500 text-sm"> / day</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // Venue pin — one pin for every listing at the same spot. Shows the lowest price and the
+  // total number of screens; clicking opens the venue panel listing packages and single screens.
+  const renderVenueMarker = (venue: VenueGroup) => (
+    <VenueMarker
+      venue={venue}
+      isActive={activeVenueKey === venue.key}
+      isHovered={!!hoveredScreenId && venue.listings.some(l => l.id === hoveredScreenId)}
+      addedCount={venue.listings.filter(l => selectedScreenIds.has(l.id)).length}
+      isHighlightedZone={venue.listings.some(l => highlightedZoneIds.has(l.id))}
+      onClick={() => openVenue(venue.key)}
+      onMouseEnter={() => setHoveredScreenId(venue.listings[0].id)}
+      onMouseLeave={() => setHoveredScreenId(null)}
+    />
+  );
 
-
+  const venuePanel = activeVenue ? (
+    <VenuePanel
+      key={activeVenue.key}
+      venue={activeVenue}
+      selectedIds={selectedScreenIds}
+      hoveredScreenId={hoveredScreenId}
+      cartCount={selectedScreenIds.size}
+      onToggle={toggleScreenSelection}
+      onAddMany={addScreensToCampaign}
+      onOpenDetails={(s) => setDetailModalScreen(s)}
+      onHover={setHoveredScreenId}
+      onBack={() => setActiveVenueKey(null)}
+      onBook={proceedToCreateCampaign}
+      backLabel={isMobile ? (viewMode === 'mobile_list' ? "Back to list" : "Back to map") : "All results"}
+      isMobile={isMobile}
+    />
+  ) : null;
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] w-full overflow-hidden bg-white">
@@ -936,6 +1103,7 @@ export default function DiscoverScreens() {
           flex flex-col bg-white overflow-y-auto z-10 transition-all duration-300
           ${isMobile ? (viewMode === 'mobile_list' ? 'absolute inset-0 w-full' : 'hidden') : 'w-[55%] relative'}
         `}>
+          {!isMobile && venuePanel ? venuePanel : (
           <div className="p-6">
             <div className="flex justify-between items-end mb-6">
               <div>
@@ -969,7 +1137,7 @@ export default function DiscoverScreens() {
                 <Button 
                   variant="outline" 
                   className="mt-4 rounded-full"
-                  onClick={() => setFilters({ state: "", city: "", venueCategories: [], screenCategories: [], environmentTypes: [], trafficTypes: [], userIntents: [], locationTags: [], minPrice: "", maxPrice: "" })}
+                  onClick={() => setFilters({ state: "", city: "", venueCategories: [], screenCategories: [], environmentTypes: [], trafficTypes: [], userIntents: [], locationTags: [], minPrice: "", maxPrice: "", search: "" })}
                 >
                   Clear all filters
                 </Button>
@@ -978,7 +1146,24 @@ export default function DiscoverScreens() {
               <div className="flex flex-col">
                 <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6 pb-8">
                   {screens.slice(0, page * 20).map(screen => (
-                    <ScreenListCard key={screen.id} screen={screen} />
+                    <ScreenListCard
+                      key={screen.id}
+                      screen={screen}
+                      isAdded={selectedScreenIds.has(screen.id)}
+                      isHighlighted={hoveredScreenId === screen.id}
+                      onHoverStart={() => setHoveredScreenId(screen.id)}
+                      onHoverEnd={() => setHoveredScreenId(null)}
+                      onOpenDetails={() => setDetailModalScreen(screen)}
+                      onToggleAdd={() => toggleScreenSelection(screen)}
+                      cardRef={(el) => { listItemRefs.current.set(screen.id, el); }}
+                      {...(() => {
+                        const key = venueKeyFor(screen);
+                        const venue = key ? venueByKey.get(key) : undefined;
+                        return venue && venue.listings.length > 1
+                          ? { venueListingCount: venue.listings.length, venueScreenCount: venue.totalScreens, onOpenVenue: () => openVenue(venue.key) }
+                          : {};
+                      })()}
+                    />
                   ))}
                 </div>
                 {screens.length > page * 20 && (
@@ -995,6 +1180,7 @@ export default function DiscoverScreens() {
               </div>
             )}
           </div>
+          )}
         </div>
 
         {/* Right Map View */}
@@ -1054,21 +1240,37 @@ export default function DiscoverScreens() {
                   </button>
                 </div>
               )}
-              {mapScreens.map((screen, index) => (
-                <AdvancedMarker
-                  key={screen.id}
-                  position={{ lat: parseFloat(String(screen.latitude)), lng: parseFloat(String(screen.longitude)) }}
-                  zIndex={hoveredScreenId === screen.id ? 100 : 1}
-                >
-                  {renderCustomMarker(screen, index)}
-                </AdvancedMarker>
-              ))}
+              {venueGroups.map((venue) => {
+                if (venue.listings.length === 1) {
+                  const screen = venue.listings[0];
+                  return (
+                    <AdvancedMarker
+                      key={screen.id}
+                      position={{ lat: parseFloat(String(screen.latitude)), lng: parseFloat(String(screen.longitude)) }}
+                      zIndex={hoveredScreenId === screen.id ? 100 : 1}
+                    >
+                      {renderCustomMarker(screen, mapScreens.indexOf(screen))}
+                    </AdvancedMarker>
+                  );
+                }
+                const isActive = activeVenueKey === venue.key;
+                const isHovered = !!hoveredScreenId && venue.listings.some(l => l.id === hoveredScreenId);
+                return (
+                  <AdvancedMarker
+                    key={`venue-${venue.key}`}
+                    position={{ lat: venue.lat, lng: venue.lng }}
+                    zIndex={isActive ? 200 : isHovered ? 100 : 2}
+                  >
+                    {renderVenueMarker(venue)}
+                  </AdvancedMarker>
+                );
+              })}
             </Map>
           </div>
         </div>
 
         {/* Mobile View Toggle */}
-        {isMobile && (
+        {isMobile && !activeVenue && (
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300">
             <div className="bg-slate-900 text-white rounded-full shadow-2xl p-1 flex items-center">
               <Button 
@@ -1095,7 +1297,7 @@ export default function DiscoverScreens() {
       </div>
 
       {/* Mobile Map Bottom Carousel */}
-      {isMobile && viewMode === 'mobile_map' && mapScreens.length > 0 && (
+      {isMobile && viewMode === 'mobile_map' && mapScreens.length > 0 && !activeVenue && (
         <div className="absolute bottom-20 left-0 right-0 z-40 pb-4">
           <div className="overflow-hidden" ref={emblaRef}>
             <div className="flex touch-pan-y">
@@ -1135,6 +1337,13 @@ export default function DiscoverScreens() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Mobile: venue panel as a full-screen sheet over the map */}
+      {isMobile && venuePanel && (
+        <div className="fixed inset-0 z-[45] bg-white flex flex-col animate-in slide-in-from-bottom-8 fade-in duration-200">
+          {venuePanel}
         </div>
       )}
 
@@ -1204,6 +1413,7 @@ export default function DiscoverScreens() {
           if (pendingAction) pendingAction();
         }}
       />
+
     </div>
   );
 }
