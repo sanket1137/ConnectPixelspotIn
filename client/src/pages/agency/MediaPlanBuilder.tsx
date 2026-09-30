@@ -37,7 +37,7 @@ function toInputDate(d: string | Date) {
 
 // ─── Map-based Screen Picker ─────────────────────────────────────────────────
 
-function ScreenPickerModal({
+export function ScreenPickerModal({
   open, onClose, onAdd, existingIds,
 }: {
   open: boolean;
@@ -331,6 +331,9 @@ function ScreenPickerModal({
                     {screen.environmentType && (
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-slate-100 text-slate-600 hover:bg-slate-200">{screen.environmentType.split(' ')[0]}</Badge>
                     )}
+                    {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-300 font-semibold">{screen.numberOfScreens} Screens Network</Badge>
+                    )}
                   </div>
                   
                   <div className="mt-3">
@@ -559,22 +562,64 @@ export default function MediaPlanBuilder() {
     }
   };
 
+  // ── Calculate days between campaign start & end date (inclusive) ──
+  const getCampaignDays = (startStr: string, endStr: string): number => {
+    if (!startStr || !endStr) return 1;
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
+    const diffMs = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return Math.max(1, diffDays + 1); // Inclusive duration (e.g. Oct 1 to Oct 30 = 30 days)
+  };
+
+  const handleStartDateChange = (val: string) => {
+    setStartDate(val);
+    if (val && endDate && items.length > 0) {
+      const newDays = getCampaignDays(val, endDate);
+      updateAllItemsDays(newDays);
+    }
+  };
+
+  const handleEndDateChange = (val: string) => {
+    setEndDate(val);
+    if (startDate && val && items.length > 0) {
+      const newDays = getCampaignDays(startDate, val);
+      updateAllItemsDays(newDays);
+    }
+  };
+
+  const updateAllItemsDays = (newDays: number) => {
+    if (newDays < 1) return;
+    setItems((prev) =>
+      prev.map((i) => ({
+        ...i,
+        days: newDays,
+        totalPrice: (i.pricePerDay || 0) * newDays,
+      }))
+    );
+    if (planId) {
+      items.forEach((i) => {
+        apiRequest("PUT", `/api/agency/media-plans/${planId}/items/${i.id}`, { days: newDays }).catch(() => {});
+      });
+    }
+  };
+
   // ── Add screen to plan ─────────────────────────────────────────
   const addScreen = async (screen: any) => {
     if (!planId) {
       toast({ title: "Save the plan first before adding screens", variant: "destructive" });
       return;
     }
-    // Auto-calculate days from plan date range
-    const calculatedDays = (startDate && endDate)
-      ? Math.max(1, Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)))
-      : 1;
+    // Auto-calculate days from campaign date range
+    const calculatedDays = getCampaignDays(startDate, endDate);
     try {
       const res = await apiRequest("POST", `/api/agency/media-plans/${planId}/items`, {
-        screenId: screen.id, days: calculatedDays,
+        screenId: screen.id,
+        days: calculatedDays,
       });
       const item = await res.json();
-      setItems((prev) => [...prev, { ...item, screen }]);
+      setItems((prev) => [...prev, { ...item, days: calculatedDays, totalPrice: (item.pricePerDay || screen.pricePerDay || 0) * calculatedDays, screen }]);
       toast({ title: `${screen.name} added (${calculatedDays} day${calculatedDays !== 1 ? "s" : ""})` });
     } catch {
       toast({ title: "Failed to add screen", variant: "destructive" });
@@ -756,11 +801,11 @@ export default function MediaPlanBuilder() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">Start Date *</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={isExecuted} />
+                  <Input type="date" value={startDate} onChange={(e) => handleStartDateChange(e.target.value)} disabled={isExecuted} />
                 </div>
                 <div>
                   <Label className="text-xs">End Date *</Label>
-                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={isExecuted} />
+                  <Input type="date" value={endDate} onChange={(e) => handleEndDateChange(e.target.value)} disabled={isExecuted} />
                 </div>
               </div>
               <div>
@@ -835,7 +880,7 @@ export default function MediaPlanBuilder() {
             <h2 className="font-semibold text-sm">
               Screens in Plan
               <span className="ml-2 text-muted-foreground font-normal">
-                ({items.filter((i) => i.status === "included").length})
+                ({items.filter((i) => i.status === "included").length} Locations · {items.filter((i) => i.status === "included").reduce((sum, i) => sum + ((i.screen?.isMultiScreen && i.screen?.numberOfScreens && i.screen.numberOfScreens > 0) ? i.screen.numberOfScreens : (i.screen?.numberOfScreens || 1)), 0)} Physical Screens)
               </span>
             </h2>
             {!isExecuted && (
@@ -875,6 +920,8 @@ export default function MediaPlanBuilder() {
                   const cityArea = `${s.city || ""}${s.venueName ? ` – ${s.venueName}` : ""}`;
                   const net = item.totalPrice || item.days * item.pricePerDay;
                   const clientAmt = Math.round(net * multiplier);
+                  const isMulti = !!((s.isMultiScreen && s.numberOfScreens && s.numberOfScreens > 1) || (s.numberOfScreens > 1));
+                  const numScreens = s.numberOfScreens || 1;
 
                   return (
                     <Card key={item.id} className="border-0 shadow-sm">
@@ -883,14 +930,16 @@ export default function MediaPlanBuilder() {
 
                           {/* Screen name + tags */}
                           <div className="md:col-span-4">
-                            <p className="font-medium text-sm leading-tight">
+                            <p className="font-medium text-sm leading-tight flex items-center flex-wrap gap-1">
                               {s.name || item.screenId}
-                              {s.numberOfScreens > 1 && (
-                                <span className="ml-1 text-xs text-muted-foreground font-normal">({s.numberOfScreens} Screens)</span>
+                              {isMulti && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-300 font-semibold">
+                                  {numScreens} Screens
+                                </Badge>
                               )}
                             </p>
-                            {s.numberOfScreens > 1 && (
-                              <p className="text-[10px] text-amber-600 mt-0.5 font-medium">* Mandatory to book all screens</p>
+                            {isMulti && (
+                              <p className="text-[10px] text-amber-600 mt-0.5 font-medium">* Mandatory to book all {numScreens} screens</p>
                             )}
                             <div className="flex flex-wrap gap-1 mt-1">
                               {s.venueCategory && (

@@ -6,6 +6,7 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 
 interface DashboardStats {
   totalUsers: number;
+  completedProfileUsers?: number;
   totalScreens: number;
   totalCampaigns: number;
   totalRevenue: number;
@@ -138,13 +139,18 @@ export default function Analytics() {
             <div className="text-3xl font-bold text-foreground">
               {stats?.activeUsers || 0}
             </div>
-            <div className="flex items-center gap-1 mt-2 text-sm">
+            {stats?.completedProfileUsers !== undefined && (
+              <div className="text-xs text-muted-foreground mt-1 font-medium">
+                {(stats.completedProfileUsers || 0).toLocaleString("en-IN")} completed profile
+              </div>
+            )}
+            <div className="flex items-center gap-1 mt-1.5 text-xs">
               {(stats?.userGrowth || 0) >= 0 ? (
-                <TrendingUp className="h-4 w-4 text-chart-2" />
+                <TrendingUp className="h-3.5 w-3.5 text-chart-2" />
               ) : (
-                <TrendingDown className="h-4 w-4 text-destructive" />
+                <TrendingDown className="h-3.5 w-3.5 text-destructive" />
               )}
-              <span className={(stats?.userGrowth || 0) >= 0 ? "text-chart-2" : "text-destructive"}>
+              <span className={(stats?.userGrowth || 0) >= 0 ? "text-chart-2 font-medium" : "text-destructive font-medium"}>
                 {stats?.userGrowth && stats.userGrowth > 0 ? '+' : ''}{stats?.userGrowth || 0}%
               </span>
               <span className="text-muted-foreground">growth rate</span>
@@ -163,15 +169,18 @@ export default function Analytics() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-foreground">
-              {stats?.totalScreens || 0}
+              {(stats?.totalScreens || 0).toLocaleString("en-IN")}
             </div>
-            <div className="flex items-center gap-1 mt-2 text-sm">
+            <div className="text-xs text-muted-foreground mt-1 font-medium">
+              Total physical screen units
+            </div>
+            <div className="flex items-center gap-1 mt-1.5 text-xs">
               {(stats?.screenGrowth || 0) >= 0 ? (
-                <TrendingUp className="h-4 w-4 text-chart-2" />
+                <TrendingUp className="h-3.5 w-3.5 text-chart-2" />
               ) : (
-                <TrendingDown className="h-4 w-4 text-destructive" />
+                <TrendingDown className="h-3.5 w-3.5 text-destructive" />
               )}
-              <span className={(stats?.screenGrowth || 0) >= 0 ? "text-chart-2" : "text-destructive"}>
+              <span className={(stats?.screenGrowth || 0) >= 0 ? "text-chart-2 font-medium" : "text-destructive font-medium"}>
                 {stats?.screenGrowth && stats.screenGrowth > 0 ? '+' : ''}{stats?.screenGrowth || 0}%
               </span>
               <span className="text-muted-foreground">vs last month</span>

@@ -105,6 +105,9 @@ export default function AgencyDiscover() {
                   {screen.venueCategory && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{screen.venueCategory}</Badge>}
                   {screen.environmentType && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{screen.environmentType}</Badge>}
                   {screen.category && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{screen.category}</Badge>}
+                  {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-300 font-semibold">{screen.numberOfScreens} Screens Network</Badge>
+                  )}
                 </div>
                 <div className="flex items-center justify-between pt-1">
                   <div>

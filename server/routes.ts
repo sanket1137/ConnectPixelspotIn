@@ -1402,6 +1402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         totalUsers: stats.totalUsers,
+        completedProfileUsers: stats.completedProfileUsers,
         totalScreens: stats.totalScreens,
         totalCampaigns: stats.totalCampaigns,
         totalRevenue: stats.totalRevenue,

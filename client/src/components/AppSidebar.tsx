@@ -46,7 +46,7 @@ export function AppSidebar() {
     { title: "Manage Users", url: "/admin/users", icon: Users },
     { title: "Manage Screens", url: "/admin/screens", icon: Monitor },
     { title: "Campaigns & Bookings", url: "/admin/bookings", icon: FileText },
-    { title: "Agency Media Plans", url: "/admin/media-plans", icon: ClipboardList },
+    { title: "Media Plans & Agency Tracker", url: "/admin/media-plans", icon: ClipboardList },
     { title: "Payments & Payouts", url: "/admin/payments", icon: CreditCard },
     { title: "AI Conversations", url: "/admin/ai-conversations", icon: MessageSquare },
     { title: "AI Security", url: "/admin/ai-security", icon: Shield },

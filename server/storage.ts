@@ -24,6 +24,8 @@ export const publicCache = new SimpleCache();
 const PUBLIC_SCREENS_TTL = 300_000; // 5 minutes
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { checkAndCreateERPNextLead } from "./services/erpnext";
+
 import { 
   users, screens, campaigns, bookings, payments,
   ownerPayouts, invoices, notifications, proofOfPlay,
@@ -225,7 +227,7 @@ export interface IStorage {
 
   // Admin: aggregate counts for dashboard stats (replaces 4x getAll*)
   getAdminDashboardStats(): Promise<{
-    totalUsers: number; totalScreens: number; totalCampaigns: number;
+    totalUsers: number; completedProfileUsers: number; totalScreens: number; totalCampaigns: number;
     totalRevenue: number; pendingScreens: number; pendingBookings: number;
     activeUsers: number; thisMonthUsers: number; lastMonthUsers: number;
     thisMonthScreens: number; lastMonthScreens: number;
@@ -332,11 +334,17 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    if (user && user.emailVerified && user.mobileVerified) {
+      checkAndCreateERPNextLead(user).catch(err => console.error("[ERPNext] Error on createUser:", err));
+    }
     return user;
   }
 
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
     const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    if (user && user.emailVerified && user.mobileVerified) {
+      checkAndCreateERPNextLead(user).catch(err => console.error("[ERPNext] Error on updateUser:", err));
+    }
     return user || undefined;
   }
 
@@ -351,11 +359,17 @@ export class DatabaseStorage implements IStorage {
 
   async verifyUserEmail(id: string): Promise<User | undefined> {
     const [user] = await db.update(users).set({ emailVerified: true }).where(eq(users.id, id)).returning();
+    if (user && user.emailVerified && user.mobileVerified) {
+      checkAndCreateERPNextLead(user).catch(err => console.error("[ERPNext] Error on verifyUserEmail:", err));
+    }
     return user || undefined;
   }
 
   async verifyUserMobile(id: string): Promise<User | undefined> {
     const [user] = await db.update(users).set({ mobileVerified: true }).where(eq(users.id, id)).returning();
+    if (user && user.emailVerified && user.mobileVerified) {
+      checkAndCreateERPNextLead(user).catch(err => console.error("[ERPNext] Error on verifyUserMobile:", err));
+    }
     return user || undefined;
   }
 
@@ -1439,12 +1453,13 @@ export class DatabaseStorage implements IStorage {
       SELECT
         (SELECT COUNT(*)::int FROM users) AS total_users,
         (SELECT COUNT(*)::int FROM users WHERE status = 'active') AS active_users,
+        (SELECT COUNT(*)::int FROM users WHERE profile_completed = true) AS completed_profile_users,
         (SELECT COUNT(*)::int FROM users WHERE created_at >= ${thisMonth} AND created_at < ${now}) AS this_month_users,
         (SELECT COUNT(*)::int FROM users WHERE created_at >= ${lastMonth} AND created_at < ${thisMonth}) AS last_month_users,
-        (SELECT COUNT(*)::int FROM screens) AS total_screens,
-        (SELECT COUNT(*)::int FROM screens WHERE status = 'pending') AS pending_screens,
-        (SELECT COUNT(*)::int FROM screens WHERE created_at >= ${thisMonth} AND created_at < ${now}) AS this_month_screens,
-        (SELECT COUNT(*)::int FROM screens WHERE created_at >= ${lastMonth} AND created_at < ${thisMonth}) AS last_month_screens,
+        (SELECT COALESCE(SUM(CASE WHEN is_multi_screen = true AND number_of_screens IS NOT NULL AND number_of_screens > 0 THEN number_of_screens ELSE 1 END), 0)::int FROM screens) AS total_screens,
+        (SELECT COALESCE(SUM(CASE WHEN is_multi_screen = true AND number_of_screens IS NOT NULL AND number_of_screens > 0 THEN number_of_screens ELSE 1 END), 0)::int FROM screens WHERE status = 'pending') AS pending_screens,
+        (SELECT COALESCE(SUM(CASE WHEN is_multi_screen = true AND number_of_screens IS NOT NULL AND number_of_screens > 0 THEN number_of_screens ELSE 1 END), 0)::int FROM screens WHERE created_at >= ${thisMonth} AND created_at < ${now}) AS this_month_screens,
+        (SELECT COALESCE(SUM(CASE WHEN is_multi_screen = true AND number_of_screens IS NOT NULL AND number_of_screens > 0 THEN number_of_screens ELSE 1 END), 0)::int FROM screens WHERE created_at >= ${lastMonth} AND created_at < ${thisMonth}) AS last_month_screens,
         (SELECT COUNT(*)::int FROM campaigns) AS total_campaigns,
         (SELECT COUNT(*)::int FROM campaigns WHERE created_at >= ${thisMonth} AND created_at < ${now}) AS this_month_campaigns,
         (SELECT COUNT(*)::int FROM campaigns WHERE created_at >= ${lastMonth} AND created_at < ${thisMonth}) AS last_month_campaigns,
@@ -1455,14 +1470,22 @@ export class DatabaseStorage implements IStorage {
     `);
     const r = result.rows[0] as any;
     return {
-      totalUsers: Number(r.total_users), totalScreens: Number(r.total_screens),
-      totalCampaigns: Number(r.total_campaigns), totalRevenue: Number(r.total_revenue),
-      pendingScreens: Number(r.pending_screens), pendingBookings: Number(r.pending_bookings),
+      totalUsers: Number(r.total_users),
+      completedProfileUsers: Number(r.completed_profile_users || 0),
+      totalScreens: Number(r.total_screens),
+      totalCampaigns: Number(r.total_campaigns),
+      totalRevenue: Number(r.total_revenue),
+      pendingScreens: Number(r.pending_screens),
+      pendingBookings: Number(r.pending_bookings),
       activeUsers: Number(r.active_users),
-      thisMonthUsers: Number(r.this_month_users), lastMonthUsers: Number(r.last_month_users),
-      thisMonthScreens: Number(r.this_month_screens), lastMonthScreens: Number(r.last_month_screens),
-      thisMonthCampaigns: Number(r.this_month_campaigns), lastMonthCampaigns: Number(r.last_month_campaigns),
-      thisMonthRevenue: Number(r.this_month_revenue), lastMonthRevenue: Number(r.last_month_revenue),
+      thisMonthUsers: Number(r.this_month_users),
+      lastMonthUsers: Number(r.last_month_users),
+      thisMonthScreens: Number(r.this_month_screens),
+      lastMonthScreens: Number(r.last_month_screens),
+      thisMonthCampaigns: Number(r.this_month_campaigns),
+      lastMonthCampaigns: Number(r.last_month_campaigns),
+      thisMonthRevenue: Number(r.this_month_revenue),
+      lastMonthRevenue: Number(r.last_month_revenue),
     };
   }
 
@@ -1479,9 +1502,10 @@ export class DatabaseStorage implements IStorage {
       users: Number(r.users),
     }));
 
-    // Screen status breakdown
+    // Screen status breakdown (physical screen count)
     const screenResult = await db.execute(drizzleSql`
-      SELECT status, COUNT(*)::int AS count FROM screens GROUP BY status
+      SELECT status, COALESCE(SUM(CASE WHEN is_multi_screen = true AND number_of_screens IS NOT NULL AND number_of_screens > 0 THEN number_of_screens ELSE 1 END), 0)::int AS count
+      FROM screens GROUP BY status
     `);
     const statusMap: Record<string, number> = {};
     (screenResult.rows as any[]).forEach(r => { statusMap[r.status] = Number(r.count); });

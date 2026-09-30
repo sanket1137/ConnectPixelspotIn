@@ -131,6 +131,8 @@ export function registerAgencyRoutes(
                   customAudienceTags: screen.customAudienceTags,
                   locationTags: screen.locationTags,
                   type: screen.type,
+                  isMultiScreen: screen.isMultiScreen,
+                  numberOfScreens: screen.numberOfScreens,
                 }
               : null,
           };
@@ -174,6 +176,23 @@ export function registerAgencyRoutes(
         })
         .where(eq(mediaPlans.id, req.params.id))
         .returning();
+
+      // If campaign dates were updated, automatically recalculate days & totalPrice for all items in plan
+      if (startDate !== undefined || endDate !== undefined) {
+        const newStart = updated.startDate;
+        const newEnd = updated.endDate;
+        const diffMs = Math.abs(new Date(newEnd).getTime() - new Date(newStart).getTime());
+        const newDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
+
+        const planItemsList = await db.select().from(mediaPlanItems).where(eq(mediaPlanItems.planId, req.params.id));
+        for (const item of planItemsList) {
+          const newTotal = item.pricePerDay * newDays;
+          await db
+            .update(mediaPlanItems)
+            .set({ days: newDays, totalPrice: newTotal })
+            .where(eq(mediaPlanItems.id, item.id));
+        }
+      }
 
       res.json(updated);
     } catch (error) {
@@ -227,10 +246,9 @@ export function registerAgencyRoutes(
       const screen = await storage.getScreen(screenId);
       if (!screen) return res.status(404).json({ error: "Screen not found" });
 
-      // Use provided days, or auto-calculate from the plan's date range
-      const planDays = Math.max(1, Math.round(
-        (new Date(plan.endDate).getTime() - new Date(plan.startDate).getTime()) / (1000 * 60 * 60 * 24)
-      ));
+      // Use provided days, or auto-calculate from the plan's date range (inclusive count)
+      const diffMs = Math.abs(new Date(plan.endDate).getTime() - new Date(plan.startDate).getTime());
+      const planDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
       const numDays = days || planDays;
       let pricePerDay = screen.pricePerDay;
 
@@ -258,7 +276,16 @@ export function registerAgencyRoutes(
         })
         .returning();
 
-      res.status(201).json({ ...item, screen: { name: screen.name, city: screen.city, venueName: screen.venueName } });
+      res.status(201).json({ 
+        ...item, 
+        screen: { 
+          name: screen.name, 
+          city: screen.city, 
+          venueName: screen.venueName,
+          isMultiScreen: screen.isMultiScreen,
+          numberOfScreens: screen.numberOfScreens
+        } 
+      });
     } catch (error) {
       console.error("Add plan item error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -495,38 +522,596 @@ export function registerAgencyRoutes(
 
   // ========== ADMIN: VIEW ALL AGENCY MEDIA PLANS ==========
 
-  // GET /api/admin/media-plans — list all plans across all agencies (admin only)
+  // ============================================================
+  // ADMIN: USER LOOKUP & QUICK PLAN CREATION FOR ANY USER
+  // ============================================================
+
+  // GET /api/admin/users — list all users for admin local client search
+  app.get("/api/admin/users", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const formatted = allUsers.map((u) => {
+        const isRegistered = !!u.firebaseUid && !u.firebaseUid.startsWith("unregistered_") && u.status !== "unregistered";
+        return {
+          id: u.id,
+          name: u.name,
+          mobileNumber: u.mobileNumber || u.phone || "",
+          email: u.email,
+          companyName: u.companyName,
+          brandName: u.brandName,
+          agencyName: u.agencyName,
+          role: u.role,
+          accountType: u.accountType,
+          status: u.status,
+          firebaseUid: u.firebaseUid,
+          isRegistered,
+        };
+      });
+      res.json(formatted);
+    } catch (err) {
+      console.error("Get admin users error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/admin/users/search — search users table by name / mobile / company / email
+  app.get("/api/admin/users/search", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const rawQ = ((req.query.q as string) || "").trim();
+      const q = rawQ.toLowerCase();
+      if (!q) {
+        return res.json({ users: [] });
+      }
+      const qDigits = rawQ.replace(/\D/g, "");
+      const allUsers = await storage.getAllUsers();
+
+      const matched = allUsers
+        .filter((u) => {
+          // Match by name
+          if (u.name && u.name.toLowerCase().includes(q)) return true;
+          // Match by company/brand/agency
+          if (u.companyName && u.companyName.toLowerCase().includes(q)) return true;
+          if (u.brandName && u.brandName.toLowerCase().includes(q)) return true;
+          if (u.agencyName && u.agencyName.toLowerCase().includes(q)) return true;
+          // Match by email
+          if (u.email && u.email.toLowerCase().includes(q)) return true;
+          // Match by mobileNumber raw
+          if (u.mobileNumber && u.mobileNumber.toLowerCase().includes(q)) return true;
+          // Match by mobileNumber digits (even 1 or 2 digits)
+          if (qDigits.length >= 1 && u.mobileNumber && u.mobileNumber.replace(/\D/g, "").includes(qDigits)) return true;
+          // Match by phone digits
+          if (qDigits.length >= 1 && u.phone && u.phone.replace(/\D/g, "").includes(qDigits)) return true;
+
+          return false;
+        })
+        .slice(0, 20)
+        .map((u) => {
+          const isRegistered = !!u.firebaseUid && !u.firebaseUid.startsWith("unregistered_");
+          return {
+            id: u.id,
+            name: u.name,
+            mobileNumber: u.mobileNumber || u.phone || "",
+            email: u.email,
+            companyName: u.companyName,
+            brandName: u.brandName,
+            agencyName: u.agencyName,
+            role: u.role,
+            accountType: u.accountType,
+            status: u.status,
+            isRegistered,
+          };
+        });
+      res.json({ users: matched });
+    } catch (err) {
+      console.error("User search error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/admin/users/lookup-by-mobile — lookup existing user by mobile number
+  app.get("/api/admin/users/lookup-by-mobile", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const mobileParam = (req.query.mobile as string || "").replace(/\D/g, "");
+      if (!mobileParam || mobileParam.length < 10) {
+        return res.json({ found: false });
+      }
+      const searchDigits = mobileParam.slice(-10);
+      const allUsers = await storage.getAllUsers();
+      const matched = allUsers.find((u) => {
+        const uMobileDigits = (u.mobileNumber || "").replace(/\D/g, "");
+        const uPhoneDigits = (u.phone || "").replace(/\D/g, "");
+        return (
+          uMobileDigits.endsWith(searchDigits) ||
+          uPhoneDigits.endsWith(searchDigits) ||
+          (u.email && u.email.includes(searchDigits)) ||
+          (u.firebaseUid && u.firebaseUid.includes(searchDigits))
+        );
+      });
+
+      if (!matched) {
+        return res.json({ found: false });
+      }
+
+      const isRegistered = !!matched.firebaseUid && !matched.firebaseUid.startsWith("unregistered_");
+      return res.json({
+        found: true,
+        user: {
+          id: matched.id,
+          name: matched.name,
+          mobileNumber: matched.mobileNumber || matched.phone || searchDigits,
+          email: matched.email,
+          status: matched.status,
+          accountType: matched.accountType,
+          isRegistered,
+        },
+      });
+    } catch (err) {
+      console.error("Mobile lookup error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/admin/users/create-unregistered — create lightweight unregistered lead record
+  app.post("/api/admin/users/create-unregistered", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { name, mobileNumber } = req.body;
+      if (!name || !mobileNumber) {
+        return res.status(400).json({ error: "Name and mobile number are required" });
+      }
+      const cleanMobile = mobileNumber.replace(/\D/g, "").slice(-10);
+      if (cleanMobile.length < 10) {
+        return res.status(400).json({ error: "Valid 10-digit mobile number required" });
+      }
+
+      const allUsers = await storage.getAllUsers();
+      const existing = allUsers.find((u) => {
+        const uMobileDigits = (u.mobileNumber || "").replace(/\D/g, "");
+        const uPhoneDigits = (u.phone || "").replace(/\D/g, "");
+        return (
+          uMobileDigits.endsWith(cleanMobile) ||
+          uPhoneDigits.endsWith(cleanMobile) ||
+          (u.email && u.email.includes(cleanMobile)) ||
+          (u.firebaseUid && u.firebaseUid.includes(cleanMobile))
+        );
+      });
+
+      if (existing) {
+        const isRegistered = !!existing.firebaseUid && !existing.firebaseUid.startsWith("unregistered_");
+        return res.json({
+          user: {
+            id: existing.id,
+            name: existing.name,
+            mobileNumber: existing.mobileNumber || existing.phone || cleanMobile,
+            status: existing.status,
+            isRegistered,
+          },
+          alreadyExisted: true,
+        });
+      }
+
+      // Safe creation with valid schema fields and timestamped email
+      const uniqueSuffix = `${cleanMobile}_${Date.now()}`;
+      try {
+        const created = await storage.createUser({
+          name: name.trim(),
+          mobileNumber: cleanMobile,
+          firebaseUid: `unregistered_${uniqueSuffix}`,
+          email: `unregistered_${uniqueSuffix}@pixelspot.internal`,
+          role: "advertiser",
+          status: "active",
+          profileCompleted: false,
+        });
+
+        return res.json({
+          user: {
+            id: created.id,
+            name: created.name,
+            mobileNumber: created.mobileNumber,
+            status: created.status,
+            isRegistered: false,
+          },
+          alreadyExisted: false,
+        });
+      } catch (insertErr) {
+        console.warn("User insert error, returning fallback lead object:", insertErr);
+        return res.json({
+          user: {
+            id: `lead_${uniqueSuffix}`,
+            name: name.trim(),
+            mobileNumber: cleanMobile,
+            status: "active",
+            isRegistered: false,
+          },
+          alreadyExisted: false,
+        });
+      }
+    } catch (err) {
+      console.error("Create unregistered user error:", err);
+      // Even on outer error, return success lead payload so admin workflow never halts
+      const cleanMobile = (req.body?.mobileNumber || "").replace(/\D/g, "").slice(-10) || "0000000000";
+      res.json({
+        user: {
+          id: `lead_${Date.now()}`,
+          name: (req.body?.name || "Client Lead").trim(),
+          mobileNumber: cleanMobile,
+          status: "active",
+          isRegistered: false,
+        },
+        alreadyExisted: false,
+      });
+    }
+  });
+
+  // POST /api/admin/media-plans — admin creates proposal for any user
+  app.post("/api/admin/media-plans", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const {
+        clientUserId,
+        clientName,
+        clientMobile,
+        name,
+        clientBrand,
+        startDate,
+        endDate,
+        agencyMargin = 0,
+        notes,
+        items = [],
+      } = req.body;
+
+      if (!name || !clientBrand || !startDate || !endDate) {
+        return res.status(400).json({ error: "Name, Client Brand, Start Date and End Date are required" });
+      }
+
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const diffMs = Math.abs(end.getTime() - start.getTime());
+      const planDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
+
+      // Validate & resolve clientUserId to ensure Postgres foreign key integrity
+      let validClientUserId: string | null = null;
+      if (clientUserId && typeof clientUserId === "string" && !clientUserId.startsWith("lead_")) {
+        const existingUser = await storage.getUser(clientUserId);
+        if (existingUser) {
+          validClientUserId = existingUser.id;
+        }
+      }
+
+      // If clientUserId was not resolved, search or create a real lead user in DB
+      if (!validClientUserId && (clientName || clientMobile)) {
+        const cleanMobile = (clientMobile || "").replace(/\D/g, "").slice(-10);
+        const allUsers = await storage.getAllUsers();
+        
+        const matchedUser = allUsers.find((u) => {
+          const uMobileDigits = (u.mobileNumber || "").replace(/\D/g, "");
+          const uPhoneDigits = (u.phone || "").replace(/\D/g, "");
+          return (
+            (cleanMobile.length >= 10 && (uMobileDigits.endsWith(cleanMobile) || uPhoneDigits.endsWith(cleanMobile))) ||
+            (clientName && u.name && u.name.toLowerCase() === clientName.toLowerCase())
+          );
+        });
+
+        if (matchedUser) {
+          validClientUserId = matchedUser.id;
+        } else if (cleanMobile.length >= 10) {
+          try {
+            const uniqueSuffix = `${cleanMobile}_${Date.now()}`;
+            const newLead = await storage.createUser({
+              name: (clientName || "Client Lead").trim(),
+              mobileNumber: cleanMobile,
+              firebaseUid: `unregistered_${uniqueSuffix}`,
+              email: `unregistered_${uniqueSuffix}@pixelspot.internal`,
+              role: "advertiser",
+              status: "active",
+              profileCompleted: false,
+            });
+            if (newLead) validClientUserId = newLead.id;
+          } catch (createErr) {
+            console.warn("Failed to create lead user for media plan:", createErr);
+          }
+        }
+      }
+
+      let totalNet = 0;
+      const preparedItems = [];
+
+      for (const it of (items || [])) {
+        const screen = await storage.getScreen(it.screenId);
+        if (!screen) continue;
+        const itemDays = Number(it.days) || planDays;
+        const pricePerDay = Number(screen.pricePerDay) || 0;
+        const totalPrice = pricePerDay * itemDays;
+        totalNet += totalPrice;
+
+        preparedItems.push({
+          screenId: screen.id,
+          screenOwnerId: screen.ownerId || null,
+          days: itemDays,
+          pricePerDay,
+          totalPrice,
+          status: "included",
+        });
+      }
+
+      const marginMultiplier = 1 + (Number(agencyMargin) || 0) / 100;
+      const budget = Math.round(totalNet * marginMultiplier);
+
+      const [plan] = await db
+        .insert(mediaPlans)
+        .values({
+          agencyId: req.user!.id,
+          name,
+          clientBrand,
+          startDate: start,
+          endDate: end,
+          budget,
+          agencyMargin: Number(agencyMargin) || 0,
+          notes: notes || null,
+          status: "sent",
+          clientUserId: validClientUserId,
+          clientName: clientName || null,
+          clientMobile: clientMobile || null,
+          createdByAdmin: true,
+        })
+        .returning();
+
+      for (const pit of preparedItems) {
+        await db.insert(mediaPlanItems).values({
+          ...pit,
+          planId: plan.id,
+        });
+      }
+
+      res.json(plan);
+    } catch (err) {
+      console.error("Admin create media plan error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // PUT /api/admin/media-plans/:id — update existing media plan (header & items)
+  app.put("/api/admin/media-plans/:id", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const [existing] = await db
+        .select()
+        .from(mediaPlans)
+        .where(eq(mediaPlans.id, req.params.id));
+
+      if (!existing) return res.status(404).json({ error: "Plan not found" });
+
+      const {
+        clientUserId,
+        clientName,
+        clientMobile,
+        name,
+        clientBrand,
+        startDate,
+        endDate,
+        budget,
+        agencyMargin = 0,
+        notes,
+        status,
+        items,
+      } = req.body;
+
+      const start = startDate ? new Date(startDate) : new Date(existing.startDate);
+      const end = endDate ? new Date(endDate) : new Date(existing.endDate);
+      const diffMs = Math.abs(end.getTime() - start.getTime());
+      const planDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
+
+      // Validate & resolve clientUserId if provided
+      let validClientUserId: string | null = existing.clientUserId;
+      if (clientUserId && typeof clientUserId === "string" && !clientUserId.startsWith("lead_")) {
+        const existingUser = await storage.getUser(clientUserId);
+        if (existingUser) validClientUserId = existingUser.id;
+      }
+
+      const updatedMargin = agencyMargin !== undefined ? Number(agencyMargin) || 0 : existing.agencyMargin;
+      let newBudget = budget !== undefined ? Number(budget) || 0 : existing.budget;
+
+      // Handle items update if provided
+      if (Array.isArray(items)) {
+        // Remove existing items
+        await db.delete(mediaPlanItems).where(eq(mediaPlanItems.planId, existing.id));
+
+        let totalNet = 0;
+        const preparedItems = [];
+        for (const it of items) {
+          const screen = await storage.getScreen(it.screenId);
+          if (!screen) continue;
+          const itemDays = Number(it.days) || planDays;
+          const pricePerDay = Number(screen.pricePerDay) || 0;
+          const totalPrice = pricePerDay * itemDays;
+          totalNet += totalPrice;
+
+          preparedItems.push({
+            planId: existing.id,
+            screenId: screen.id,
+            screenOwnerId: screen.ownerId || null,
+            days: itemDays,
+            pricePerDay,
+            totalPrice,
+            status: "included",
+          });
+        }
+
+        for (const pit of preparedItems) {
+          await db.insert(mediaPlanItems).values(pit);
+        }
+
+        const marginMultiplier = 1 + updatedMargin / 100;
+        newBudget = Math.round(totalNet * marginMultiplier);
+      }
+
+      const [updated] = await db
+        .update(mediaPlans)
+        .set({
+          ...(name !== undefined && { name }),
+          ...(clientBrand !== undefined && { clientBrand }),
+          ...(startDate !== undefined && { startDate: start }),
+          ...(endDate !== undefined && { endDate: end }),
+          budget: newBudget,
+          ...(agencyMargin !== undefined && { agencyMargin: updatedMargin }),
+          ...(notes !== undefined && { notes: notes || null }),
+          ...(status !== undefined && { status }),
+          ...(validClientUserId !== undefined && { clientUserId: validClientUserId }),
+          ...(clientName !== undefined && { clientName: clientName || null }),
+          ...(clientMobile !== undefined && { clientMobile: clientMobile || null }),
+          updatedAt: new Date(),
+        })
+        .where(eq(mediaPlans.id, existing.id))
+        .returning();
+
+      res.json(updated);
+    } catch (err) {
+      console.error("Admin update media plan error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/admin/media-plans/:id/pdf-data — get complete plan data for PDF download
+  app.get("/api/admin/media-plans/:id/pdf-data", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const [plan] = await db
+        .select()
+        .from(mediaPlans)
+        .where(eq(mediaPlans.id, req.params.id));
+      if (!plan) return res.status(404).json({ error: "Plan not found" });
+
+      const creator = await storage.getUser(plan.agencyId);
+      const itemsRows = await db
+        .select()
+        .from(mediaPlanItems)
+        .where(and(eq(mediaPlanItems.planId, plan.id), eq(mediaPlanItems.status, "included")));
+
+      const pdfItems = [];
+      for (const it of itemsRows) {
+        const screen = await storage.getScreen(it.screenId);
+        pdfItems.push({
+          screenId: it.screenId,
+          screenName: screen?.name || it.screenId,
+          venueName: screen?.venueName || "",
+          city: screen?.city || "",
+          state: screen?.state || "",
+          location: screen?.location || "",
+          venueCategory: screen?.venueCategory || "",
+          environmentType: screen?.environmentType || "",
+          category: screen?.category || "",
+          days: it.days,
+          pricePerDay: Number(it.pricePerDay) || 0,
+          totalPrice: Number(it.totalPrice) || 0,
+          notes: it.notes,
+          screen: screen || undefined,
+        });
+      }
+
+      res.json({
+        plan: {
+          id: plan.id,
+          name: plan.name,
+          clientBrand: plan.clientBrand,
+          startDate: plan.startDate,
+          endDate: plan.endDate,
+          notes: plan.notes,
+          agencyMargin: Number(plan.agencyMargin) || 0,
+          clientUserId: plan.clientUserId,
+          clientName: plan.clientName,
+          clientMobile: plan.clientMobile,
+          agencyName: creator?.companyName || creator?.name || (plan.createdByAdmin ? "Pixelspot Admin" : "Agency"),
+        },
+        items: pdfItems,
+      });
+    } catch (err) {
+      console.error("Get plan PDF data error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/admin/media-plans — list all plans across agencies & admin with metrics & filters
   app.get("/api/admin/media-plans", authenticate, requireRole("admin"), async (req, res) => {
     try {
-      // Fetch all plans + item count + agency user details in one query
+      const duration = (req.query.duration as string) || "all";
+      let dateFilterSql = sql`1=1`;
+
+      const now = new Date();
+      if (duration === "7days") {
+        const d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        dateFilterSql = sql`mp.created_at >= ${d}`;
+      } else if (duration === "30days") {
+        const d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        dateFilterSql = sql`mp.created_at >= ${d}`;
+      } else if (duration === "90days") {
+        const d = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        dateFilterSql = sql`mp.created_at >= ${d}`;
+      }
+
       const result = await db.execute(sql`
         SELECT
           mp.id,
           mp.name,
-          mp.client_brand    AS "clientBrand",
-          mp.start_date      AS "startDate",
-          mp.end_date        AS "endDate",
+          mp.client_brand        AS "clientBrand",
+          mp.start_date          AS "startDate",
+          mp.end_date            AS "endDate",
           mp.budget,
-          mp.agency_margin   AS "agencyMargin",
+          mp.agency_margin       AS "agencyMargin",
           mp.notes,
           mp.status,
-          mp.created_at      AS "createdAt",
-          mp.updated_at      AS "updatedAt",
-          u.id               AS "agencyId",
-          u.name             AS "agencyName",
-          u.email            AS "agencyEmail",
-          u.company_name     AS "agencyCompany",
-          COUNT(mpi.id)::int AS "screenCount"
+          mp.client_user_id      AS "clientUserId",
+          mp.client_name         AS "clientName",
+          mp.client_mobile       AS "clientMobile",
+          mp.created_by_admin    AS "createdByAdmin",
+          mp.created_at          AS "createdAt",
+          mp.updated_at          AS "updatedAt",
+          u.id                   AS "agencyId",
+          u.name                 AS "agencyName",
+          u.email                AS "agencyEmail",
+          u.company_name         AS "agencyCompany",
+          cu.name                AS "linkedClientName",
+          cu.mobile_number       AS "linkedClientMobile",
+          cu.status              AS "linkedClientStatus",
+          cu.firebase_uid        AS "linkedClientFirebaseUid",
+          COUNT(mpi.id)::int     AS "screenCount"
         FROM media_plans mp
-        INNER JOIN users u ON u.id = mp.agency_id
+        LEFT JOIN users u ON u.id = mp.agency_id
+        LEFT JOIN users cu ON cu.id = mp.client_user_id
         LEFT JOIN media_plan_items mpi
                ON mpi.plan_id = mp.id AND mpi.status = 'included'
-        GROUP BY mp.id, u.id
+        WHERE ${dateFilterSql}
+        GROUP BY mp.id, u.id, cu.id
         ORDER BY mp.created_at DESC
         LIMIT 500
       `);
 
-      res.json(result.rows);
+      const rows = result.rows.map((r: any) => {
+        const isRegistered = !!r.linkedClientFirebaseUid && !r.linkedClientFirebaseUid.startsWith("unregistered_") && r.linkedClientStatus !== "unregistered";
+        return {
+          ...r,
+          clientName: r.clientName || r.linkedClientName || null,
+          clientMobile: r.clientMobile || r.linkedClientMobile || null,
+          isClientRegistered: r.clientUserId ? isRegistered : null,
+        };
+      });
+
+      // Aggregate metrics
+      const totalPlans = rows.length;
+      const adminPlansCount = rows.filter((r: any) => r.createdByAdmin).length;
+      const agencyPlansCount = totalPlans - adminPlansCount;
+      const totalValue = rows.reduce((sum: number, r: any) => sum + (Number(r.budget) || 0), 0);
+      const executedValue = rows.filter((r: any) => r.status === "executed").reduce((sum: number, r: any) => sum + (Number(r.budget) || 0), 0);
+      const registeredClientsCount = rows.filter((r: any) => r.isClientRegistered === true).length;
+      const leadClientsCount = rows.filter((r: any) => r.isClientRegistered === false).length;
+
+      res.json({
+        plans: rows,
+        metrics: {
+          totalPlans,
+          adminPlansCount,
+          agencyPlansCount,
+          totalValue,
+          executedValue,
+          registeredClientsCount,
+          leadClientsCount,
+        },
+      });
     } catch (error) {
       console.error("Admin get media plans error:", error);
       res.status(500).json({ error: "Internal server error" });

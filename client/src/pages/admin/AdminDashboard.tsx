@@ -13,6 +13,7 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 
 interface DashboardStats {
   totalUsers: number;
+  completedProfileUsers?: number;
   totalScreens: number;
   totalCampaigns: number;
   totalRevenue: number;
@@ -135,7 +136,8 @@ export default function AdminDashboard() {
   const statCards = [
     {
       title: "Total Users",
-      value: stats?.totalUsers || 0,
+      value: (stats?.totalUsers || 0).toLocaleString("en-IN"),
+      subtext: `${(stats?.completedProfileUsers || 0).toLocaleString("en-IN")} completed profile`,
       icon: Users,
       change: `${stats?.userGrowth && stats.userGrowth > 0 ? '+' : ''}${stats?.userGrowth || 0}%`,
       positive: (stats?.userGrowth || 0) >= 0,
@@ -144,7 +146,8 @@ export default function AdminDashboard() {
     },
     {
       title: "Total Screens",
-      value: stats?.totalScreens || 0,
+      value: (stats?.totalScreens || 0).toLocaleString("en-IN"),
+      subtext: "Total physical screen units",
       icon: Monitor,
       change: `${stats?.screenGrowth && stats.screenGrowth > 0 ? '+' : ''}${stats?.screenGrowth || 0}%`,
       positive: (stats?.screenGrowth || 0) >= 0,
@@ -153,7 +156,8 @@ export default function AdminDashboard() {
     },
     {
       title: "Total Campaigns",
-      value: stats?.totalCampaigns || 0,
+      value: (stats?.totalCampaigns || 0).toLocaleString("en-IN"),
+      subtext: "All created campaign briefs",
       icon: FileText,
       change: `${stats?.campaignGrowth && stats.campaignGrowth > 0 ? '+' : ''}${stats?.campaignGrowth || 0}%`,
       positive: (stats?.campaignGrowth || 0) >= 0,
@@ -163,6 +167,7 @@ export default function AdminDashboard() {
     {
       title: "Total Revenue",
       value: `₹${((stats?.totalRevenue || 0) / 1000).toFixed(1)}K`,
+      subtext: "Completed booking value",
       icon: DollarSign,
       change: `${stats?.revenueGrowth && stats.revenueGrowth > 0 ? '+' : ''}${stats?.revenueGrowth || 0}%`,
       positive: (stats?.revenueGrowth || 0) >= 0,
@@ -210,13 +215,18 @@ export default function AdminDashboard() {
               <div className="text-3xl font-bold text-foreground" data-testid={`text-stat-${stat.title.toLowerCase().replace(/\s+/g, '-')}`}>
                 {stat.value}
               </div>
-              <div className="flex items-center gap-1 mt-2 text-sm">
+              {stat.subtext && (
+                <div className="text-xs text-muted-foreground mt-1 font-medium">
+                  {stat.subtext}
+                </div>
+              )}
+              <div className="flex items-center gap-1 mt-1.5 text-xs">
                 {stat.positive ? (
-                  <TrendingUp className="h-4 w-4 text-chart-2" />
+                  <TrendingUp className="h-3.5 w-3.5 text-chart-2" />
                 ) : (
-                  <TrendingDown className="h-4 w-4 text-destructive" />
+                  <TrendingDown className="h-3.5 w-3.5 text-destructive" />
                 )}
-                <span className={stat.positive ? "text-chart-2" : "text-destructive"}>
+                <span className={stat.positive ? "text-chart-2 font-medium" : "text-destructive font-medium"}>
                   {stat.change}
                 </span>
                 <span className="text-muted-foreground">from last month</span>

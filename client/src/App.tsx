@@ -72,6 +72,7 @@ const SEOLandingPage = lazy(() => import("@/pages/SEOLandingPage"));
 const AgencyDashboard = lazy(() => import("@/pages/agency/AgencyDashboard"));
 const MediaPlansList = lazy(() => import("@/pages/agency/MediaPlansList"));
 const MediaPlanBuilder = lazy(() => import("@/pages/agency/MediaPlanBuilder"));
+const AdminMediaPlanBuilder = lazy(() => import("@/pages/admin/AdminMediaPlanBuilder"));
 // Agency reuses the same full-featured advertiser components for these flows:
 const AgencyDiscover = lazy(() => import("@/pages/advertiser/DiscoverScreens"));
 const AgencyCampaigns = lazy(() => import("@/pages/advertiser/CampaignsList"));
@@ -195,6 +196,16 @@ function Router() {
       <Route path="/admin/media-plans">
         <AuthGuard allowedRoles={["admin"]}>
           <AdminMediaPlans />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/media-plans/new">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminMediaPlanBuilder />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/media-plans/:id">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminMediaPlanBuilder />
         </AuthGuard>
       </Route>
       <Route path="/admin/profile">

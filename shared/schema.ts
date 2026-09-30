@@ -36,6 +36,7 @@ export const users = pgTable("users", {
   // Profile Status
   profileCompleted: boolean("profile_completed").notNull().default(false),
   hasSeenOnboarding: boolean("has_seen_onboarding").notNull().default(false),
+  erpnextLeadCreated: boolean("erpnext_lead_created").notNull().default(false),
   
   // Bank Details (for screen owners - payouts)
   bankAccountName: text("bank_account_name"),
@@ -724,11 +725,16 @@ export const mediaPlans = pgTable("media_plans", {
   agencyMargin: integer("agency_margin").notNull().default(0), // % markup, never shown in client PDF
   notes:        text("notes"),
   status:       text("status").notNull().default("draft"), // draft | sent | executed
+  clientUserId: varchar("client_user_id"), // linked recipient user ID (registered or unregistered lead)
+  clientName:   text("client_name"),       // recipient name
+  clientMobile: text("client_mobile"),     // recipient mobile number
+  createdByAdmin: boolean("created_by_admin").notNull().default(false), // true if created by Admin
   createdAt:    timestamp("created_at").defaultNow().notNull(),
   updatedAt:    timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_media_plans_agency_id").on(table.agencyId),
   index("idx_media_plans_status").on(table.status),
+  index("idx_media_plans_client_mobile").on(table.clientMobile),
 ]);
 
 // Media Plan Items table — individual screen line-items within a plan
