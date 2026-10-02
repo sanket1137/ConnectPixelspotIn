@@ -218,8 +218,34 @@ export default function CreateCampaign() {
     fetchZoneInfo();
   }, [selectedMapScreen]);
 
-  // Load cart from Discover Screens
+  // Load draft from URL or load cart from Discover Screens
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const draftId = params.get("draftId");
+    if (draftId) {
+      apiRequest("GET", `/api/advertiser/campaigns/${draftId}`)
+        .then((res) => res.json())
+        .then((draft) => {
+          if (!draft || draft.error) return;
+          const summary = typeof draft.summary === "string" ? JSON.parse(draft.summary) : (draft.summary || {});
+          const screenIds = summary.selectedScreenIds || draft.bookings?.map((b: any) => b.screenId || b.id) || [];
+          if (screenIds.length > 0) {
+            setSelectedScreenIds(screenIds);
+          }
+          if (draft.name) {
+            form.setValue("name", draft.name);
+          }
+          if (draft.startDate) {
+            form.setValue("startDate", new Date(draft.startDate).toISOString().split("T")[0]);
+          }
+          if (draft.endDate) {
+            form.setValue("endDate", new Date(draft.endDate).toISOString().split("T")[0]);
+          }
+        })
+        .catch((err) => console.error("Failed to load draft in CreateCampaign:", err));
+      return;
+    }
+
     const saved = localStorage.getItem("selectedScreenIds");
     if (saved) {
       try {

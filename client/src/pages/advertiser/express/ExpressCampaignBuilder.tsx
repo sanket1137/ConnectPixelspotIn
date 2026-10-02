@@ -82,8 +82,82 @@ export default function ExpressCampaignBuilder() {
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasProgress = state.campaignName.trim().length >= 3;
 
-  // ── On mount: check for localStorage draft to offer resume ───────────────
+  // ── On mount: check for draftId in URL or localStorage draft ───────────────
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const draftIdFromUrl = params.get("draftId");
+    const stepFromUrl = params.get("step");
+
+    if (draftIdFromUrl) {
+      apiRequest("GET", `/api/advertiser/campaigns/${draftIdFromUrl}`)
+        .then((res) => res.json())
+        .then((draft) => {
+          if (!draft || draft.error) return;
+          const summary = typeof draft.summary === "string" ? JSON.parse(draft.summary) : (draft.summary || {});
+
+          let locations: LocationItem[] = summary.locations || [];
+          if (!locations || locations.length === 0) {
+            if (summary.pinLat && summary.pinLng) {
+              locations = [{
+                id: "loc-pin",
+                label: summary.targetCity || "Selected Area",
+                type: "map",
+                locationType: "point",
+                lat: Number(summary.pinLat),
+                lng: Number(summary.pinLng),
+                radiusKm: Number(summary.radiusKm || 5),
+              }];
+            } else if (summary.targetCity) {
+              locations = [{
+                id: "loc-city",
+                label: summary.targetCity,
+                type: "city",
+                locationType: "city",
+                city: summary.targetCity,
+              }];
+            } else if (draft.bookings?.length > 0) {
+              const cities = Array.from(new Set(draft.bookings.map((b: any) => b.screen?.city).filter(Boolean)));
+              if (cities.length > 0) {
+                locations = cities.map((c, i) => ({
+                  id: `loc-city-${i}`,
+                  label: String(c),
+                  type: "city",
+                  locationType: "city",
+                  city: String(c),
+                }));
+              }
+            }
+          }
+
+          const screenIds: string[] = summary.selectedScreenIds || draft.bookings?.map((b: any) => b.screenId || b.id) || [];
+          const screensData = draft.bookings?.map((b: any) => b.screen).filter(Boolean) || [];
+
+          setState((s) => ({
+            ...s,
+            campaignName: draft.name || summary.name || "",
+            locations,
+            selectedScreenIds: screenIds,
+            screensData: screensData.length > 0 ? screensData : s.screensData,
+            campaignDays: summary.campaignDays || 7,
+            startDate: summary.startDate
+              ? summary.startDate.split("T")[0]
+              : draft.startDate
+              ? new Date(draft.startDate).toISOString().split("T")[0]
+              : s.startDate,
+            creativeUrl: draft.creativeUrl || summary.creativeUrl || "",
+            zonePriceOverrides: summary.zonePriceOverrides || {},
+          }));
+
+          setSavedDraftId(draft.id);
+          const targetStep = stepFromUrl ? parseInt(stepFromUrl, 10) : (summary._step || 3);
+          setStep(targetStep);
+        })
+        .catch((err) => {
+          console.error("Failed to load draft campaign from URL:", err);
+        });
+      return;
+    }
+
     try {
       const saved = localStorage.getItem(LS_KEY);
       if (saved) {
@@ -100,26 +174,39 @@ export default function ExpressCampaignBuilder() {
   const clearError = (key: string) =>
     setErrors((e) => { const n = { ...e }; delete n[key]; return n; });
 
-  // ── Auto-save to localStorage on every state change ─────────────────────
+  // ── Auto-save to localStorage & DB on state change ─────────────────────
   useEffect(() => {
     if (!hasProgress) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
       try {
         localStorage.setItem(LS_KEY, JSON.stringify({ ...serializeState(state), _step: step }));
+        setDraftSaveStatus("saving");
+        if (savedDraftId) {
+          saveDraftToDb(state, step, savedDraftId);
+        }
         setDraftSaveStatus("saved");
         setTimeout(() => setDraftSaveStatus("idle"), 2000);
       } catch { /* ignore */ }
     }, 1500);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [state, step]);
+  }, [state, step, savedDraftId, saveDraftToDb]);
 
-  // ── Save to DB on unmount if user abandons mid-flow ─────────────────────
+  // ── Save to DB on unmount or on screen updates ─────────────────────────
   const saveDraftToDb = useCallback(async (currentState: ExpressState, currentStep: number, existingDraftId: string | null) => {
     if (!currentState.campaignName?.trim()) return;
     const startDate = new Date(currentState.startDate || Date.now());
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + (currentState.campaignDays || 7));
+
+    const totalCost = currentState.screensData
+      .filter((s) => currentState.selectedScreenIds.includes(s.id))
+      .reduce((sum, s) => {
+        const basePrice = calculateScreenPricePerDay(s);
+        const price = currentState.zonePriceOverrides[s.id] ?? basePrice;
+        return sum + (price * (currentState.campaignDays || 7));
+      }, 0);
+
     try {
       const res = await apiRequest("PUT", "/api/advertiser/campaigns/draft", {
         draftId: existingDraftId || undefined,
@@ -130,9 +217,11 @@ export default function ExpressCampaignBuilder() {
         campaignDays: currentState.campaignDays,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-        budget: 0,
+        budget: totalCost,
         creativeUrl: currentState.creativeUrl || null,
         targetArea: { type: "multiple", locations: currentState.locations },
+        zonePriceOverrides: currentState.zonePriceOverrides,
+        mode: "express",
       });
       const draft = await res.json();
       if (draft?.id) setSavedDraftId(draft.id);
@@ -354,11 +443,18 @@ export default function ExpressCampaignBuilder() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setLocation("/advertiser/campaigns/new")}
+            onClick={() => {
+              if (savedDraftId) {
+                saveDraftToDb(state, step, savedDraftId);
+                setLocation(`/advertiser/campaigns/${savedDraftId}`);
+              } else {
+                setLocation("/advertiser/campaigns/new");
+              }
+            }}
             className="gap-1.5 shrink-0 h-8"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
+            {savedDraftId ? "Back to Campaign" : "Back"}
           </Button>
           
           <div className="hidden sm:flex items-center gap-2 border-r pr-4">
@@ -377,6 +473,20 @@ export default function ExpressCampaignBuilder() {
               <div className="flex items-center gap-2">
                 {draftSaveStatus === "saving" && <span className="text-[10px] text-muted-foreground">Saving…</span>}
                 {draftSaveStatus === "saved" && <span className="text-[10px] text-emerald-600">Saved</span>}
+                {savedDraftId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      saveDraftToDb(state, step, savedDraftId);
+                      toast({ title: "Draft Saved", description: "Your changes have been saved." });
+                      setLocation(`/advertiser/campaigns/${savedDraftId}`);
+                    }}
+                    className="gap-1 text-[11px] h-6 px-2 ml-2"
+                  >
+                    Save & View Details
+                  </Button>
+                )}
               </div>
             </div>
             <Progress value={progress} className="h-1" />

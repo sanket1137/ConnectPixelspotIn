@@ -71,6 +71,46 @@ export default function AICampaignBuilder() {
   const update = (patch: Partial<AIState>) => setState((s) => ({ ...s, ...patch }));
   const clearError = (key: string) => setErrors((e) => { const n = { ...e }; delete n[key]; return n; });
 
+  // ── On mount: check for draftId in URL ───────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const draftId = params.get("draftId");
+    const stepParam = params.get("step");
+    if (draftId) {
+      apiRequest("GET", `/api/advertiser/campaigns/${draftId}`)
+        .then((res) => res.json())
+        .then((draft) => {
+          if (!draft || draft.error) return;
+          const summary = typeof draft.summary === "string" ? JSON.parse(draft.summary) : (draft.summary || {});
+          const screenIds = summary.selectedScreenIds || draft.bookings?.map((b: any) => b.screenId || b.id) || [];
+          const screensData = draft.bookings?.map((b: any) => b.screen).filter(Boolean) || [];
+
+          setState((s) => ({
+            ...s,
+            campaignName: draft.name || summary.name || "",
+            locationText: summary.locationText || "",
+            audienceText: summary.audienceText || "",
+            budget: draft.budget || summary.budget || 0,
+            selectedScreenIds: screenIds,
+            screensData: screensData.length > 0 ? screensData : s.screensData,
+            matchReasons: summary.matchReasons || [],
+            budgetWarnings: summary.budgetWarnings || [],
+            campaignDays: summary.campaignDays || 7,
+            startDate: summary.startDate
+              ? summary.startDate.split("T")[0]
+              : draft.startDate
+              ? new Date(draft.startDate).toISOString().split("T")[0]
+              : s.startDate,
+            creativeUrl: draft.creativeUrl || summary.creativeUrl || "",
+          }));
+
+          const targetStep = stepParam ? parseInt(stepParam, 10) : (screenIds.length > 0 ? 3 : 1);
+          setStep(targetStep);
+        })
+        .catch((err) => console.error("Failed to load AI draft:", err));
+    }
+  }, []);
+
   // Step 2 → trigger AI match when conversation finishes
   const handleConversationComplete = useCallback(async (
     locationText: string,

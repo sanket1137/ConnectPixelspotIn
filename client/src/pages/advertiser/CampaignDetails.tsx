@@ -18,7 +18,11 @@ import {
   X,
   Camera,
   ShieldCheck,
-  AlertTriangle 
+  AlertTriangle,
+  Plus,
+  Trash2,
+  FileText,
+  ArrowRight
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
@@ -68,6 +72,7 @@ interface CampaignWithBookings {
   budget: number;
   createdAt: string;
   paymentStatus: string | null;
+  summary?: any;
   bookings: BookingWithScreen[];
 }
 
@@ -77,6 +82,7 @@ export default function CampaignDetails() {
   const { toast } = useToast();
   const [alternativeDateDialog, setAlternativeDateDialog] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingWithScreen | null>(null);
+  const [screenToDelete, setScreenToDelete] = useState<BookingWithScreen | null>(null);
   const [disputeDialog, setDisputeDialog] = useState<{ open: boolean; proofId: string; reason: string }>({ open: false, proofId: "", reason: "" });
   const { initiatePayment, isProcessing: isPaymentProcessing } = useRazorpayCheckout();
 
@@ -84,6 +90,49 @@ export default function CampaignDetails() {
     queryKey: [`/api/advertiser/campaigns/${params?.id}`],
     enabled: !!params?.id,
   });
+
+  const removeScreenMutation = useMutation({
+    mutationFn: async (screenOrBookingId: string) => {
+      return apiRequest("DELETE", `/api/advertiser/campaigns/${params?.id}/screens/${screenOrBookingId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/advertiser/campaigns/${params?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
+      setScreenToDelete(null);
+      toast({
+        title: "Screen Removed",
+        description: "The screen has been removed from this draft campaign.",
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Error removing screen",
+        description: err.message || "Failed to remove screen from draft campaign.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAddScreens = () => {
+    if (!campaign) return;
+    let mode = "express";
+    try {
+      const summary = typeof campaign.summary === "string" ? JSON.parse(campaign.summary) : campaign.summary;
+      if (summary?.mode === "ai" || campaign.objective === "ai") {
+        mode = "ai";
+      } else if (summary?.mode === "advanced" || campaign.objective === "advanced") {
+        mode = "advanced";
+      }
+    } catch {}
+
+    if (mode === "ai") {
+      setLocation(`/advertiser/campaigns/new/ai?draftId=${campaign.id}&step=3`);
+    } else if (mode === "advanced") {
+      setLocation(`/advertiser/campaigns/new/advanced?draftId=${campaign.id}`);
+    } else {
+      setLocation(`/advertiser/campaigns/new/express?draftId=${campaign.id}&step=3`);
+    }
+  };
 
   // Fetch proofs for all bookings in this campaign
   const bookingIds = campaign?.bookings?.map(b => b.id) || [];
@@ -189,13 +238,23 @@ export default function CampaignDetails() {
         return <Badge className="bg-blue-500"><CheckCircle className="mr-1 h-3 w-3" />Active</Badge>;
       case "rejected":
         return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" />Rejected</Badge>;
+      case "draft":
+        return <Badge variant="outline" className="border-amber-500 text-amber-600 bg-amber-500/10">Draft</Badge>;
       default:
         return <Badge>{booking.status}</Badge>;
     }
   };
 
   const calculateCampaignStatus = () => {
-    if (!campaign || !campaign.bookings || !Array.isArray(campaign.bookings)) {
+    if (!campaign) {
+      return { text: "Unknown", variant: "secondary" as const };
+    }
+
+    if (campaign.status === "draft") {
+      return { text: "Draft", variant: "outline" as const };
+    }
+
+    if (!campaign.bookings || !Array.isArray(campaign.bookings)) {
       return { text: "Unknown", variant: "secondary" as const };
     }
     
@@ -266,7 +325,13 @@ export default function CampaignDetails() {
             <div className="grid grid-cols-4 gap-6">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Status</p>
-                <Badge variant={status.variant}>{status.text}</Badge>
+                {campaign.status === "draft" ? (
+                  <Badge variant="outline" className="border-amber-500 text-amber-600 bg-amber-500/10 font-medium">
+                    Draft
+                  </Badge>
+                ) : (
+                  <Badge variant={status.variant}>{status.text}</Badge>
+                )}
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Created</p>
@@ -290,10 +355,33 @@ export default function CampaignDetails() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Draft Mode Alert Banner */}
+        {campaign.status === "draft" && (
+          <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500/20 rounded-md">
+                  <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm">Campaign Draft Mode</h4>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    This campaign is currently in draft. You can add more screens or remove existing screens before finalizing.
+                  </p>
+                </div>
+              </div>
+              <Button onClick={handleAddScreens} className="bg-amber-600 hover:bg-amber-700 text-white shrink-0 gap-1.5 h-9">
+                <Plus className="h-4 w-4" />
+                Add Screens
+              </Button>
+            </div>
+          </Alert>
+        )}
       </div>
 
-      {/* Payment Section */}
-      {!(["advertiser_paid", "partially_released", "fully_settled"] as string[]).includes(campaign.paymentStatus || "") && (() => {
+      {/* Payment Section (Not shown for drafts) */}
+      {campaign.status !== "draft" && !(["advertiser_paid", "partially_released", "fully_settled"] as string[]).includes(campaign.paymentStatus || "") && (() => {
         const approvedBookings = campaign.bookings.filter(b => b.ownerApproved || b.status === "approved");
         const approvedTotal = approvedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
         if (approvedBookings.length === 0) return null;
@@ -344,7 +432,7 @@ export default function CampaignDetails() {
         </Card>
         );
       })()}
-      {(["advertiser_paid", "partially_released", "fully_settled"] as string[]).includes(campaign.paymentStatus || "") && (
+      {campaign.status !== "draft" && (["advertiser_paid", "partially_released", "fully_settled"] as string[]).includes(campaign.paymentStatus || "") && (
         <Alert>
           <CheckCircle className="h-4 w-4" />
           <AlertDescription>Payment completed for this campaign.</AlertDescription>
@@ -353,12 +441,30 @@ export default function CampaignDetails() {
 
       {/* Bookings List */}
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold">Screen Bookings ({campaign.bookings?.length || 0})</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">Screen Bookings ({campaign.bookings?.length || 0})</h2>
+          {campaign.status === "draft" && (
+            <Button onClick={handleAddScreens} size="sm" className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              Add Screens
+            </Button>
+          )}
+        </div>
 
         {!campaign.bookings || campaign.bookings.length === 0 ? (
           <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              No bookings for this campaign
+            <CardContent className="py-12 text-center text-muted-foreground space-y-4">
+              <Monitor className="h-10 w-10 text-muted-foreground mx-auto opacity-50" />
+              <div>
+                <p className="text-base font-medium text-foreground">No screens in this draft campaign yet</p>
+                <p className="text-sm text-muted-foreground mt-1">Select screens across India to add to your campaign.</p>
+              </div>
+              {campaign.status === "draft" && (
+                <Button onClick={handleAddScreens} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Screens Now
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -371,14 +477,28 @@ export default function CampaignDetails() {
                       <Monitor className="w-5 h-5 text-primary" />
                     </div>
                     <div className="flex-1 space-y-3">
-                      <div>
-                        <CardTitle className="text-lg">{booking.screen.name}</CardTitle>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {booking.screen.location}, {booking.screen.city}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {booking.screen.venueCategory}
-                        </p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-lg">{booking.screen?.name || "Screen"}</CardTitle>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {booking.screen?.location ? `${booking.screen.location}, ` : ""}{booking.screen?.city || ""}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {booking.screen?.venueCategory || ""}
+                          </p>
+                        </div>
+                        {campaign.status === "draft" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive gap-1.5 h-8 text-xs shrink-0"
+                            onClick={() => setScreenToDelete(booking)}
+                            data-testid={`button-delete-screen-${booking.id}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Remove Screen
+                          </Button>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-3 gap-4">
@@ -619,6 +739,35 @@ export default function CampaignDetails() {
               disabled={disputeProofMutation.isPending || !disputeDialog.reason.trim()}
             >
               {disputeProofMutation.isPending ? "Submitting..." : "Submit Dispute"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Screen from Draft Dialog */}
+      <Dialog open={!!screenToDelete} onOpenChange={(open) => !open && setScreenToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Screen from Draft?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove <strong className="text-foreground">{screenToDelete?.screen?.name || "this screen"}</strong> from this draft campaign?
+              The campaign budget will be recalculated automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setScreenToDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (screenToDelete) {
+                  removeScreenMutation.mutate(screenToDelete.screenId || screenToDelete.id);
+                }
+              }}
+              disabled={removeScreenMutation.isPending}
+            >
+              {removeScreenMutation.isPending ? "Removing..." : "Remove Screen"}
             </Button>
           </DialogFooter>
         </DialogContent>

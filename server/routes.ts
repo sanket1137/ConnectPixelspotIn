@@ -6,7 +6,8 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { User, Screen, Campaign, Booking } from "@shared/schema";
 import { db } from "./db";
 import { bookings, passwordResetTokens, campaigns, screens } from "@shared/schema";
-import { eq, and, gt, sql, inArray } from "drizzle-orm";
+import { eq, and, gt, sql, inArray, or } from "drizzle-orm";
+import { calculateScreenPricePerDay } from "@shared/utils";
 import { getCampaignAdvice } from "./ai-advisor";
 import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
 import { notificationService } from "./notifications";
@@ -3311,7 +3312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const campaignBookings = await storage.getBookingsByCampaign(id);
       
       // Enrich bookings with screen details
-      const enrichedBookings = await Promise.all(
+      let enrichedBookings = await Promise.all(
         campaignBookings.map(async (booking) => {
           const screen = await storage.getScreen(booking.screenId);
           return {
@@ -3321,12 +3322,212 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
       );
 
+      let campaignBudget = campaign.budget;
+
+      // If draft and has no DB bookings, reconstruct synthetic bookings from summary
+      if (campaign.status === "draft" && enrichedBookings.length === 0 && campaign.summary) {
+        try {
+          const summary = typeof campaign.summary === "string" ? JSON.parse(campaign.summary) : campaign.summary;
+          const screenIds: string[] = Array.isArray(summary.selectedScreenIds) ? summary.selectedScreenIds : [];
+
+          if (screenIds.length > 0) {
+            const days = summary.campaignDays || 7;
+            const synthetic = await Promise.all(
+              screenIds.map(async (screenId: string) => {
+                const screen = await storage.getScreen(screenId);
+                if (!screen) return null;
+                const basePrice = calculateScreenPricePerDay(screen);
+                const overridePrice = summary.zonePriceOverrides?.[screen.id];
+                const pricePerDay = overridePrice ?? basePrice;
+                const price = pricePerDay * days;
+                return {
+                  id: screen.id,
+                  screenId: screen.id,
+                  campaignId: campaign.id,
+                  price,
+                  status: "draft",
+                  ownerApproved: false,
+                  approvedByAdmin: false,
+                  ownerResponse: null,
+                  ownerRespondedAt: null,
+                  alternativeDates: null,
+                  adminNotes: null,
+                  startDate: summary.startDate || campaign.startDate,
+                  endDate: summary.endDate || campaign.endDate,
+                  screen,
+                };
+              })
+            );
+            enrichedBookings = synthetic.filter(Boolean) as any[];
+            if (!campaignBudget || campaignBudget === 0) {
+              campaignBudget = enrichedBookings.reduce((sum, b) => sum + (b.price || 0), 0);
+            }
+          }
+        } catch (err) {
+          console.error("Error parsing draft summary in getCampaign:", err);
+        }
+      }
+
       res.json({
         ...campaign,
+        budget: campaignBudget,
         bookings: enrichedBookings,
       });
     } catch (error) {
       console.error("Get campaign details error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Delete a screen/booking from a draft campaign (advertiser/agency)
+  app.delete("/api/advertiser/campaigns/:campaignId/screens/:screenId", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
+    try {
+      const { campaignId, screenId } = req.params;
+      const campaign = await storage.getCampaign(campaignId);
+
+      if (!campaign || campaign.advertiserId !== req.user!.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      if (campaign.status !== "draft") {
+        return res.status(400).json({ error: "Screens can only be removed from draft campaigns" });
+      }
+
+      // 1. Delete matching row from bookings table if exists
+      await db
+        .delete(bookings)
+        .where(
+          and(
+            eq(bookings.campaignId, campaignId),
+            or(eq(bookings.id, screenId), eq(bookings.screenId, screenId))
+          )
+        );
+
+      // 2. Remove screen from campaign summary if present
+      let newBudget = 0;
+      if (campaign.summary) {
+        try {
+          const summary = typeof campaign.summary === "string" ? JSON.parse(campaign.summary) : campaign.summary;
+          if (Array.isArray(summary.selectedScreenIds)) {
+            summary.selectedScreenIds = summary.selectedScreenIds.filter((id: string) => id !== screenId);
+          }
+          if (summary.zonePriceOverrides && summary.zonePriceOverrides[screenId]) {
+            delete summary.zonePriceOverrides[screenId];
+          }
+
+          // Recalculate budget
+          const remainingBookings = await storage.getBookingsByCampaign(campaignId);
+          if (remainingBookings.length > 0) {
+            newBudget = remainingBookings.reduce((s, b) => s + (b.price || 0), 0);
+          } else if (Array.isArray(summary.selectedScreenIds)) {
+            const days = summary.campaignDays || 7;
+            for (const sId of summary.selectedScreenIds) {
+              const sc = await storage.getScreen(sId);
+              if (sc) {
+                const bp = calculateScreenPricePerDay(sc);
+                const p = (summary.zonePriceOverrides?.[sc.id] ?? bp) * days;
+                newBudget += p;
+              }
+            }
+          }
+
+          await db
+            .update(campaigns)
+            .set({
+              summary: JSON.stringify(summary),
+              budget: newBudget,
+            })
+            .where(eq(campaigns.id, campaignId));
+        } catch (err) {
+          console.error("Error updating draft summary on screen delete:", err);
+        }
+      } else {
+        const remainingBookings = await storage.getBookingsByCampaign(campaignId);
+        newBudget = remainingBookings.reduce((s, b) => s + (b.price || 0), 0);
+        await db
+          .update(campaigns)
+          .set({ budget: newBudget })
+          .where(eq(campaigns.id, campaignId));
+      }
+
+      res.json({ success: true, budget: newBudget });
+    } catch (error) {
+      console.error("Delete draft screen error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Alias: delete booking from draft campaign
+  app.delete("/api/advertiser/campaigns/:campaignId/bookings/:bookingId", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
+    try {
+      const { campaignId, bookingId } = req.params;
+      const campaign = await storage.getCampaign(campaignId);
+
+      if (!campaign || campaign.advertiserId !== req.user!.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      if (campaign.status !== "draft") {
+        return res.status(400).json({ error: "Screens can only be removed from draft campaigns" });
+      }
+
+      await db
+        .delete(bookings)
+        .where(
+          and(
+            eq(bookings.campaignId, campaignId),
+            or(eq(bookings.id, bookingId), eq(bookings.screenId, bookingId))
+          )
+        );
+
+      let newBudget = 0;
+      if (campaign.summary) {
+        try {
+          const summary = typeof campaign.summary === "string" ? JSON.parse(campaign.summary) : campaign.summary;
+          if (Array.isArray(summary.selectedScreenIds)) {
+            summary.selectedScreenIds = summary.selectedScreenIds.filter((id: string) => id !== bookingId);
+          }
+          if (summary.zonePriceOverrides && summary.zonePriceOverrides[bookingId]) {
+            delete summary.zonePriceOverrides[bookingId];
+          }
+
+          const remainingBookings = await storage.getBookingsByCampaign(campaignId);
+          if (remainingBookings.length > 0) {
+            newBudget = remainingBookings.reduce((s, b) => s + (b.price || 0), 0);
+          } else if (Array.isArray(summary.selectedScreenIds)) {
+            const days = summary.campaignDays || 7;
+            for (const sId of summary.selectedScreenIds) {
+              const sc = await storage.getScreen(sId);
+              if (sc) {
+                const bp = calculateScreenPricePerDay(sc);
+                const p = (summary.zonePriceOverrides?.[sc.id] ?? bp) * days;
+                newBudget += p;
+              }
+            }
+          }
+
+          await db
+            .update(campaigns)
+            .set({
+              summary: JSON.stringify(summary),
+              budget: newBudget,
+            })
+            .where(eq(campaigns.id, campaignId));
+        } catch (err) {
+          console.error("Error updating draft summary on booking delete:", err);
+        }
+      } else {
+        const remainingBookings = await storage.getBookingsByCampaign(campaignId);
+        newBudget = remainingBookings.reduce((s, b) => s + (b.price || 0), 0);
+        await db
+          .update(campaigns)
+          .set({ budget: newBudget })
+          .where(eq(campaigns.id, campaignId));
+      }
+
+      res.json({ success: true, budget: newBudget });
+    } catch (error) {
+      console.error("Delete draft booking error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
