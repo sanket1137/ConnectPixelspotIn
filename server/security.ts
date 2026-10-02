@@ -50,7 +50,7 @@ export function setupSecurity(app: Express) {
     }
   }
   
-  const allowedOrigins = process.env.NODE_ENV === 'production'
+  const allowedOrigins = (process.env.NODE_ENV === 'production' && process.env.LOCAL_DEV !== 'true')
     ? [
         'https://pixelspot.in',
         'https://www.pixelspot.in',

@@ -22,6 +22,9 @@ import { registerSupportRoutes } from "./routes-support";
 import { geolocationService } from "./services/geolocation";
 // import { serveSitemap, serveRobotsTxt } from "./sitemap";
 import { fromCitySlug, fromVenueSlug, toSlug, normalizeCityName, USER_ROLES } from "@shared/constants";
+import { getVenueType } from "@shared/venueTaxonomy";
+import { cleanVenueDetails } from "./venueDetails";
+import type { ScreenSort } from "./storage";
 
 // Extend Express Request to include user
 declare global {
@@ -1750,7 +1753,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/screens/create", authenticate, requireRole("admin"), async (req, res) => {
     try {
       const { ownerId, ...screenData } = req.body;
-      
+      const venueError = cleanVenueDetails(screenData);
+      if (venueError) return res.status(400).json({ error: venueError });
+
       // Auto-calculate maxBrandsPerLoop
       if (screenData.loopDuration && screenData.durationPerSlot) {
         const loopDur = parseInt(String(screenData.loopDuration));
@@ -1967,6 +1972,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Auto-calculate maxBrandsPerLoop from loopDuration and durationPerSlot
       const body = { ...req.body };
+      const venueError = cleanVenueDetails(body);
+      if (venueError) return res.status(400).json({ error: venueError });
       if (body.loopDuration && body.durationPerSlot) {
         const loopDur = parseInt(String(body.loopDuration));
         const slotDur = parseInt(String(body.durationPerSlot));
@@ -2012,6 +2019,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Auto-calculate maxBrandsPerLoop
       const body = { ...req.body };
+      const venueError = cleanVenueDetails(body, existingScreen);
+      if (venueError) return res.status(400).json({ error: venueError });
 
       // Sanitize: convert empty strings to null for integer/numeric fields
       // (HTML forms send "" for cleared number inputs, which breaks Postgres integer columns)
@@ -2134,12 +2143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // If fewer screens than requested → counter-offer (advertiser must accept/reject)
         if (screensAccepted < screensRequested) {
           const days = Math.max(1, Math.ceil((new Date(existingBooking.endDate).getTime() - new Date(existingBooking.startDate).getTime()) / (1000 * 60 * 60 * 24)));
-          let newPrice: number;
-          if (screensAccepted === screen.numberOfScreens && screen.bundlePricePerDay) {
-            newPrice = screen.bundlePricePerDay * days;
-          } else {
-            newPrice = screen.pricePerDay * screensAccepted * days;
-          }
+          const newPrice = screen.pricePerDay * screensAccepted * days;
 
           const counterBooking = await storage.counterOfferBooking(id, screensAccepted, newPrice, req.body.reason);
           if (!counterBooking) {
@@ -2189,12 +2193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (screen && screen.isMultiScreen && !screen.bulkBookingMandatory && req.body.screensAccepted) {
         const screensAccepted = parseInt(req.body.screensAccepted);
         const days = Math.max(1, Math.ceil((new Date(booking.endDate).getTime() - new Date(booking.startDate).getTime()) / (1000 * 60 * 60 * 24)));
-        let newPrice: number;
-        if (screensAccepted === screen.numberOfScreens && screen.bundlePricePerDay) {
-          newPrice = screen.bundlePricePerDay * days;
-        } else {
-          newPrice = screen.pricePerDay * screensAccepted * days;
-        }
+        const newPrice = screen.pricePerDay * screensAccepted * days;
         await storage.updateBooking(booking.id, { screensAccepted, price: newPrice } as any);
         booking.screensAccepted = screensAccepted;
         booking.price = newPrice;
@@ -2507,12 +2506,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all approved screens (for discovery) with SQL-level filtering & pagination
-  app.get("/api/screens", async (req, res) => {
-    try {
-      const { city, type, minPrice, maxPrice, pincode, limit, offset, search, page, pageSize, venueCategories, environmentTypes, environmentTags, minBookingDays, lat, lng, radiusKm, boundsN, boundsS, boundsE, boundsW, sortBy, sortOrder, userIntents, locationTags, locations, types, occupationMixes, userMoods, genderOrientations, incomeLevels } = req.query;
-      
-      const result = await storage.getFilteredScreens({
+  // Query string → getFilteredScreens filters (shared by /api/screens and /api/screens/facets)
+  const parseScreenFilters = (query: typeof Object.prototype & Record<string, any>) => {
+      const { city, type, minPrice, maxPrice, pincode, limit, offset, search, page, pageSize, venueCategories, environmentTypes, environmentTags, minBookingDays, lat, lng, radiusKm, boundsN, boundsS, boundsE, boundsW, sortBy, sortOrder, userIntents, locationTags, locations, types, occupationMixes, userMoods, genderOrientations, incomeLevels, families, venueTypes, environment, state, screenCategories, trafficTypes } = query;
+      const asList = (v: unknown) => (v ? (Array.isArray(v) ? v : [v]).map(String) : undefined);
+
+      return {
+        state: state ? String(state) : undefined,
+        screenCategories: asList(screenCategories),
+        trafficTypes: asList(trafficTypes),
+        families: asList(families),
+        venueTypes: asList(venueTypes),
+        environment: environment === 'indoor' || environment === 'outdoor' ? environment : undefined,
         city: city as string | undefined,
         type: type as string | undefined,
         minPrice: minPrice ? parseInt(minPrice as string) : undefined,
@@ -2542,13 +2547,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
         boundsE: boundsE !== undefined ? parseFloat(boundsE as string) : undefined,
         boundsW: boundsW !== undefined ? parseFloat(boundsW as string) : undefined,
         locations: locations ? JSON.parse(locations as string) : undefined,
-        sortBy: sortBy as 'distance' | 'price' | 'popularity' | 'newest' | undefined,
+        sortBy: sortBy as ScreenSort | undefined,
         sortOrder: sortOrder as 'asc' | 'desc' | undefined,
+      };
+  };
+
+  // Every matching screen as a slim row — for map pins, clusters and venue grouping. The list uses
+  // /api/screens with page/pageSize; the map needs all matches, but not all columns.
+  app.get("/api/screens/pins", async (req, res) => {
+    try {
+      const result = await storage.getFilteredScreens({
+        ...parseScreenFilters(req.query),
+        fields: 'pins', sortBy: 'recommended', page: undefined, pageSize: undefined, limit: undefined, offset: undefined,
       });
-      
+      res.json(Array.isArray(result) ? result : result.screens);
+    } catch (error) {
+      console.error("Get screen pins error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get all approved screens (for discovery) with SQL-level filtering & pagination
+  app.get("/api/screens", async (req, res) => {
+    try {
+      const result = await storage.getFilteredScreens(parseScreenFilters(req.query));
       res.json(result);
     } catch (error) {
       console.error("Get screens error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Screen counts per venue family / type for the current search, ignoring the venue-type filter
+  // itself — so chips can show "Cinema 412" even while "Residential" is selected.
+  app.get("/api/screens/facets", async (req, res) => {
+    try {
+      const filters = parseScreenFilters(req.query);
+      const result = await storage.getFilteredScreens({
+        ...filters,
+        families: undefined, venueTypes: undefined, venueCategories: undefined, fields: 'pins', sortBy: 'recommended',
+        page: undefined, pageSize: undefined, limit: undefined, offset: undefined,
+      });
+      const rows = Array.isArray(result) ? result : result.screens;
+      const families: Record<string, number> = {};
+      const types: Record<string, number> = {};
+      let total = 0;
+      for (const s of rows) {
+        const n = s.isMultiScreen && s.numberOfScreens && s.numberOfScreens > 1 ? s.numberOfScreens : 1;
+        total += n;
+        const t = s.venueType ? getVenueType(s.venueType) : undefined;
+        if (!t) continue;
+        types[t.slug] = (types[t.slug] || 0) + n;
+        families[t.family] = (families[t.family] || 0) + n;
+      }
+      res.json({ total, families, types });
+    } catch (error) {
+      console.error("Get screen facets error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2872,7 +2926,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           latitude: r.latitude, longitude: r.longitude, size: r.size,
           type: r.type, resolution: r.resolution, displayFormat: r.display_format,
           isMultiScreen: r.is_multi_screen, numberOfScreens: r.number_of_screens,
-          bundlePricePerDay: r.bundle_price_per_day, bulkBookingMandatory: r.bulk_booking_mandatory,
+          bulkBookingMandatory: r.bulk_booking_mandatory,
           screenImages: r.screen_images, environmentType: r.environment_type,
           status: r.status, imageUrl: r.image_url, thumbnailUrl: r.thumbnail_url,
           venueType: r.venue_type, interestSegments: r.interest_segments,
@@ -3169,9 +3223,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const requestedScreens = req.body.screensRequested ? parseInt(req.body.screensRequested) : null;
 
         if (screen.bulkBookingMandatory) {
-          // Bulk mode: must book all screens, use bundle price if available
+          // Bulk mode: must book all screens
           screensRequested = screen.numberOfScreens;
-          const dailyPrice = screen.bundlePricePerDay || (screen.pricePerDay * screen.numberOfScreens);
+          const dailyPrice = screen.pricePerDay * screen.numberOfScreens;
           serverPrice = dailyPrice * days;
         } else if (requestedScreens && requestedScreens >= 1) {
           // Flexible mode: advertiser chose specific number of screens
@@ -3179,16 +3233,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(400).json({ error: `Cannot request more than ${screen.numberOfScreens} screens` });
           }
           screensRequested = requestedScreens;
-          if (requestedScreens === screen.numberOfScreens && screen.bundlePricePerDay) {
-            // Booking all screens — use bundle discount
-            serverPrice = screen.bundlePricePerDay * days;
-          } else {
-            serverPrice = screen.pricePerDay * requestedScreens * days;
-          }
+          serverPrice = screen.pricePerDay * requestedScreens * days;
         } else {
-          // Flexible mode, not mandatory, no explicit quantity — this listing is priced and
-          // booked as a single direct-priced unit, regardless of how many physical screens
-          // happen to be installed at the venue (bulkBookingMandatory=false means no × or ÷)
+          screensRequested = 1;
           serverPrice = (screen.pricePerDay || 0) * days;
         }
       } else {

@@ -5,7 +5,7 @@ export const VENUE_CATEGORIES = [
   'Airport',
   'Apartment',
   'Bus Stop',
-  'Café',
+  'Cafe',
   'Cinema',
   'Co-working',
   'College',
@@ -50,10 +50,10 @@ export const ROLE_LABELS: Record<UserRole, string> = {
  * Key = lowercase non-standard value, Value = canonical value from VENUE_CATEGORIES.
  */
 export const VENUE_CATEGORY_ALIASES: Record<string, string> = {
-  'cafe': 'Café',
-  'café': 'Café',
-  'cafe ': 'Café',
-  ' café': 'Café',
+  'cafe': 'Cafe',
+  'café': 'Cafe',
+  'cafe ': 'Cafe',
+  ' café': 'Cafe',
   'cinema lobby': 'Cinema',
   'multiplex': 'Cinema',
   'food court': 'Restaurant',

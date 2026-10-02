@@ -7,9 +7,18 @@ const clients = new Set<WebSocket>();
 const userClients = new Map<string, Set<WebSocket>>();
 
 export function setupWebSocket(server: Server) {
-  wss = new WebSocketServer({ 
-    server,
-    path: '/ws'
+  // noServer + our own 'upgrade' handler: with { server, path } the ws library answers EVERY
+  // upgrade on the HTTP server and rejects non-/ws ones with 400 — which killed Vite's HMR socket
+  // in development. Only /ws is ours; anything else is left for other handlers (Vite HMR).
+  wss = new WebSocketServer({ noServer: true });
+  server.on('upgrade', (req, socket, head) => {
+    const pathname = (req.url || '').split('?')[0];
+    if (pathname !== '/ws') {
+      // production has no other upgrade handler — close instead of leaving the socket hanging
+      if (process.env.NODE_ENV === 'production') socket.destroy();
+      return;
+    }
+    wss!.handleUpgrade(req, socket, head, (ws) => wss!.emit('connection', ws, req));
   });
 
   wss.on('connection', (ws: WebSocket) => {

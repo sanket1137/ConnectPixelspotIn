@@ -14,6 +14,7 @@ export type VenueFamily =
   | "outdoor"
   | "transit"
   | "lifestyle"
+  | "education"
   | "other";
 
 export const VENUE_FAMILY_LABELS: Record<VenueFamily, string> = {
@@ -22,22 +23,24 @@ export const VENUE_FAMILY_LABELS: Record<VenueFamily, string> = {
   retail: "Retail & Malls",
   food: "Food & Drink",
   workplace: "Workplace",
-  outdoor: "Outdoor",
+  outdoor: "Billboards & roads",
   transit: "Transit",
   lifestyle: "Lifestyle & Health",
+  education: "Education",
   other: "Venue",
 };
 
 // Order matters: first match wins. Keywords are matched against lower-cased text.
 const FAMILY_RULES: Array<{ family: VenueFamily; keywords: string[] }> = [
   { family: "residential", keywords: ["apartment", "residential", "residence", "society", "villa", "gated", "housing"] },
+  { family: "education", keywords: ["school", "academy", "college", "institute", "university", "coaching", "tuition", "classes"] },
   { family: "cinema", keywords: ["cinema", "multiplex", "theater", "theatre", "pvr", "inox", "cinepolis", "cinépolis", "audi"] },
   { family: "transit", keywords: ["bus stop", "bus station", "bus stand", "metro", "railway", "train", "airport", "transit", "vande bharat"] },
   { family: "outdoor", keywords: ["billboard", "bill board", "hoarding", "highway", "road", "street", "junction", "flyover", "petrol", "parking", "barricade", "mill", "outdoor"] },
   { family: "workplace", keywords: ["corporate", "office", "tech park", "it park", "co-working", "coworking", "business park"] },
   { family: "retail", keywords: ["mall", "hypermarket", "supermarket", "super market", "smart bazaar", "retail", "store", "shopping", "mart"] },
   { family: "food", keywords: ["restaurant", "cafe", "café", "coffee", "food", "hotel", "dhaba", "resto", "bar", "bakery", "udupi"] },
-  { family: "lifestyle", keywords: ["salon", "spa", "gym", "fitness", "hospital", "clinic", "play area", "play zone", "play ville", "playville", "kids", "stadium", "sports", "college"] },
+  { family: "lifestyle", keywords: ["salon", "spa", "gym", "fitness", "hospital", "clinic", "play area", "play zone", "play ville", "playville", "play centre", "play center", "game centre", "game center", "kids", "stadium", "sports", "dance", "yoga", "tattoo", "nail"] },
 ];
 
 export function getVenueFamily(input: { venueCategory?: string | null; venueName?: string | null; name?: string | null }): VenueFamily {
@@ -54,25 +57,58 @@ export function getVenueFamily(input: { venueCategory?: string | null; venueName
 
 // ---------- Numbers written in descriptions ----------
 
-type CountKey = "flats" | "residents" | "seats" | "audis" | "offices" | "employees" | "stores" | "members" | "rooms";
+type CountKey =
+  | "flats" | "residents" | "seats" | "audis" | "offices" | "employees" | "stores" | "members" | "rooms"
+  | "towers" | "lifts" | "departures";
 
-const COUNT_PATTERNS: Record<CountKey, RegExp> = {
-  flats: /(\d[\d,]*)\s*\+?\s*(?:flats|apartments|households|homes|families)\b/i,
-  residents: /(\d[\d,]*)\s*\+?\s*residents\b/i,
-  seats: /(\d[\d,]*)\s*\+?\s*(?:seats|seater|seating|recliners|covers)\b/i,
-  audis: /(\d[\d,]*)\s*\+?\s*(?:audis|auditoriums|audi screens)\b/i,
-  offices: /(\d[\d,]*)\s*\+?\s*(?:offices|companies|tenants)\b/i,
-  employees: /(\d[\d,]*)\s*\+?\s*(?:employees|professionals|working professionals)\b/i,
-  stores: /(\d[\d,]*)\s*\+?\s*(?:stores|outlets|shops|brands)\b/i,
-  members: /(\d[\d,]*)\s*\+?\s*(?:members|memberships)\b/i,
-  rooms: /(\d[\d,]*)\s*\+?\s*(?:rooms|keys)\b/i,
+// Several phrasings per key; the first pattern that matches wins. Group 1 is always the number.
+// Covers the templated descriptions from bulk imports too, e.g. "Seating capacity 162",
+// "6 tower(s) with 12 lift(s) serving 660 flats", "538 bus departures/day".
+const COUNT_PATTERNS: Record<CountKey, RegExp[]> = {
+  flats: [/(\d[\d,]*)\s*\+?\s*(?:flats|apartments|households|homes|families)\b/i],
+  residents: [/(\d[\d,]*)\s*\+?\s*residents\b/i],
+  seats: [/seating capacity\s*(?:of\s*)?[:\-]?\s*(\d[\d,]*)/i, /(\d[\d,]*)\s*\+?\s*(?:seats|seater|seating|recliners|covers)\b/i],
+  audis: [/(\d[\d,]*)\s*\+?\s*(?:audis|auditoriums|audi screens)\b/i],
+  offices: [/(\d[\d,]*)\s*\+?\s*(?:offices|companies|tenants)\b/i],
+  employees: [/(\d[\d,]*)\s*\+?\s*(?:employees|professionals|working professionals)\b/i],
+  stores: [/(\d[\d,]*)\s*\+?\s*(?:stores|outlets|shops|brands)\b/i],
+  members: [/(\d[\d,]*)\s*\+?\s*(?:members|memberships|students)\b/i],
+  rooms: [/(\d[\d,]*)\s*\+?\s*(?:rooms|keys)\b/i],
+  towers: [/(\d[\d,]*)\s*tower(?:\(s\)|s)?\b/i],
+  lifts: [/(\d[\d,]*)\s*lift(?:\(s\)|s)?\b/i],
+  departures: [/(\d[\d,]*)\s*(?:bus\s+|train\s+)?departures\b/i],
 };
 
 function parseCount(description: string, key: CountKey): number | null {
-  const m = description.match(COUNT_PATTERNS[key]);
+  for (const pattern of COUNT_PATTERNS[key]) {
+    const m = description.match(pattern);
+    if (!m) continue;
+    const n = parseInt(m[1].replace(/,/g, ""), 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+// "avg flat price approx Rs 1.2 Cr" / "average flat value ₹85 lakh" → rupees
+function parseFlatValue(description: string): number | null {
+  const m = description.match(/(?:avg|average)\.?\s+flat\s+(?:price|value|cost)[^\d₹]{0,20}(?:rs\.?|inr|₹)?\s*([\d.]+)\s*(cr|crore|crores|l|lac|lakh|lakhs)\b/i);
   if (!m) return null;
-  const n = parseInt(m[1].replace(/,/g, ""), 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
+  const n = parseFloat(m[1]);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * (/^c/i.test(m[2]) ? 10000000 : 100000));
+}
+
+// "Cinema category: SILVER" → "Silver"
+function parseCinemaTier(description: string): string | null {
+  const m = description.match(/cinema category\s*:\s*([a-z' ]{3,20}?)(?:[.,\n]|$)/i);
+  if (!m) return null;
+  return m[1].trim().toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function formatRupeesCompact(n: number): string {
+  if (n >= 10000000) return `₹${(n / 10000000).toFixed(1).replace(/\.0$/, "")} Cr`;
+  if (n >= 100000) return `₹${(n / 100000).toFixed(1).replace(/\.0$/, "")} L`;
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
 }
 
 // ---------- Formatting ----------
@@ -133,6 +169,18 @@ export interface VenueFact {
 // Venue-level facts from all listings at the venue. Footfall/dwell are venue properties that each
 // listing repeats, so we take the max rather than summing.
 export function getVenueKeyFacts(listings: any[], family: VenueFamily, totalScreens: number): VenueFact[] {
+  return buildVenueFacts(listings, family, totalScreens).slice(0, 4);
+}
+
+// Facts that describe the venue itself (not footfall, screen count, hours or size) — used for the
+// two-fact line on result cards, e.g. "660 flats · ₹1.2 Cr avg flat value".
+export function getVenueTypeFacts(listings: any[], family: VenueFamily): VenueFact[] {
+  const generic = new Set(["footfall", "screens", "hours", "size", "dwell"]);
+  return buildVenueFacts(listings, family, 1).filter((f) => !generic.has(f.key));
+}
+
+// Every fact we can back with data, most important for the venue type first.
+export function buildVenueFacts(listings: any[], family: VenueFamily, totalScreens: number): VenueFact[] {
   const description = listings.map((l) => l.description || "").join(" \n ");
   const maxOf = (pick: (l: any) => number | null | undefined) => {
     const values = listings.map(pick).filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
@@ -159,6 +207,7 @@ export function getVenueKeyFacts(listings: any[], family: VenueFamily, totalScre
     outdoor: "Daily traffic",
     transit: "Daily commuters",
     lifestyle: "Daily visitors",
+    education: "Daily students & parents",
     other: "Daily footfall",
   };
 
@@ -167,26 +216,32 @@ export function getVenueKeyFacts(listings: any[], family: VenueFamily, totalScre
   const dwellFact = fact("dwell", family === "transit" ? "Avg wait" : "Avg time spent", dwell ? `${dwell} min` : null);
   const hoursFact = fact("hours", "Screen hours", hours);
 
+  const flatValue = parseFlatValue(description);
+  const flatValueFact = fact("flatValue", "Avg flat value", flatValue ? formatRupeesCompact(flatValue) : null);
+  const cinemaTier = parseCinemaTier(description);
+
   const byFamily: Record<VenueFamily, Array<VenueFact | null>> = {
-    residential: [fact("flats", "Flats", counts.flats), fact("residents", "Residents", counts.residents), footfallFact, screensFact],
-    cinema: [footfallFact, fact("seats", "Seats", counts.seats), fact("audis", "Audis", counts.audis), dwellFact],
+    residential: [fact("flats", "Flats", counts.flats), flatValueFact, fact("residents", "Residents", counts.residents), footfallFact, fact("towers", "Towers", counts.towers), fact("lifts", "Lifts", counts.lifts), screensFact],
+    cinema: [fact("seats", "Seats", counts.seats), fact("tier", "Cinema tier", cinemaTier), fact("audis", "Audis", counts.audis), footfallFact, dwellFact],
     retail: [footfallFact, fact("stores", "Stores", counts.stores), dwellFact, screensFact],
     food: [footfallFact, fact("seats", "Seats", counts.seats), dwellFact, fact("rooms", "Rooms", counts.rooms)],
-    workplace: [fact("offices", "Offices", counts.offices), fact("employees", "Employees", counts.employees), footfallFact, screensFact],
+    workplace: [fact("employees", "Employees", counts.employees), fact("offices", "Offices", counts.offices), footfallFact, fact("lifts", "Lifts", counts.lifts), screensFact],
     outdoor: [footfallFact, fact("size", "Size", largestSize), hoursFact, screensFact],
-    transit: [footfallFact, dwellFact, hoursFact, screensFact],
+    transit: [footfallFact, fact("departures", "Departures / day", counts.departures), dwellFact, hoursFact, screensFact],
     lifestyle: [footfallFact, dwellFact, fact("members", "Members", counts.members), fact("audience", "Audience", audience)],
+    education: [footfallFact, dwellFact, fact("members", "Students", counts.members), fact("audience", "Audience", audience)],
     other: [footfallFact, dwellFact, hoursFact, screensFact],
   };
 
   const facts: VenueFact[] = [];
   const seen = new Set<string>();
   for (const f of [...byFamily[family], footfallFact, dwellFact, screensFact, hoursFact]) {
+    // footfall that only repeats an earlier number ("3,000 residents" / "3,000 daily footfall") adds nothing
+    if (f && f.key === "footfall" && facts.some((x) => x.value === f.value)) continue;
     if (f && !seen.has(f.key)) {
       facts.push(f);
       seen.add(f.key);
     }
-    if (facts.length === 4) break;
   }
   return facts;
 }

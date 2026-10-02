@@ -17,16 +17,17 @@ export function getBasePricePerPhysicalScreen(screen: any): number {
 }
 
 // Total price per day for the venue as listed — what actually gets charged for booking it.
-export function calculateScreenPricePerDay(screen: any): number {
-  const price = screen.pricePerDay || 0;
-  if (screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && screen.bulkBookingMandatory) {
-    return screen.bundlePricePerDay || (price * screen.numberOfScreens);
+export function calculateScreenPricePerDay(screen: any, quantity?: number): number {
+  const price = Number(screen?.pricePerDay) || 0;
+  if (screen?.isMultiScreen && screen?.numberOfScreens && screen.numberOfScreens > 1 && screen.bulkBookingMandatory) {
+    return price * screen.numberOfScreens;
   }
-  return price;
+  const qty = quantity && quantity >= 1 ? quantity : 1;
+  return price * qty;
 }
 
-export function calculateScreenCampaignPrice(screen: any, campaignDays: number): number {
-  return calculateScreenPricePerDay(screen) * campaignDays;
+export function calculateScreenCampaignPrice(screen: any, campaignDays: number, quantity?: number): number {
+  return calculateScreenPricePerDay(screen, quantity) * campaignDays;
 }
 
 export function getScreenCountDisplay(screen: any): string {

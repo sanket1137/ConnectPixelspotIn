@@ -134,6 +134,16 @@ export const screens = pgTable("screens", {
   rejectionReason: text("rejection_reason"), // Admin's reason for rejecting the screen
   ownedByAdmin: boolean("owned_by_admin").notNull().default(false),
   host: text("host"), // Provider/network host code e.g. 'IND-06-PVR'
+
+  // Derived at write time from shared/venueTaxonomy.ts (see migrations/2026_09_venue_taxonomy.up.sql)
+  venueType: text("venue_type"), // canonical type slug from venue_category, e.g. 'apartment'
+  environmentClass: text("environment_class"), // 'indoor' | 'outdoor'
+  searchText: text("search_text"), // lowercased, accent-free: names, address, city, type labels, host
+
+  // Venue-specific audience inputs (keys defined per venue type in shared/venueAttributes.ts)
+  venueAttributes: jsonb("venue_attributes").$type<Record<string, number | string | boolean>>().notNull().default({}),
+  customAttributes: jsonb("custom_attributes").$type<Array<{ label: string; value: string; unit?: string }>>().notNull().default([]),
+  footfallNote: text("footfall_note"), // null | 'estimate' | 'hidden' (placeholder footfall — venue metrics shown instead)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 
   // Auto-tagging metadata

@@ -22,7 +22,9 @@ export function log(message: string, source = "express") {
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
-    hmr: { server },
+    // clientPort: in middleware mode Vite doesn't know our port, so after a failed first connect
+    // (e.g. a tab left open across a server restart) its fallback dialled ws://localhost:undefined
+    hmr: { server, clientPort: parseInt(process.env.PORT || "5000", 10) },
     allowedHosts: true as const,
   };
 
@@ -31,9 +33,11 @@ export async function setupVite(app: Express, server: Server) {
     configFile: false,
     customLogger: {
       ...viteLogger,
+      // Log and keep serving: exiting here meant one half-saved file (a transient syntax error
+      // while editing) took the whole localhost server down. Vite shows the error overlay and
+      // recovers on the next save.
       error: (msg, options) => {
         viteLogger.error(msg, options);
-        process.exit(1);
       },
     },
     server: serverOptions,
