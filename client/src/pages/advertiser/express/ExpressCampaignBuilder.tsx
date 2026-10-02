@@ -174,24 +174,6 @@ export default function ExpressCampaignBuilder() {
   const clearError = (key: string) =>
     setErrors((e) => { const n = { ...e }; delete n[key]; return n; });
 
-  // ── Auto-save to localStorage & DB on state change ─────────────────────
-  useEffect(() => {
-    if (!hasProgress) return;
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => {
-      try {
-        localStorage.setItem(LS_KEY, JSON.stringify({ ...serializeState(state), _step: step }));
-        setDraftSaveStatus("saving");
-        if (savedDraftId) {
-          saveDraftToDb(state, step, savedDraftId);
-        }
-        setDraftSaveStatus("saved");
-        setTimeout(() => setDraftSaveStatus("idle"), 2000);
-      } catch { /* ignore */ }
-    }, 1500);
-    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [state, step, savedDraftId, saveDraftToDb]);
-
   // ── Save to DB on unmount or on screen updates ─────────────────────────
   const saveDraftToDb = useCallback(async (currentState: ExpressState, currentStep: number, existingDraftId: string | null) => {
     if (!currentState.campaignName?.trim()) return;
@@ -227,6 +209,24 @@ export default function ExpressCampaignBuilder() {
       if (draft?.id) setSavedDraftId(draft.id);
     } catch { /* silently fail — user won't see this */ }
   }, []);
+
+  // ── Auto-save to localStorage & DB on state change ─────────────────────
+  useEffect(() => {
+    if (!hasProgress) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify({ ...serializeState(state), _step: step }));
+        setDraftSaveStatus("saving");
+        if (savedDraftId) {
+          saveDraftToDb(state, step, savedDraftId);
+        }
+        setDraftSaveStatus("saved");
+        setTimeout(() => setDraftSaveStatus("idle"), 2000);
+      } catch { /* ignore */ }
+    }, 1500);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [state, step, savedDraftId, saveDraftToDb, hasProgress]);
 
   // Save to DB on component unmount
   const stateRef = useRef(state);
