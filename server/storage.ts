@@ -431,17 +431,31 @@ export class DatabaseStorage implements IStorage {
         screen: screens,
         activeZoneId: zones.id,
         zoneName: zones.name,
+        zonePricePerDay: zones.pricePerDay,
       })
       .from(screens)
       .leftJoin(zones, and(eq(screens.zoneId, zones.id), eq(zones.status, "active")))
       .where(eq(screens.id, id))
       .limit(1);
     if (!rows.length) return undefined;
-    const { screen, activeZoneId, zoneName } = rows[0];
+    const { screen, activeZoneId, zoneName, zonePricePerDay } = rows[0];
+    let zoneScreenCount: number | null = null;
+    let pricePerDay = screen.pricePerDay;
+    if (activeZoneId && zonePricePerDay != null) {
+      const [countRow] = await db
+        .select({ count: drizzleSql<number>`count(*)::int` })
+        .from(screens)
+        .where(and(eq(screens.zoneId, activeZoneId), inArray(screens.status, ["active", "approved"])));
+      zoneScreenCount = countRow?.count || 1;
+      pricePerDay = Math.round((Number(zonePricePerDay) / zoneScreenCount) * 100) / 100;
+    }
     return {
       ...screen,
+      pricePerDay,
       zoneId: activeZoneId || null,
       zoneName: activeZoneId ? zoneName : null,
+      zonePricePerDay: activeZoneId && zonePricePerDay != null ? Number(zonePricePerDay) : null,
+      zoneScreenCount,
     } as any;
   }
 
@@ -479,16 +493,34 @@ export class DatabaseStorage implements IStorage {
         screen: screens,
         activeZoneId: zones.id,
         zoneName: zones.name,
+        zonePricePerDay: zones.pricePerDay,
       })
       .from(screens)
       .leftJoin(zones, and(eq(screens.zoneId, zones.id), eq(zones.status, "active")))
       .where(inArray(screens.status, ["active", "approved"]));
 
-    const activeScreens = result.map(({ screen, activeZoneId, zoneName }) => ({
-      ...screen,
-      zoneId: activeZoneId || null,
-      zoneName: activeZoneId ? zoneName : null,
-    }));
+    const zoneCounts = new Map<string, number>();
+    for (const r of result) {
+      if (r.activeZoneId) {
+        zoneCounts.set(r.activeZoneId, (zoneCounts.get(r.activeZoneId) || 0) + 1);
+      }
+    }
+
+    const activeScreens = result.map(({ screen, activeZoneId, zoneName, zonePricePerDay }) => {
+      const count = activeZoneId ? (zoneCounts.get(activeZoneId) || 1) : null;
+      const pricePerDay = (activeZoneId && zonePricePerDay != null && count)
+        ? Math.round((Number(zonePricePerDay) / count) * 100) / 100
+        : screen.pricePerDay;
+
+      return {
+        ...screen,
+        pricePerDay,
+        zoneId: activeZoneId || null,
+        zoneName: activeZoneId ? zoneName : null,
+        zonePricePerDay: activeZoneId && zonePricePerDay != null ? Number(zonePricePerDay) : null,
+        zoneScreenCount: count,
+      };
+    });
     publicCache.set('pub:approvedScreens', activeScreens, PUBLIC_SCREENS_TTL);
     return activeScreens as any[];
   }
@@ -501,17 +533,35 @@ export class DatabaseStorage implements IStorage {
         screen: screens,
         activeZoneId: zones.id,
         zoneName: zones.name,
+        zonePricePerDay: zones.pricePerDay,
       })
       .from(screens)
       .leftJoin(zones, and(eq(screens.zoneId, zones.id), eq(zones.status, "active")))
       .where(inArray(screens.status, ["active", "approved"]))
       .orderBy(desc(screens.createdAt));
 
-    const mapped = result.map(({ screen, activeZoneId, zoneName }) => ({
-      ...screen,
-      zoneId: activeZoneId || null,
-      zoneName: activeZoneId ? zoneName : null,
-    }));
+    const zoneCounts = new Map<string, number>();
+    for (const r of result) {
+      if (r.activeZoneId) {
+        zoneCounts.set(r.activeZoneId, (zoneCounts.get(r.activeZoneId) || 0) + 1);
+      }
+    }
+
+    const mapped = result.map(({ screen, activeZoneId, zoneName, zonePricePerDay }) => {
+      const count = activeZoneId ? (zoneCounts.get(activeZoneId) || 1) : null;
+      const pricePerDay = (activeZoneId && zonePricePerDay != null && count)
+        ? Math.round((Number(zonePricePerDay) / count) * 100) / 100
+        : screen.pricePerDay;
+
+      return {
+        ...screen,
+        pricePerDay,
+        zoneId: activeZoneId || null,
+        zoneName: activeZoneId ? zoneName : null,
+        zonePricePerDay: activeZoneId && zonePricePerDay != null ? Number(zonePricePerDay) : null,
+        zoneScreenCount: count,
+      };
+    });
     publicCache.set('pub:publicScreens', mapped, PUBLIC_SCREENS_TTL);
     return mapped as any[];
   }
@@ -1836,11 +1886,23 @@ export class DatabaseStorage implements IStorage {
     if (filters.type) {
       conditions.push(drizzleSql`type = ${filters.type}`);
     }
+    // What the advertiser actually pays per day — same rule as calculateScreenPricePerDay (bulk-
+    // mandatory packages are priced as the whole venue: price_per_day * number_of_screens;
+    // zone screens are priced per single screen: zone price_per_day / zone screen count)
+    const effectivePrice = drizzleSql`(CASE
+      WHEN zone_id IS NOT NULL 
+           AND (SELECT z.price_per_day FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') IS NOT NULL
+           AND (SELECT COUNT(*) FROM screens s2 WHERE s2.zone_id = screens.zone_id AND s2.status IN ('active', 'approved')) > 0
+        THEN ((SELECT z.price_per_day FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active')::float / (SELECT COUNT(*) FROM screens s2 WHERE s2.zone_id = screens.zone_id AND s2.status IN ('active', 'approved')))
+      WHEN is_multi_screen AND number_of_screens > 1 AND bulk_booking_mandatory
+        THEN (price_per_day * number_of_screens)
+      ELSE price_per_day END)`;
+
     if (filters.minPrice !== undefined) {
-      conditions.push(drizzleSql`price_per_day >= ${filters.minPrice}`);
+      conditions.push(drizzleSql`${effectivePrice} >= ${filters.minPrice}`);
     }
     if (filters.maxPrice !== undefined) {
-      conditions.push(drizzleSql`price_per_day <= ${filters.maxPrice}`);
+      conditions.push(drizzleSql`${effectivePrice} <= ${filters.maxPrice}`);
     }
     if (filters.pincode) {
       conditions.push(drizzleSql`pincode = ${filters.pincode}`);
@@ -1993,13 +2055,6 @@ export class DatabaseStorage implements IStorage {
       : null;
     const haversineSelect = distanceExpr ? drizzleSql`, ${distanceExpr} AS distance_km` : drizzleSql``;
 
-    // What the advertiser actually pays per day — same rule as calculateScreenPricePerDay (bulk-
-    // mandatory packages are priced as the whole venue: price_per_day * number_of_screens)
-    const effectivePrice = drizzleSql`(CASE
-      WHEN is_multi_screen AND number_of_screens > 1 AND bulk_booking_mandatory
-        THEN (price_per_day * number_of_screens)
-      ELSE price_per_day END)`;
-
     // All sorts run in SQL so pagination is correct; `id` is the tie-breaker so pages never repeat
     // or skip a screen. Legacy sortBy=price/popularity/distance + sortOrder still work.
     const desc = filters.sortOrder === 'desc';
@@ -2037,17 +2092,31 @@ export class DatabaseStorage implements IStorage {
       ? drizzleSql`id, name, venue_name, venue_category, venue_type, environment_class, latitude, longitude, city, state, location,
           price_per_day, is_multi_screen, number_of_screens, bulk_booking_mandatory, min_booking_days,
           category, type, size, display_format, duration_per_slot, loop_duration, max_brands_per_loop, playback_slots_per_hour,
-          avg_daily_footfall, avg_dwell_time, income_level, zone_id, (SELECT z.name FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_name, status, venue_attributes, footfall_note,
+          avg_daily_footfall, avg_dwell_time, income_level, zone_id,
+          (SELECT z.name FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_name,
+          (SELECT z.price_per_day FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_price_per_day,
+          (SELECT COUNT(*) FROM screens s2 WHERE s2.zone_id = screens.zone_id AND s2.status IN ('active', 'approved'))::int AS zone_screen_count,
+          status, venue_attributes, footfall_note,
           custom_operating_hours_start, custom_operating_hours_end, operating_hours_preset, operational_hours,
           LEFT(description, 400) AS description,
           screen_images[1:1] AS screen_images, images[1:1] AS images, surrounding_images[1:1] AS surrounding_images,
           location_tags, lifestyle_tags, interest_segments, user_intent`
-      : drizzleSql`*, (SELECT z.name FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_name`;
+      : drizzleSql`*,
+          (SELECT z.name FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_name,
+          (SELECT z.price_per_day FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_price_per_day,
+          (SELECT COUNT(*) FROM screens s2 WHERE s2.zone_id = screens.zone_id AND s2.status IN ('active', 'approved'))::int AS zone_screen_count`;
 
     const toScreen = (r: any) => {
-      const screen = mapRowToCamel<Screen & { distanceKm?: number; zoneName?: string }>(r);
+      const screen = mapRowToCamel<Screen & { distanceKm?: number; zoneName?: string; zonePricePerDay?: number; zoneScreenCount?: number }>(r);
       screen.zoneId = r.zone_name ? screen.zoneId : null;
       if (r.zone_name) (screen as any).zoneName = r.zone_name;
+      if (r.zone_price_per_day != null) {
+        const zonePrice = parseFloat(r.zone_price_per_day);
+        const zoneCount = parseInt(r.zone_screen_count, 10) || 1;
+        (screen as any).zonePricePerDay = zonePrice;
+        (screen as any).zoneScreenCount = zoneCount;
+        screen.pricePerDay = Math.round((zonePrice / zoneCount) * 100) / 100;
+      }
       if (r.distance_km !== undefined) screen.distanceKm = parseFloat(r.distance_km) || 0;
       delete (screen as any).searchText; // internal search column — never sent to browsers
       delete (screen as any).bundlePricePerDay; // internal admin column — never sent to browsers
@@ -2520,9 +2589,19 @@ export class DatabaseStorage implements IStorage {
       
     const screenIds = screenRecords.map(r => r.id);
 
+    const count = screenRecords.length || 1;
+    const perScreenPrice = Math.round((pricePerDay / count) * 100) / 100;
+    const decoratedScreens = screenRecords.map(s => ({
+      ...s,
+      pricePerDay: perScreenPrice,
+      zoneName,
+      zonePricePerDay: pricePerDay,
+      zoneScreenCount: count,
+    }));
+
     return {
       zone: { zoneName, pricePerDay, minBookingDays, status, screenIds },
-      screens: screenRecords,
+      screens: decoratedScreens as Screen[],
     };
   }
 }

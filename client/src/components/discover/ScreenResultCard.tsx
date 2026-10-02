@@ -80,6 +80,11 @@ export function ScreenResultCard({
             <span className="rounded-full bg-white/95 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold text-slate-800 shadow-sm border border-slate-200/50">
               {VENUE_FAMILY_LABELS[family]}
             </span>
+            {screen.zoneName && (
+              <span className="rounded-full bg-blue-600/90 text-white backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold shadow-sm border border-blue-400/30">
+                {screen.zoneName} Zone
+              </span>
+            )}
             {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
               <span className="rounded-full bg-slate-900/85 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm flex items-center gap-1 border border-white/20">
                 <Monitor className="w-3 h-3 text-amber-400" />
@@ -147,7 +152,11 @@ export function ScreenResultCard({
             </span>
             <span className="text-xs font-normal text-slate-500">/ day</span>
           </div>
-          {price.isBulkMandatory && price.screens > 1 ? (
+          {screen.zoneName && (screen.zonePricePerDay || screen.zoneScreenCount) ? (
+            <p className="text-[11px] text-blue-600 font-medium truncate mt-0.5" title={`Part of ${screen.zoneName} zone package`}>
+              Part of {screen.zoneName} · {formatRupees(screen.zonePricePerDay || 1600)}/day ({screen.zoneScreenCount || 45} screens pkg)
+            </p>
+          ) : price.isBulkMandatory && price.screens > 1 ? (
             <p className="text-[11px] text-slate-500 truncate mt-0.5">
               {formatRupees(price.perScreen)}/screen · {price.screens} screens pkg
             </p>

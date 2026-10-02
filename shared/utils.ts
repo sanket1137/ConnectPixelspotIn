@@ -8,17 +8,20 @@ export function calculateTotalPhysicalScreens(screens: any[]): number {
 }
 
 // Returns the price for a SINGLE physical screen.
-// bulkBookingMandatory=true means the venue must be booked as a whole, so pricePerDay
-// is the per-screen rate and the bundle spans numberOfScreens screens. Otherwise the
-// venue is priced and booked as the single listed unit pricePerDay describes, regardless
-// of how many physical screens happen to be installed there.
+// For zone screens, each screen's price is zonePricePerDay / zoneScreenCount.
 export function getBasePricePerPhysicalScreen(screen: any): number {
-  return screen.pricePerDay || 0;
+  if (screen?.zonePricePerDay && screen?.zoneScreenCount && screen.zoneScreenCount > 0) {
+    return screen.zonePricePerDay / screen.zoneScreenCount;
+  }
+  return screen?.pricePerDay || 0;
 }
 
 // Total price per day for the venue as listed — what actually gets charged for booking it.
 export function calculateScreenPricePerDay(screen: any, quantity?: number): number {
-  const price = Number(screen?.pricePerDay) || 0;
+  let price = Number(screen?.pricePerDay) || 0;
+  if (screen?.zonePricePerDay && screen?.zoneScreenCount && screen.zoneScreenCount > 0) {
+    price = screen.zonePricePerDay / screen.zoneScreenCount;
+  }
   if (screen?.isMultiScreen && screen?.numberOfScreens && screen.numberOfScreens > 1 && screen.bulkBookingMandatory) {
     return price * screen.numberOfScreens;
   }

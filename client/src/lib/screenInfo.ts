@@ -38,7 +38,10 @@ export interface PriceInfo {
 }
 
 export function priceInfo(s: Screen, override?: number, quantity?: number): PriceInfo {
-  const basePrice = Number(s.pricePerDay) || 0;
+  let basePrice = Number(s.pricePerDay) || 0;
+  if (s.zonePricePerDay && s.zoneScreenCount && s.zoneScreenCount > 0) {
+    basePrice = s.zonePricePerDay / s.zoneScreenCount;
+  }
   const isBulk = Boolean(s.isMultiScreen && s.numberOfScreens && s.numberOfScreens > 1 && s.bulkBookingMandatory);
   const totalScreens = s.isMultiScreen && s.numberOfScreens && s.numberOfScreens > 1 ? s.numberOfScreens : 1;
   const selectedScreens = isBulk ? totalScreens : (quantity && quantity >= 1 ? quantity : 1);

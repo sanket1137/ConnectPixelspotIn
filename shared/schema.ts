@@ -825,7 +825,11 @@ export const otps = pgTable("otps", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
-export type Screen = typeof screens.$inferSelect;
+export type Screen = typeof screens.$inferSelect & {
+  zoneName?: string | null;
+  zonePricePerDay?: number | null;
+  zoneScreenCount?: number | null;
+};
 export type InsertScreen = z.infer<typeof insertScreenSchema>;
 
 export type Campaign = typeof campaigns.$inferSelect;
