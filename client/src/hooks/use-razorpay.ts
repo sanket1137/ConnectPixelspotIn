@@ -101,7 +101,7 @@ export function useRazorpayCheckout() {
             ondismiss: function () {
               setIsProcessing(false);
               options.onFailure?.("Payment cancelled");
-              reject(new Error("Payment cancelled"));
+              resolve(null);
             },
           },
           theme: {
@@ -114,7 +114,7 @@ export function useRazorpayCheckout() {
           const msg = response.error?.description || "Payment failed";
           toast({ title: "Payment Failed", description: msg, variant: "destructive" });
           options.onFailure?.(msg);
-          reject(new Error(msg));
+          resolve(null);
         });
 
         rzp.open();
@@ -127,7 +127,7 @@ export function useRazorpayCheckout() {
         variant: "destructive",
       });
       options.onFailure?.(error.message);
-      throw error;
+      return null;
     }
   }, [toast]);
 
