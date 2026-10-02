@@ -1,11 +1,12 @@
 import React from "react";
-import { Check, Clock, Layers, Plus, Users } from "lucide-react";
+import { Check, Clock, Layers, Plus, Monitor, MapPin } from "lucide-react";
 import type { Screen } from "@shared/schema";
 import { VENUE_FAMILY_LABELS, formatCompact } from "@shared/venueTypes";
 import type { DisplayFact } from "@/lib/venueFacts";
 import { formatRupees } from "@/lib/venueGroups";
 import { footfallValue, formatLine, localityLine, primaryPhoto, priceInfo, screenFamily } from "@/lib/screenInfo";
 import { ScreenPhoto } from "@/components/discover/VenueTypeIcon";
+import { getScreenCountDisplay } from "@shared/utils";
 
 interface ScreenResultCardProps {
   screen: Screen & { distanceKm?: number };
@@ -40,106 +41,162 @@ export function ScreenResultCard({
 }: ScreenResultCardProps) {
   const family = screenFamily(screen);
   const price = priceInfo(screen, priceOverride);
-  const facts = typeFacts.slice(0, 2);
-  // Footfall: hidden when it's a placeholder and the venue has its own facts; skipped when it just
-  // repeats a fact ("5,800 employees" / "5,800 daily footfall")
-  const rawFootfall = screen.footfallNote === "hidden" && facts.length > 0 ? null : footfallValue(screen);
-  const footfall = rawFootfall && !facts.some((f) => f.value === formatCompact(rawFootfall)) ? rawFootfall : null;
+  const rawFootfall = footfallValue(screen);
   const format = formatLine(screen);
   const locality = localityLine(screen);
+  const screenCountLabel = getScreenCountDisplay(screen);
 
   return (
     <div
       ref={cardRef}
-      className={`group relative flex flex-col rounded-2xl border bg-white overflow-hidden transition-shadow ${
-        isSelected ? "border-primary ring-2 ring-primary/30" : isHighlighted ? "border-slate-300 shadow-md" : "border-slate-200 hover:shadow-md"
+      className={`group relative flex flex-col rounded-2xl border bg-white overflow-hidden transition-all duration-200 hover:shadow-lg ${
+        isSelected
+          ? "border-primary ring-2 ring-primary/30 shadow-md"
+          : isHighlighted
+          ? "border-slate-300 shadow-md"
+          : "border-slate-200 hover:border-slate-300"
       }`}
       onMouseEnter={() => onHoverChange(true)}
       onMouseLeave={() => onHoverChange(false)}
     >
-      <button type="button" onClick={onOpen} className="text-left flex flex-col flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset" aria-label={`Open ${screen.venueName}`}>
-        <div className="relative">
-          <ScreenPhoto src={primaryPhoto(screen)} family={family} alt={screen.venueName} className="h-32 w-full" iconClassName="w-9 h-9" />
-          <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm">
-            {VENUE_FAMILY_LABELS[family]}
-          </span>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="text-left flex flex-col flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+        aria-label={`Open ${screen.venueName}`}
+      >
+        {/* Bigger, High-impact Image */}
+        <div className="relative w-full overflow-hidden bg-slate-100">
+          <ScreenPhoto
+            src={primaryPhoto(screen)}
+            family={family}
+            alt={screen.venueName}
+            className="h-48 sm:h-52 w-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+            iconClassName="w-12 h-12"
+          />
+
+          {/* Top badges */}
+          <div className="absolute left-3 top-3 flex items-center gap-1.5 flex-wrap max-w-[80%]">
+            <span className="rounded-full bg-white/95 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold text-slate-800 shadow-sm border border-slate-200/50">
+              {VENUE_FAMILY_LABELS[family]}
+            </span>
+            {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+              <span className="rounded-full bg-slate-900/85 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm flex items-center gap-1 border border-white/20">
+                <Monitor className="w-3 h-3 text-amber-400" />
+                {screen.numberOfScreens} Screens
+              </span>
+            )}
+          </div>
+
           {isAdded && (
-            <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-green-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
-              <Check className="h-3 w-3" /> In your campaign
+            <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
+              <Check className="h-3 w-3" /> In campaign
             </span>
           )}
         </div>
 
-        <div className="flex flex-col gap-1 p-4 pb-3">
+        {/* Content Under Image */}
+        <div className="flex flex-col flex-1 p-4 pb-3">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-slate-900 leading-snug line-clamp-1">{screen.venueName}</h3>
+            <h3 className="font-bold text-slate-900 text-base leading-snug line-clamp-1 group-hover:text-primary transition-colors">
+              {screen.venueName}
+            </h3>
             {screen.distanceKm !== undefined && screen.distanceKm !== null && (
-              <span className="shrink-0 text-xs text-slate-500 mt-0.5">{Number(screen.distanceKm).toFixed(1)} km</span>
+              <span className="shrink-0 text-xs font-medium text-slate-500 mt-0.5">
+                {Number(screen.distanceKm).toFixed(1)} km
+              </span>
             )}
           </div>
-          {locality && <p className="text-xs text-slate-500 line-clamp-1">{locality}</p>}
 
-          {facts.length > 0 && (
-            <p className="text-[13px] text-slate-800 mt-1 line-clamp-1">
-              {facts.map((f, i) => (
-                <React.Fragment key={f.key}>
-                  {i > 0 && <span className="text-slate-300"> · </span>}
-                  <b className="font-semibold" title={f.formula}>{f.value}</b> <span className="text-slate-500">{f.label.toLowerCase()}</span>
-                  {f.estimate && <span className="ml-0.5 text-[10px] font-medium text-slate-400" title={f.formula}>Est.</span>}
-                </React.Fragment>
-              ))}
+          {locality && (
+            <p className="text-xs text-slate-500 line-clamp-1 flex items-center gap-1 mt-1">
+              <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
+              <span className="truncate">{locality}</span>
             </p>
           )}
-          {footfall && (
-            <p className="text-xs text-slate-600 flex items-center gap-1">
-              <Users className="h-3 w-3 text-slate-400" /> {formatCompact(footfall)} daily footfall
-            </p>
-          )}
-          {format && <p className="text-xs text-slate-500 line-clamp-1">{format}</p>}
-        </div>
-      </button>
 
-      <div className="flex items-end justify-between gap-3 px-4 pb-4 mt-auto">
-        <div className="min-w-0">
-          <div className="text-base font-bold text-slate-900 leading-tight">
-            {formatRupees(price.total)}
-            <span className="text-xs font-normal text-slate-500"> / day</span>
-            {price.isBulkMandatory && price.screens > 1 && (
-              <span className="text-xs font-medium text-slate-600"> · {price.screens} screens pkg</span>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 mt-0.5">
-            {showValue && rawFootfall && price.total > 0 && (
-              <span className="font-semibold text-slate-700">{formatRupees(Math.max(1, (price.total / rawFootfall) * 1000))} per 1,000 people</span>
-            )}
-            {price.isBulkMandatory && price.screens > 1 && <span>{formatRupees(price.perScreen)} per screen</span>}
+          {/* Quick specs pills: Number of Screens & Min Booking Days */}
+          <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-2 border-t border-slate-100">
+            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100/80 px-2.5 py-1 text-xs font-medium text-slate-700">
+              <Monitor className="h-3.5 w-3.5 text-slate-500" />
+              {screenCountLabel}
+            </span>
+
             {price.minDays !== null && (
-              <span className="inline-flex items-center gap-0.5">
-                <Clock className="h-3 w-3" /> Min {price.minDays} days
+              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200/60 px-2.5 py-1 text-xs font-medium text-amber-800">
+                <Clock className="h-3.5 w-3.5 text-amber-600" />
+                Min {price.minDays} {price.minDays === 1 ? "day" : "days"}
+              </span>
+            )}
+
+            {format && (
+              <span className="inline-flex items-center rounded-md bg-slate-50 border border-slate-200/50 px-2 py-1 text-xs text-slate-600">
+                {format}
               </span>
             )}
           </div>
         </div>
+      </button>
+
+      {/* Bottom Bar: Price & Add Button */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-100 bg-slate-50/60 mt-auto">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-1">
+            <span className="text-lg font-bold text-slate-900 leading-tight">
+              {formatRupees(price.total)}
+            </span>
+            <span className="text-xs font-normal text-slate-500">/ day</span>
+          </div>
+          {price.isBulkMandatory && price.screens > 1 ? (
+            <p className="text-[11px] text-slate-500 truncate mt-0.5">
+              {formatRupees(price.perScreen)}/screen · {price.screens} screens pkg
+            </p>
+          ) : showValue && rawFootfall && price.total > 0 ? (
+            <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+              {formatRupees(Math.max(1, (price.total / rawFootfall) * 1000))} / 1k people
+            </p>
+          ) : null}
+        </div>
+
         <button
           type="button"
-          onClick={onToggleAdd}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleAdd();
+          }}
           aria-pressed={isAdded}
           aria-label={isAdded ? `Remove ${screen.venueName} from campaign` : `Add ${screen.venueName} to campaign`}
-          className={`shrink-0 inline-flex items-center gap-1 h-9 px-3.5 rounded-full text-sm font-semibold border transition-colors ${
-            isAdded ? "bg-green-600 border-green-600 text-white hover:bg-green-700" : "bg-white border-slate-300 text-slate-800 hover:border-slate-400"
+          className={`shrink-0 inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-xl text-xs font-semibold shadow-sm transition-all ${
+            isAdded
+              ? "bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow"
+              : "bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow"
           }`}
         >
-          {isAdded ? <><Check className="h-4 w-4" /> Added</> : <><Plus className="h-4 w-4" /> Add</>}
+          {isAdded ? (
+            <>
+              <Check className="h-3.5 w-3.5" />
+              <span>Added</span>
+            </>
+          ) : (
+            <>
+              <Plus className="h-3.5 w-3.5" />
+              <span>Add Screen</span>
+            </>
+          )}
         </button>
       </div>
 
+      {/* Additional screens at the same venue link */}
       {moreAtVenue > 0 && onOpenVenue && (
         <button
           type="button"
-          onClick={onOpenVenue}
-          className="flex items-center justify-center gap-1.5 h-9 border-t border-slate-100 bg-slate-50 text-xs font-semibold text-primary hover:bg-slate-100"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenVenue();
+          }}
+          className="flex items-center justify-center gap-1.5 h-8 border-t border-slate-200/80 bg-slate-100/70 text-xs font-semibold text-primary hover:bg-slate-200/80 transition-colors"
         >
-          <Layers className="h-3.5 w-3.5" /> +{moreAtVenue} more {moreAtVenue === 1 ? "screen" : "screens"} here
+          <Layers className="h-3.5 w-3.5" /> +{moreAtVenue} more {moreAtVenue === 1 ? "screen" : "screens"} at this venue
         </button>
       )}
     </div>
