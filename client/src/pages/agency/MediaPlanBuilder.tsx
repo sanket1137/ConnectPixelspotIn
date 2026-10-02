@@ -594,6 +594,7 @@ export function ScreenPickerModal({
                 </div>
               )}
             </>
+          )}
         </div>
 
         {/* Right Map */}
