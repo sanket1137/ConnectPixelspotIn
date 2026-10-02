@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, Check, CheckCircle2, ExternalLink, Layers, MapPin, Plus, X } from "lucide-react";
+import React, { useMemo, useState, useEffect } from "react";
+import { ArrowLeft, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, ExternalLink, Layers, MapPin, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Screen, ZoneInfo } from "@shared/schema";
 import { VENUE_FAMILY_LABELS, getOperatingHoursLabel } from "@shared/venueTypes";
@@ -71,26 +71,40 @@ function Gallery({ screen, family }: { screen: Screen; family: ReturnType<typeof
   // Photos whose links are broken drop out; if none load, the venue-type icon shows instead
   const [broken, setBroken] = useState<Set<string>>(new Set());
   const all = screenPhotos(screen);
-  const photos = { screen: all.screen.filter((p) => !broken.has(p)), surroundings: all.surroundings.filter((p) => !broken.has(p)) };
+  const photos = {
+    screen: all.screen.filter((p) => !broken.has(p)),
+    surroundings: all.surroundings.filter((p) => !broken.has(p)),
+  };
   const hasBoth = photos.screen.length > 0 && photos.surroundings.length > 0;
   const [tab, setTab] = useState<"screen" | "surroundings">(all.screen.length ? "screen" : "surroundings");
   const list = (tab === "screen" && photos.screen.length) || !photos.surroundings.length ? photos.screen : photos.surroundings;
   const markBroken = (src: string) => setBroken((prev) => new Set(prev).add(src));
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // Reset active index when switching tabs
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [tab]);
 
   if (!photos.screen.length && !photos.surroundings.length) {
-    return <ScreenPhoto src={null} family={family} alt={screen.venueName} className="h-40 w-full rounded-2xl" iconClassName="w-12 h-12" />;
+    return (
+      <ScreenPhoto
+        src={null}
+        family={family}
+        alt={screen.venueName}
+        className="h-72 sm:h-80 w-full rounded-2xl shadow-sm border border-slate-200"
+        iconClassName="w-16 h-16"
+      />
+    );
   }
+
+  const currentPhoto = list[activeIndex] || list[0];
+
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory rounded-2xl [scrollbar-width:thin]">
-        {list.map((src, i) => (
-          <a key={src} href={src} target="_blank" rel="noopener noreferrer" className="snap-start shrink-0 w-[85%] first:w-full only:w-full">
-            <img src={src} alt={`${screen.venueName} — photo ${i + 1}`} loading="lazy" onError={() => markBroken(src)} className="h-52 w-full object-cover rounded-2xl bg-slate-100" />
-          </a>
-        ))}
-      </div>
+    <div className="flex flex-col gap-3">
+      {/* Category and Tab toggles */}
       {hasBoth && (
-        <div className="flex gap-1.5" role="tablist" aria-label="Photos">
+        <div className="flex gap-2" role="tablist" aria-label="Photos">
           {(["screen", "surroundings"] as const).map((t) => (
             <button
               key={t}
@@ -98,9 +112,93 @@ function Gallery({ screen, family }: { screen: Screen; family: ReturnType<typeof
               role="tab"
               aria-selected={tab === t}
               onClick={() => setTab(t)}
-              className={`h-8 px-3 rounded-full text-xs font-semibold border ${tab === t ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-700 border-slate-200"}`}
+              className={`h-8 px-3.5 rounded-full text-xs font-semibold transition-all border ${
+                tab === t
+                  ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              }`}
             >
               {t === "screen" ? `Screen (${photos.screen.length})` : `Surroundings (${photos.surroundings.length})`}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Main Large Image Container */}
+      <div className="relative group w-full rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm">
+        <a
+          href={currentPhoto}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block w-full cursor-zoom-in"
+          title="Click to view full resolution"
+        >
+          <img
+            src={currentPhoto}
+            alt={`${screen.venueName} — photo ${activeIndex + 1}`}
+            loading="lazy"
+            onError={() => markBroken(currentPhoto)}
+            className="h-72 sm:h-80 md:h-[340px] w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+          />
+        </a>
+
+        {/* Counter Badge */}
+        {list.length > 1 && (
+          <span className="absolute bottom-3 right-3 rounded-full bg-slate-950/75 backdrop-blur-md px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
+            {activeIndex + 1} / {list.length}
+          </span>
+        )}
+
+        {/* Prev / Next Arrows */}
+        {list.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveIndex((prev) => (prev > 0 ? prev - 1 : list.length - 1));
+              }}
+              aria-label="Previous photo"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 text-slate-800 flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveIndex((prev) => (prev < list.length - 1 ? prev + 1 : 0));
+              }}
+              aria-label="Next photo"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 text-slate-800 flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Thumbnails Strip if multiple photos */}
+      {list.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+          {list.map((src, i) => (
+            <button
+              key={src}
+              type="button"
+              onClick={() => setActiveIndex(i)}
+              className={`relative shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all ${
+                activeIndex === i
+                  ? "border-primary ring-2 ring-primary/25 scale-105"
+                  : "border-transparent opacity-70 hover:opacity-100"
+              }`}
+            >
+              <img
+                src={src}
+                alt=""
+                className="w-full h-full object-cover"
+                loading="lazy"
+                onError={() => markBroken(src)}
+              />
             </button>
           ))}
         </div>

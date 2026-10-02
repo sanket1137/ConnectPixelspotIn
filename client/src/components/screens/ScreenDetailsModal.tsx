@@ -52,7 +52,7 @@ export function ScreenDetailsModal({
       <DialogContent className="max-w-4xl p-0 overflow-hidden bg-white border-0 rounded-2xl shadow-2xl flex flex-col sm:flex-row h-[90vh] sm:h-auto sm:max-h-[85vh]">
         
         {/* Left Column - Image & Quick Info */}
-        <div className="w-full sm:w-2/5 bg-slate-50 flex flex-col relative h-[40vh] sm:h-auto shrink-0">
+        <div className="w-full sm:w-[45%] bg-slate-50 flex flex-col relative min-h-[320px] sm:min-h-[460px] sm:h-auto shrink-0">
           <Button 
             variant="ghost" 
             size="icon" 
