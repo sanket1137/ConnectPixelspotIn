@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { VENUE_FAMILIES, typesInFamily } from "@shared/venueTaxonomy";
 import {
   ImagePlus, Search, Upload, Monitor, ChevronLeft, ChevronRight, X,
   CheckCircle, Shuffle, Copy, Loader2, Filter, RotateCcw, ImageOff,
@@ -14,7 +15,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { VENUE_CATEGORIES } from "@shared/constants";
 import { INDIAN_STATES } from "@shared/constants";
 import type { Screen } from "@shared/schema";
 
@@ -367,7 +367,12 @@ export default function BulkImageManager() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Venues</SelectItem>
-              {VENUE_CATEGORIES.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+              {VENUE_FAMILIES.map(f => (
+                <SelectGroup key={f.slug}>
+                  <SelectLabel>{f.label}</SelectLabel>
+                  {typesInFamily(f.slug).map(t => <SelectItem key={t.slug} value={t.label}>{t.label}</SelectItem>)}
+                </SelectGroup>
+              ))}
             </SelectContent>
           </Select>
 

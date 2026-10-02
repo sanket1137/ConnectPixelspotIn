@@ -3,7 +3,8 @@ import { ArrowLeft, Check, ChevronDown, ChevronUp, Clock, Info, Layers, MapPin, 
 import { Button } from "@/components/ui/button";
 import type { Screen } from "@shared/schema";
 import { calculateScreenPricePerDay } from "@shared/utils";
-import { VENUE_FAMILY_LABELS, getPlaysPerHour, getVenueKeyFacts } from "@shared/venueTypes";
+import { VENUE_FAMILY_LABELS, getPlaysPerHour } from "@shared/venueTypes";
+import { detailFactsFor } from "@/lib/venueFacts";
 import {
   type ListedScreen,
   type VenueGroup,
@@ -94,8 +95,9 @@ export function VenuePanel({
   const [tab, setTab] = useState<Tab>("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
+  // Stored venue attributes (+ footfall/dwell, Est. metrics); description-parsed facts as fallback
   const facts = useMemo(
-    () => getVenueKeyFacts(venue.listings, venue.family, venue.totalScreens),
+    () => detailFactsFor(venue.listings, venue.family, venue.totalScreens).slice(0, 6),
     [venue]
   );
 
@@ -330,9 +332,12 @@ export function VenuePanel({
           {facts.length > 0 && (
             <div className="grid grid-cols-2 gap-2">
               {facts.map((f) => (
-                <div key={f.key} className="rounded-xl bg-slate-50 px-3.5 py-3">
+                <div key={f.key} className="rounded-xl bg-slate-50 px-3.5 py-3" title={f.formula}>
                   <div className="text-lg font-bold text-slate-900 leading-tight">{f.value}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{f.label}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {f.label}
+                    {f.estimate && <span className="ml-1 rounded bg-slate-200/70 px-1 py-px text-[10px] font-medium text-slate-500">Est.</span>}
+                  </div>
                 </div>
               ))}
             </div>

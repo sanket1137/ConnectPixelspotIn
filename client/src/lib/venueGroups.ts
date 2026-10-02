@@ -1,6 +1,7 @@
 import type { Screen } from "@shared/schema";
 import { calculateScreenPricePerDay } from "@shared/utils";
 import { getVenueFamily, type VenueFamily } from "@shared/venueTypes";
+import { getVenueType } from "@shared/venueTaxonomy";
 
 export type ListedScreen = Screen & { distanceKm?: number };
 
@@ -31,7 +32,7 @@ export function screenCount(screen: Screen): number {
 }
 
 export function isPackage(screen: Screen): boolean {
-  return screenCount(screen) > 1;
+  return Boolean(screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && screen.bulkBookingMandatory);
 }
 
 export function venueKeyFor(screen: Screen): string | null {
@@ -53,6 +54,17 @@ function mostCommon(values: string[]): string {
     }
   });
   return best;
+}
+
+// Venue family from the listings' canonical venue_type (most common one); keyword guess for
+// untyped rows
+function familyForListings(listings: ListedScreen[], venueCategory: string, name: string): VenueFamily {
+  const families = listings
+    .map((l) => getVenueType(l.venueType)?.family)
+    .filter((f): f is NonNullable<typeof f> => !!f)
+    .map((f) => (f === "mixed" ? "other" : f));
+  if (families.length) return mostCommon(families) as VenueFamily;
+  return getVenueFamily({ venueCategory, venueName: name, name: listings[0]?.name });
 }
 
 export function groupScreensByVenue(screens: ListedScreen[]): VenueGroup[] {
@@ -94,7 +106,7 @@ export function groupScreensByVenue(screens: ListedScreen[]): VenueGroup[] {
       otherNames,
       city: first.city,
       address: first.location,
-      family: getVenueFamily({ venueCategory, venueName: name, name: first.name }),
+      family: familyForListings(listings, venueCategory, name),
       venueCategory,
       listings,
       packages,

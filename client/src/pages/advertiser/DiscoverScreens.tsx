@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Map, AdvancedMarker, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,153 +14,79 @@ import { getScreenCountDisplay, calculateScreenPricePerDay } from "@shared/utils
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SearchAutocomplete } from "@/components/map/SearchAutocomplete";
-import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { DiscoverAuthModal } from "@/components/DiscoverAuthModal";
-import useEmblaCarousel from "embla-carousel-react";
+import { MapBottomSheet, type SheetSnap } from "@/components/discover/MapBottomSheet";
 import { VenuePanel } from "@/components/map/VenuePanel";
 import { VenueMarker } from "@/components/map/VenueMarker";
-import { groupScreensByVenue, venueKeyFor, type VenueGroup } from "@/lib/venueGroups";
+import { groupScreensByVenue, venueKeyFor, screenCount, type VenueGroup } from "@/lib/venueGroups";
+import { cardFactsFor, type DisplayFact } from "@/lib/venueFacts";
+import { ScreenResultCard } from "@/components/discover/ScreenResultCard";
+import { ScreenDetailPanel } from "@/components/discover/ScreenDetailPanel";
+import { useDiscoverPanel, parentPanel, type DiscoverPanel } from "@/lib/discoverPanel";
+import { findSimilarScreens } from "@/lib/similarScreens";
+import { VENUE_FAMILIES, parseSearchQuery, resolveVenueType, typesInFamily } from "@shared/venueTaxonomy";
+import { screenFamily, priceInfo, primaryPhoto, localityLine } from "@/lib/screenInfo";
+import { ScreenPhoto } from "@/components/discover/VenueTypeIcon";
+import { formatRupees } from "@/lib/venueGroups";
+import { venuesInView, type MapViewport } from "@/lib/mapClusters";
 
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
 
-type ViewMode = "desktop" | "mobile_list" | "mobile_map";
+// Sort options — all applied on the server so paging stays correct
+type DiscoverSort = "recommended" | "price_asc" | "price_desc" | "distance" | "map_center" | "footfall" | "value" | "package_size" | "newest";
+const SORT_LABELS: Record<DiscoverSort, string> = {
+  recommended: "Recommended",
+  price_asc: "Price: low to high",
+  price_desc: "Price: high to low",
+  distance: "Nearest to searched place",
+  map_center: "Nearest to map centre",
+  footfall: "Highest daily footfall",
+  value: "Best value (₹ per 1,000 people)",
+  package_size: "Most screens",
+  newest: "Newest",
+};
 
-function VenueIconFallback({ category, name }: { category: string, name: string }) {
-  const normalized = (category || "").toLowerCase();
-
-  let Icon = Monitor;
-  if (normalized.includes("cafe") || normalized.includes("coffee")) Icon = Coffee;
-  else if (normalized.includes("restaurant") || normalized.includes("food")) Icon = Utensils;
-  else if (normalized.includes("bus") || normalized.includes("transit")) Icon = Bus;
-  else if (normalized.includes("mall") || normalized.includes("retail") || normalized.includes("shopping")) Icon = Store;
-  else if (normalized.includes("corporate") || normalized.includes("office") || normalized.includes("apartment") || normalized.includes("building")) Icon = Building2;
-  else if (normalized.includes("airport") || normalized.includes("plane")) Icon = Plane;
-  else if (normalized.includes("metro") || normalized.includes("train") || normalized.includes("railway")) Icon = Train;
-  else if (normalized.includes("cinema") || normalized.includes("movie")) Icon = MonitorPlay;
-  else if (normalized.includes("gym") || normalized.includes("fitness")) Icon = Dumbbell;
-  else if (normalized.includes("college") || normalized.includes("school")) Icon = GraduationCap;
-  else if (normalized.includes("hospital") || normalized.includes("clinic")) Icon = Activity;
-  else if (normalized.includes("hotel") || normalized.includes("resort")) Icon = Hotel;
-  else if (normalized.includes("salon")) Icon = Scissors;
-  else if (normalized.includes("road") || normalized.includes("highway") || normalized.includes("junction") || normalized.includes("flyover")) Icon = MapPin;
-
-  return (
-    <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center text-slate-400 group-hover:bg-slate-200 transition-colors">
-      <Icon className="w-10 h-10 mb-2 opacity-50" />
-      <span className="text-[10px] font-medium uppercase tracking-wider opacity-60 text-center px-2 line-clamp-1">{category || "Digital Screen"}</span>
-    </div>
-  );
+interface DiscoverFilters {
+  state: string;
+  city: string;
+  families: string[]; // venue family chips (phase 3 taxonomy)
+  venueTypes: string[]; // venue type multi-select
+  venueCategories: string[]; // legacy raw category (unknown ?venue= values only)
+  environment: "" | "indoor" | "outdoor";
+  screenCategories: string[];
+  trafficTypes: string[];
+  userIntents: string[];
+  locationTags: string[];
+  minPrice: string;
+  maxPrice: string;
+  search: string;
 }
 
-// Airbnb-style Screen Card Component — module scope so hovering a marker doesn't remount every
-// sidebar card on each render (it also holds the ref used to scroll a card into view)
-function ScreenListCard({
-  screen,
-  isAdded,
-  isHighlighted,
-  onHoverStart,
-  onHoverEnd,
-  onOpenDetails,
-  onToggleAdd,
-  cardRef,
-  venueListingCount = 1,
-  venueScreenCount = 1,
-  onOpenVenue,
-}: {
-  screen: Screen & { distanceKm?: number };
-  isAdded: boolean;
-  isHighlighted: boolean;
-  onHoverStart: () => void;
-  onHoverEnd: () => void;
-  onOpenDetails: () => void;
-  onToggleAdd: () => void;
-  cardRef: (el: HTMLDivElement | null) => void;
-  venueListingCount?: number;
-  venueScreenCount?: number;
-  onOpenVenue?: () => void;
-}) {
-  return (
-    <div
-      ref={cardRef}
-      className="group cursor-pointer flex flex-col gap-3"
-      onMouseEnter={onHoverStart}
-      onMouseLeave={onHoverEnd}
-      onClick={onOpenDetails}
-    >
-      <div className={`relative aspect-[4/3] overflow-hidden rounded-xl bg-slate-200 transition-shadow ${isHighlighted ? 'ring-2 ring-offset-2 ring-primary' : ''}`}>
-        {(screen.screenImages?.[0] || screen.images?.[0]) ? (
-          <img
-            src={screen.screenImages?.[0] || screen.images?.[0]}
-            alt={screen.name}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <VenueIconFallback category={screen.category || ""} name={screen.name} />
-        )}
-        {isAdded && (
-          <div className="absolute top-3 left-3 bg-green-500 text-white px-2 py-1 rounded-full shadow-sm text-xs font-semibold flex items-center">
-            <Check className="w-3 h-3 mr-1" /> Added
-          </div>
-        )}
-        <div className="absolute top-3 right-3">
-          <Button
-            size="icon"
-            variant="secondary"
-            className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleAdd();
-            }}
-          >
-            {isAdded ? <Check className="w-4 h-4 text-green-600" /> : <ShoppingCart className="w-4 h-4" />}
-          </Button>
-        </div>
-      </div>
+const EMPTY_FILTERS: DiscoverFilters = {
+  state: "",
+  city: "",
+  families: [],
+  venueTypes: [],
+  venueCategories: [],
+  environment: "",
+  screenCategories: [],
+  trafficTypes: [],
+  userIntents: [],
+  locationTags: [],
+  minPrice: "",
+  maxPrice: "",
+  search: "",
+};
 
-      <div className="flex flex-col">
-        <div className="flex justify-between items-start">
-          <h3 className="font-semibold text-slate-900 line-clamp-1">{screen.venueName}, {screen.city}</h3>
-          {screen.distanceKm !== undefined && (
-            <span className="text-sm text-slate-500 whitespace-nowrap ml-2">
-              {Number(screen.distanceKm).toFixed(1)} km
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <p className="text-sm text-slate-500 line-clamp-1">{screen.name} • {screen.category}</p>
-          {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
-            <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-primary/10 text-primary">
-              {getScreenCountDisplay(screen)}
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center text-sm text-slate-500 mt-0.5">
-          <Users className="w-3 h-3 mr-1" />
-          {((screen.avgDailyFootfall || 0) / 1000).toFixed(1)}k daily footfall
-        </div>
-        <div className="mt-1">
-          <span className="font-bold text-slate-900">₹{calculateScreenPricePerDay(screen).toLocaleString()}</span>
-          <span className="text-slate-500 text-sm"> / day</span>
-        </div>
-        {venueListingCount > 1 && onOpenVenue && (
-          <button
-            type="button"
-            className="self-start mt-1.5 text-xs font-semibold text-primary hover:underline flex items-center gap-1"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenVenue();
-            }}
-          >
-            <Layers className="w-3 h-3" />
-            See all {venueScreenCount} screens at this venue
-          </button>
-        )}
-      </div>
-    </div>
+// Filters that count toward the "Filters (n)" badge — the location search is not one of them
+function activeFilterCount(f: DiscoverFilters): number {
+  return (
+    (f.state ? 1 : 0) + (f.city ? 1 : 0) + f.venueTypes.length + f.venueCategories.length + f.screenCategories.length +
+    f.trafficTypes.length + f.userIntents.length + f.locationTags.length + (f.minPrice ? 1 : 0) + (f.maxPrice ? 1 : 0)
   );
 }
 
@@ -172,7 +98,8 @@ export default function DiscoverScreens() {
 
   const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set());
   const [hoveredScreenId, setHoveredScreenId] = useState<string | null>(null);
-  const [detailModalScreen, setDetailModalScreen] = useState<Screen | null>(null);
+  // Sidebar: results ↔ screen detail ↔ venue (mirrored in the URL)
+  const { panel, setPanel } = useDiscoverPanel();
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Zone State
@@ -185,13 +112,9 @@ export default function DiscoverScreens() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
-  const [emblaRef, emblaApi] = useEmblaCarousel({ startIndex: 0, align: "center", skipSnaps: false });
-  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
-  const [bottomSheetSnap, setBottomSheetSnap] = useState(0);
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  // Mobile: the sheet over the map — 0 peek, 1 half, 2 full
+  const [sheetSnap, setSheetSnap] = useState<SheetSnap>(0);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
-  // Venue side panel — key of the venue (map pin) whose screens are listed in the panel
-  const [activeVenueKey, setActiveVenueKey] = useState<string | null>(null);
 
   // Search State
   const [lat, setLat] = useState<number | undefined>();
@@ -204,41 +127,26 @@ export default function DiscoverScreens() {
   const geocodingLib = useMapsLibrary("geocoding");
 
   // Filters State
-  const [filters, setFilters] = useState<{
-    state: string;
-    city: string;
-    venueCategories: string[];
-    screenCategories: string[];
-    environmentTypes: string[];
-    trafficTypes: string[];
-    userIntents: string[];
-    locationTags: string[];
-    minPrice: string;
-    maxPrice: string;
-    search: string;
-  }>(() => {
+  const [filters, setFilters] = useState<DiscoverFilters>(() => {
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
     const q = params.get("q");
     const venue = params.get("venue");
-    
+    // ?venue=Apartment (links from other pages) → the canonical type; unknown text stays raw
+    const venueType = venue ? resolveVenueType(venue)?.type.slug : undefined;
+
     return {
-      state: "",
-      city: "",
-      venueCategories: venue ? [venue] : [],
-      screenCategories: [],
-      environmentTypes: [],
-      trafficTypes: [],
-      userIntents: [],
-      locationTags: [],
-      minPrice: "",
-      maxPrice: "",
+      ...EMPTY_FILTERS,
+      venueTypes: venueType ? [venueType] : [],
+      venueCategories: venue && !venueType ? [venue] : [],
       search: q || "",
     };
   });
 
-  const [sortBy, setSortBy] = useState<string>("popularity");
-  const [sortOrder, setSortOrder] = useState<string>("desc");
-  const [viewMode, setViewMode] = useState<ViewMode>("desktop");
+  const [sortBy, setSortBy] = useState<DiscoverSort>("recommended");
+  // "Search this area": the map view the advertiser asked to search (bounds + its centre)
+  const [areaSearch, setAreaSearch] = useState<{ bounds: { north: number; south: number; east: number; west: number }; lat: number; lng: number } | null>(null);
+  // Shown after the advertiser pans/zooms the map themselves (never on its own moves)
+  const [showSearchArea, setShowSearchArea] = useState(false);
   const isMobile = useIsMobile();
   const [page, setPage] = useState(1);
 
@@ -246,11 +154,6 @@ export default function DiscoverScreens() {
   const circleRef = useRef<google.maps.Circle | null>(null);
   // Refs for sidebar list cards, keyed by screen id — lets a hovered/selected map marker scroll its card into view
   const listItemRefs = useRef(new globalThis.Map<string, HTMLDivElement | null>());
-
-  useEffect(() => {
-    if (!isMobile) setViewMode("desktop");
-    else if (viewMode === "desktop") setViewMode("mobile_map");
-  }, [isMobile, viewMode]);
 
   useEffect(() => {
     const saved = localStorage.getItem(SELECTED_SCREENS_KEY);
@@ -277,9 +180,10 @@ export default function DiscoverScreens() {
     }
   }, []);
 
-  // Fetch zone info when a screen is selected for details
+  // Fetch zone info when a screen's detail is open
+  const detailScreenId = panel.kind === "screen" ? panel.id : null;
   useEffect(() => {
-    if (!detailModalScreen) {
+    if (!detailScreenId) {
       setZoneInfo(null);
       setZoneScreens([]);
       return;
@@ -287,7 +191,7 @@ export default function DiscoverScreens() {
 
     async function fetchZoneInfo() {
       try {
-        const res = await fetch(`/api/zones/screen/${detailModalScreen!.id}`);
+        const res = await fetch(`/api/zones/screen/${detailScreenId}`);
         const data = await res.json();
         if (data.zone) {
           setZoneInfo(data.zone);
@@ -303,31 +207,35 @@ export default function DiscoverScreens() {
       }
     }
     fetchZoneInfo();
-  }, [detailModalScreen]);
+  }, [detailScreenId]);
 
   const saveZoneOverrides = (newOverrides: Map<string, number>) => {
     setZonePriceOverrides(newOverrides);
     localStorage.setItem("zonePriceOverrides", JSON.stringify(Array.from(newOverrides.entries())));
   };
 
-  const queryString = useMemo(() => {
+  // Where + what to search (no sort / paging): shared by the list, map pins and chip counts.
+  // Geography, in priority order: "Search this area" (map bounds; its centre is the distance
+  // origin), a country/state (its bounds), or the searched place + radius.
+  const filterString = useMemo(() => {
     const params = new URLSearchParams();
-    if (locationBounds && (locationType === "country" || locationType === "administrative_area_level_1")) {
-      params.append("boundsN", locationBounds.north.toString());
-      params.append("boundsS", locationBounds.south.toString());
-      params.append("boundsE", locationBounds.east.toString());
-      params.append("boundsW", locationBounds.west.toString());
-      params.append("sortBy", sortBy === 'distance' ? 'popularity' : sortBy);
-      params.append("sortOrder", sortOrder);
+    const bounds = areaSearch
+      ? areaSearch.bounds
+      : locationBounds && (locationType === "country" || locationType === "administrative_area_level_1") ? locationBounds : null;
+    if (bounds) {
+      params.append("boundsN", bounds.north.toString());
+      params.append("boundsS", bounds.south.toString());
+      params.append("boundsE", bounds.east.toString());
+      params.append("boundsW", bounds.west.toString());
+      if (areaSearch) {
+        // centre only sets where distances are measured from (bounds win over radius on the server)
+        params.append("lat", areaSearch.lat.toString());
+        params.append("lng", areaSearch.lng.toString());
+      }
     } else if (lat !== undefined && lng !== undefined) {
       params.append("lat", lat.toString());
       params.append("lng", lng.toString());
       params.append("radiusKm", radiusKm.toString());
-      params.append("sortBy", sortBy);
-      params.append("sortOrder", sortOrder);
-    } else {
-      params.append("sortBy", sortBy === 'distance' ? 'popularity' : sortBy);
-      params.append("sortOrder", sortOrder);
     }
 
     if (filters.state) params.append("state", filters.state);
@@ -335,14 +243,14 @@ export default function DiscoverScreens() {
     if (filters.minPrice) params.append("minPrice", filters.minPrice);
     if (filters.maxPrice) params.append("maxPrice", filters.maxPrice);
     
+    filters.families.forEach(f => params.append("families", f));
+    filters.venueTypes.forEach(t => params.append("venueTypes", t));
+    if (filters.environment) params.append("environment", filters.environment);
     if (filters.venueCategories.length > 0) {
       filters.venueCategories.forEach(v => params.append("venueCategories", v));
     }
     if (filters.screenCategories.length > 0) {
       filters.screenCategories.forEach(s => params.append("screenCategories", s));
-    }
-    if (filters.environmentTypes.length > 0) {
-      filters.environmentTypes.forEach(e => params.append("environmentTypes", e));
     }
     if (filters.trafficTypes.length > 0) {
       filters.trafficTypes.forEach(t => params.append("trafficTypes", t));
@@ -358,10 +266,43 @@ export default function DiscoverScreens() {
     }
     
     return params.toString();
-  }, [filters, lat, lng, radiusKm, sortBy, sortOrder]);
+  }, [filters, lat, lng, radiusKm, locationBounds, locationType, areaSearch]);
 
-  const { data: result, isLoading } = useQuery<{ screens: (Screen & { distanceKm?: number })[], total?: number } | Screen[]>({
-    queryKey: [`/api/screens?${queryString}`],
+  // Distance sorts need an origin: the searched place, or the map centre after "Search this area"
+  const hasDistanceOrigin = !!areaSearch || (lat !== undefined && lng !== undefined);
+  const effectiveSort: DiscoverSort = (sortBy === "distance" || sortBy === "map_center") && !hasDistanceOrigin ? "recommended" : sortBy;
+
+  // Results list: sorted and paged on the server (24 per page), "Load more" fetches the next page
+  const LIST_PAGE_SIZE = 24;
+  const {
+    data: listData,
+    isLoading: listLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<{ screens: (Screen & { distanceKm?: number })[]; total: number }>({
+    queryKey: ["/api/screens", "list", filterString, effectiveSort],
+    queryFn: async ({ pageParam }) => {
+      const res = await fetch(`/api/screens?${filterString}&sortBy=${effectiveSort}&page=${pageParam}&pageSize=${LIST_PAGE_SIZE}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`Screens request failed (${res.status})`);
+      return res.json();
+    },
+    initialPageParam: 1,
+    getNextPageParam: (last, pages) => (pages.length * LIST_PAGE_SIZE < last.total ? pages.length + 1 : undefined),
+    enabled: initialLocationLoaded,
+  });
+
+  // Map: every match as a slim row (pins, clusters, venue grouping, header count)
+  const { data: pinData, isLoading: pinsLoading } = useQuery<(Screen & { distanceKm?: number })[]>({
+    queryKey: [`/api/screens/pins?${filterString}`],
+    enabled: initialLocationLoaded,
+  });
+  const isLoading = listLoading || pinsLoading;
+
+  // Screens per venue family/type for this search (the server ignores the type filter itself,
+  // so every chip keeps its own count while one is selected)
+  const { data: facets } = useQuery<{ total: number; families: Record<string, number>; types: Record<string, number> }>({
+    queryKey: [`/api/screens/facets?${filterString}`],
     enabled: initialLocationLoaded,
   });
 
@@ -369,10 +310,43 @@ export default function DiscoverScreens() {
     // If we've already done the initial location fetch, do nothing.
     if (initialLocationLoaded) return;
     
-    // If the library is not yet loaded, we must wait. 
-    if (!geocodingLib) return; 
+    // If the library is not yet loaded, we must wait.
+    if (!geocodingLib) return;
 
     const geocoder = new geocodingLib.Geocoder();
+
+    // A shared link to a venue (?place=lat,lng) or a screen (?screen=id) searches around that
+    // place, not around the viewer, so the linked venue/screen is actually in the results
+    const startAt = (pLat: number, pLng: number) => {
+      setLat(pLat);
+      setLng(pLng);
+      setRadiusKm(5);
+      geocoder.geocode({ location: { lat: pLat, lng: pLng } }, (results, status) => {
+        const comp = status === "OK" ? results?.[0]?.address_components.find(c => c.types.includes("sublocality") || c.types.includes("locality")) : undefined;
+        setLocationName(comp?.long_name || "");
+      });
+      setInitialLocationLoaded(true);
+    };
+    if (panel.kind === "venue") {
+      const [pLat, pLng] = panel.key.split(",").map(Number);
+      if (!isNaN(pLat) && !isNaN(pLng)) {
+        startAt(pLat, pLng);
+        return;
+      }
+    }
+    if (panel.kind === "screen") {
+      fetch(`/api/screens/by-ids?ids=${encodeURIComponent(panel.id)}`)
+        .then(r => (r.ok ? r.json() : []))
+        .then((rows: Screen[]) => {
+          const s = Array.isArray(rows) ? rows[0] : null;
+          const sLat = s ? parseFloat(String(s.latitude)) : NaN;
+          const sLng = s ? parseFloat(String(s.longitude)) : NaN;
+          if (!isNaN(sLat) && !isNaN(sLng)) startAt(sLat, sLng);
+          else setInitialLocationLoaded(true);
+        })
+        .catch(() => setInitialLocationLoaded(true));
+      return;
+    }
 
     const fetchFallbackIPLocation = async () => {
       try {
@@ -420,8 +394,8 @@ export default function DiscoverScreens() {
             setInitialLocationLoaded(true);
           });
         },
-        (error) => {
-          console.error("Geolocation denied or failed", error);
+        () => {
+          // Declining location access is a normal choice, not an error — fall back to IP location
           fetchFallbackIPLocation();
         },
         { timeout: 5000, maximumAge: 60000 }
@@ -431,8 +405,14 @@ export default function DiscoverScreens() {
     }
   }, [initialLocationLoaded, geocodingLib]);
 
-  const fetchedScreens = Array.isArray(result) ? result : (result?.screens || []);
-  const screens = activeZoneScreens || fetchedScreens;
+  // `screens`: every match (slim pin rows) — map, counts, venue grouping, similar screens.
+  // `listScreens`: full rows on the list pages loaded so far. "View zone" shows just the zone.
+  const screens: (Screen & { distanceKm?: number })[] = activeZoneScreens || pinData || [];
+  const listScreens = useMemo(
+    () => activeZoneScreens || (listData?.pages.flatMap(p => p.screens) ?? []),
+    [activeZoneScreens, listData]
+  );
+  const listTotal = activeZoneScreens ? activeZoneScreens.length : listData?.pages[0]?.total ?? 0;
 
   const totalPhysicalScreensCount = useMemo(() => {
     return screens.reduce((acc, s) => {
@@ -451,52 +431,192 @@ export default function DiscoverScreens() {
     venueGroups.forEach(g => m.set(g.key, g));
     return m;
   }, [venueGroups]);
-  const activeVenue = activeVenueKey ? venueByKey.get(activeVenueKey) || null : null;
+  const activeVenue = panel.kind === "venue" ? venueByKey.get(panel.key) || null : null;
 
-  // Close the panel if a new search no longer contains that venue
-  useEffect(() => {
-    if (activeVenueKey && !venueByKey.has(activeVenueKey)) setActiveVenueKey(null);
-  }, [activeVenueKey, venueByKey]);
+  // The screen whose detail is open: from the results, the zone, or (shared link to a screen
+  // outside the current search) fetched on its own
+  const screenFromResults = useMemo(() => {
+    if (panel.kind !== "screen") return null;
+    // full rows only — pins are slim, so a pin-only screen is fetched by id below
+    return listScreens.find(s => s.id === panel.id) || zoneScreens.find(s => s.id === panel.id) || null;
+  }, [panel, listScreens, zoneScreens]);
+  const { data: fetchedDetail, isLoading: detailLoading } = useQuery<Screen[]>({
+    queryKey: [`/api/screens/by-ids?ids=${panel.kind === "screen" ? panel.id : ""}`],
+    enabled: panel.kind === "screen" && !screenFromResults && !isLoading,
+  });
+  const detailScreen: (Screen & { distanceKm?: number }) | null = useMemo(() => {
+    if (panel.kind !== "screen") return null;
+    const full: (Screen & { distanceKm?: number }) | null = screenFromResults || (Array.isArray(fetchedDetail) ? fetchedDetail[0] || null : null);
+    if (!full) return null;
+    // a screen fetched by id has no distance — take it from its map pin
+    const pin = full.distanceKm === undefined ? screens.find(s => s.id === full.id) : undefined;
+    return pin?.distanceKm !== undefined ? { ...full, distanceKm: pin.distanceKm } : full;
+  }, [panel, screenFromResults, fetchedDetail, screens]);
+  const detailVenue = useMemo(() => {
+    if (!detailScreen) return null;
+    const key = venueKeyFor(detailScreen);
+    return key ? venueByKey.get(key) || null : null;
+  }, [detailScreen, venueByKey]);
+  const similarScreens = useMemo(
+    () => (detailScreen ? findSimilarScreens(detailScreen, mapScreens) : []),
+    [detailScreen, mapScreens]
+  );
+  // Venue key the selected pin should show as active (open venue, or the venue of the open screen)
+  const selectedVenueKey = panel.kind === "venue" ? panel.key : detailScreen ? venueKeyFor(detailScreen) : null;
 
-  // Esc closes the venue panel (but not while a dialog on top of it is open)
+  // Card facts per venue ("660 flats · ₹1.2 Cr avg flat value"), parsed once per venue
+  const typeFactsCache = useMemo(() => new globalThis.Map<string, DisplayFact[]>(), [venueGroups]);
+  const typeFactsFor = (screen: Screen): DisplayFact[] => {
+    const key = venueKeyFor(screen) || screen.id;
+    let facts = typeFactsCache.get(key);
+    if (!facts) {
+      const venue = venueByKey.get(key);
+      facts = venue ? cardFactsFor(venue.listings, venue.family) : cardFactsFor([screen], screenFamily(screen));
+      typeFactsCache.set(key, facts);
+    }
+    return facts;
+  };
+
+  // Zoomed out, nearby venues merge into count bubbles; only what's in view is rendered
+  const [mapViewport, setMapViewport] = useState<MapViewport>({ zoom: 5, bounds: null });
+  const syncMapViewport = useCallback(() => {
+    if (!map) return;
+    const b = map.getBounds()?.toJSON();
+    setMapViewport({ zoom: map.getZoom() ?? 5, bounds: b ? { north: b.north, south: b.south, east: b.east, west: b.west } : null });
+  }, [map]);
   useEffect(() => {
-    if (!activeVenueKey) return;
-    const dialogOpen = !!detailModalScreen || showAuthModal || showAdvancedFilters || showMobileSearch;
-    if (dialogOpen) return;
+    if (!map) return;
+    syncMapViewport();
+    const listener = map.addListener("idle", syncMapViewport);
+    return () => listener.remove();
+  }, [map, syncMapViewport]);
+  // "Search this area" appears only after the advertiser moves the map (drag, wheel, pinch) —
+  // programmatic moves (fitting a new search, opening a venue) never trigger it, and panning
+  // alone never refetches.
+  useEffect(() => {
+    if (!map) return;
+    let userMoved = false;
+    const markUser = () => { userMoved = true; };
+    const div = map.getDiv();
+    div.addEventListener("wheel", markUser, { passive: true });
+    div.addEventListener("touchmove", markUser, { passive: true });
+    const drag = map.addListener("dragstart", markUser);
+    const idle = map.addListener("idle", () => {
+      if (userMoved) setShowSearchArea(true);
+      userMoved = false;
+    });
+    return () => {
+      div.removeEventListener("wheel", markUser);
+      div.removeEventListener("touchmove", markUser);
+      drag.remove();
+      idle.remove();
+    };
+  }, [map]);
+
+  const searchThisArea = () => {
+    if (!map) return;
+    const b = map.getBounds()?.toJSON();
+    const c = map.getCenter();
+    if (!b || !c) return;
+    setAreaSearch({ bounds: { north: b.north, south: b.south, east: b.east, west: b.west }, lat: c.lat(), lng: c.lng() });
+    setShowSearchArea(false);
+    if (sortBy === "distance") setSortBy("map_center");
+    setPage(1);
+  };
+
+  // A new place / radius search replaces the map-area search
+  useEffect(() => {
+    setAreaSearch(null);
+    setShowSearchArea(false);
+  }, [lat, lng, radiusKm, locationBounds]);
+
+  // Every venue gets its own pin; only those in (or near) the visible map area are drawn
+  const mapVenues = useMemo(() => venuesInView(venueGroups, mapViewport), [venueGroups, mapViewport]);
+
+  // Once results have loaded, drop a venue/screen the new search no longer contains (replace, so
+  // Back doesn't bring back something that isn't there)
+  useEffect(() => {
+    if (isLoading || !initialLocationLoaded) return;
+    if (panel.kind === "venue" && !venueByKey.has(panel.key)) setPanel({ kind: "results" }, "replace");
+    if (panel.kind === "screen" && !detailScreen && !detailLoading && fetchedDetail !== undefined) setPanel({ kind: "results" }, "replace");
+  }, [panel, venueByKey, isLoading, initialLocationLoaded, detailScreen, detailLoading, fetchedDetail, setPanel]);
+
+  // The results list keeps its scroll position while a detail/venue is open
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const savedListScroll = useRef(0);
+  const navigatePanel = useCallback((next: DiscoverPanel) => {
+    if (panel.kind === "results" && next.kind !== "results" && listScrollRef.current) {
+      savedListScroll.current = listScrollRef.current.scrollTop;
+    }
+    setPanel(next);
+  }, [panel.kind, setPanel]);
+  useLayoutEffect(() => {
+    if (panel.kind === "results" && listScrollRef.current) listScrollRef.current.scrollTop = savedListScroll.current;
+  }, [panel.kind]);
+
+  const goBack = useCallback(() => navigatePanel(parentPanel(panel)), [navigatePanel, panel]);
+
+  // Esc goes back one level (but not while a dialog on top of the page is open)
+  useEffect(() => {
+    if (panel.kind === "results") return;
+    if (showAuthModal || showAdvancedFilters || showMobileSearch) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setActiveVenueKey(null);
+      if (e.key === "Escape") goBack();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeVenueKey, detailModalScreen, showAuthModal, showAdvancedFilters, showMobileSearch]);
+  }, [panel.kind, goBack, showAuthModal, showAdvancedFilters, showMobileSearch]);
+
+  // Keep the selected pin on screen. Zooming in (venues) centres on the pin first so it can't end
+  // up off-screen; otherwise only pan when it's outside the current view.
+  const revealOnMap = (lat: number, lng: number, zoomTo?: number) => {
+    if (!map || isNaN(lat) || isNaN(lng)) return;
+    if (isMobile) {
+      // Mobile: the half sheet covers the lower ~52%, and the search pill + chips the top ~110px —
+      // centre the pin in the strip of map between them
+      map.setCenter({ lat, lng });
+      if (zoomTo && (map.getZoom() || 0) < zoomTo) map.setZoom(zoomTo);
+      const mapHeight = map.getDiv().clientHeight || window.innerHeight;
+      const visibleMid = (110 + window.innerHeight * 0.48) / 2;
+      map.panBy(0, Math.round(mapHeight / 2 - visibleMid));
+      return;
+    }
+    if (zoomTo && (map.getZoom() || 0) < zoomTo) {
+      map.setCenter({ lat, lng });
+      map.setZoom(zoomTo);
+      return;
+    }
+    const bounds = map.getBounds();
+    if (!bounds || !bounds.contains({ lat, lng })) map.panTo({ lat, lng });
+  };
 
   const openVenue = (key: string) => {
     const venue = venueByKey.get(key);
     if (!venue) return;
-    setActiveVenueKey(key);
-    setIsBottomSheetOpen(false);
-    if (map) {
-      map.panTo({ lat: venue.lat, lng: venue.lng });
-      if ((map.getZoom() || 0) < 14) map.setZoom(15);
-    }
+    navigatePanel({ kind: "venue", key });
+    if (isMobile) setSheetSnap(1);
+    revealOnMap(venue.lat, venue.lng, 15);
   };
 
-  useEffect(() => {
-    if (!emblaApi) return;
-    const onSelect = () => {
-      const index = emblaApi.selectedScrollSnap();
-      setCarouselIndex(index);
-      const selectedScreen = mapScreens[index];
-      if (selectedScreen && isBottomSheetOpen && bottomSheetSnap === 0) {
-        setHoveredScreenId(selectedScreen.id);
-      }
-    };
-    emblaApi.on('select', onSelect);
-    return () => { emblaApi.off('select', onSelect); };
-  }, [emblaApi, mapScreens, isBottomSheetOpen, bottomSheetSnap]);
+  const openScreen = (screen: Screen, fromVenue?: string) => {
+    navigatePanel({ kind: "screen", id: screen.id, fromVenue });
+    if (isMobile) setSheetSnap(1);
+    revealOnMap(parseFloat(String(screen.latitude)), parseFloat(String(screen.longitude)));
+  };
+
+  // A click on the map itself (not a pin, not the end of a drag) goes back to the results.
+  // Google fires the map's click for marker clicks too, so pins stamp the time they were clicked.
+  const lastMarkerClick = useRef(0);
+  const markMarkerClick = () => { lastMarkerClick.current = Date.now(); };
+  const handleMapClick = () => {
+    if (Date.now() - lastMarkerClick.current < 400) return;
+    if (panel.kind !== "results") navigatePanel({ kind: "results" });
+    // on mobile an empty-map tap also lowers the sheet so the map is free to explore
+    if (isMobile) setSheetSnap(0);
+  };
 
   // Scroll the sidebar list to whichever screen is hovered/selected on the map (desktop only —
-  // list and map are mutually exclusive full-screen views on mobile)
+  // on mobile the list lives in the sheet and hover doesn't exist)
   useEffect(() => {
     if (isMobile || !hoveredScreenId) return;
     listItemRefs.current.get(hoveredScreenId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -564,9 +684,15 @@ export default function DiscoverScreens() {
     }
   }, [map, lat, lng, radiusKm, locationBounds, locationType]);
 
-  // Fallback map bounds if no lat/lng but screens exist
+  // While a map-area search is active the place's radius circle no longer describes the results
   useEffect(() => {
-    if (!map || !window.google || (lat !== undefined && lng !== undefined) || screens.length === 0) return;
+    circleRef.current?.setVisible(!areaSearch);
+  }, [areaSearch]);
+
+  // Fallback map bounds if no lat/lng but screens exist (never while searching a map area — the
+  // advertiser chose that view)
+  useEffect(() => {
+    if (!map || !window.google || areaSearch || (lat !== undefined && lng !== undefined) || screens.length === 0) return;
 
     const bounds = new window.google.maps.LatLngBounds();
     let hasCoords = false;
@@ -583,7 +709,7 @@ export default function DiscoverScreens() {
       map.fitBounds(bounds);
       if (screens.length === 1) map.setZoom(13);
     }
-  }, [map, screens, lat, lng]);
+  }, [map, screens, lat, lng, areaSearch]);
 
   const handlePlaceSelect = (place: google.maps.places.PlaceResult | null, inputValue: string) => {
     setLocationName(inputValue);
@@ -698,8 +824,8 @@ export default function DiscoverScreens() {
   const handleViewZone = () => {
     if (!zoneInfo || zoneScreens.length === 0) return;
     setHighlightedZoneIds(new Set(zoneScreens.map(s => s.id)));
-    setDetailModalScreen(null);
-    
+    navigatePanel({ kind: "results" });
+
     setActiveZoneScreens(zoneScreens);
     setActiveZoneName(zoneInfo.zoneName);
     
@@ -736,7 +862,6 @@ export default function DiscoverScreens() {
     setSelectedScreenIds(next);
     localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(Array.from(next)));
     saveZoneOverrides(newOverrides);
-    setDetailModalScreen(null);
     setHighlightedZoneIds(new Set());
     
     toast({
@@ -763,8 +888,9 @@ export default function DiscoverScreens() {
   };
 
   // Custom Map Marker Content — single screen
-  const renderCustomMarker = (screen: Screen, index: number) => {
-    const isHovered = hoveredScreenId === screen.id;
+  const renderCustomMarker = (screen: Screen) => {
+    const isOpen = detailScreenId === screen.id;
+    const isHovered = hoveredScreenId === screen.id && !isOpen;
     const isSelected = selectedScreenIds.has(screen.id);
     const isHighlightedZone = highlightedZoneIds.has(screen.id);
     const hasMultiScreen = !!(screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1);
@@ -774,7 +900,7 @@ export default function DiscoverScreens() {
     const hasZoneOverride = zonePriceOverrides.has(screen.id);
     const basePrice = calculateScreenPricePerDay(screen);
     const price = zonePriceOverrides.get(screen.id) ?? basePrice ?? 0;
-    const formatPrice = (p: number) => p >= 1000 ? `₹${(p / 1000).toFixed(1).replace('.0', '')}k` : `₹${p}`;
+    const formatPrice = (p: number) => p >= 1000 ? `₹${(p / 1000).toFixed(1).replace('.0', '')}k` : `₹${Math.round(p)}`;
 
     // Bulk-mandatory venues are priced per screen × how many screens the booking spans, so
     // show that breakdown directly instead of a single collapsed total
@@ -784,47 +910,53 @@ export default function DiscoverScreens() {
       priceDisplay = `${formatPrice(unitPrice)} × ${screen.numberOfScreens}`;
     }
 
-    const pillColor = isSelected
-      ? 'bg-green-600 text-white border-white'
-      : isHighlightedZone
-        ? 'bg-amber-500 text-white border-white'
-        : isHovered
-          ? 'bg-slate-900 text-white border-slate-900'
-          : 'bg-white text-slate-800 border-white hover:bg-slate-50';
+    // Open in the sidebar: primary blue with a halo; in the campaign: green
+    const pillColor = isOpen
+      ? 'bg-primary text-primary-foreground border-white ring-4 ring-primary/25'
+      : isSelected
+        ? 'bg-green-600 text-white border-white'
+        : isHighlightedZone
+          ? 'bg-amber-500 text-white border-white'
+          : isHovered
+            ? 'bg-slate-900 text-white border-slate-900'
+            : 'bg-white text-slate-800 border-white hover:bg-slate-50';
 
-    const caretColor = isSelected
-      ? 'border-t-green-600'
-      : isHighlightedZone
-        ? 'border-t-amber-500'
-        : isHovered
-          ? 'border-t-slate-900'
-          : 'border-t-white';
+    const caretColor = isOpen
+      ? 'border-t-primary'
+      : isSelected
+        ? 'border-t-green-600'
+        : isHighlightedZone
+          ? 'border-t-amber-500'
+          : isHovered
+            ? 'border-t-slate-900'
+            : 'border-t-white';
 
     return (
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={`${screen.venueName}, ${priceDisplay} per day`}
+        aria-pressed={isOpen}
         className={`relative flex flex-col items-center transition-all duration-300 cursor-pointer ${
-          isHovered ? 'scale-125 z-50' : 'scale-100 z-10'
+          isHovered || isOpen ? 'scale-125 z-50' : 'scale-100 z-10'
         }`}
         onMouseEnter={() => setHoveredScreenId(screen.id)}
-        onMouseLeave={() => {
-          // Keep the sidebar highlight while this screen's detail modal is open, so it doesn't
-          // drop the instant the mouse leaves the marker en route to the modal
-          if (detailModalScreen?.id !== screen.id) setHoveredScreenId(null);
-        }}
+        onMouseLeave={() => setHoveredScreenId(null)}
         onClick={() => {
-          if (isMobile) {
-            setIsBottomSheetOpen(true);
-            setBottomSheetSnap(0);
-            setTimeout(() => emblaApi?.scrollTo(index), 50);
-          } else {
-            setDetailModalScreen(screen);
+          markMarkerClick();
+          openScreen(screen);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openScreen(screen);
           }
         }}
       >
         {/* Price pill */}
         <div className={`px-3 py-1.5 rounded-full font-bold text-[13px] shadow-lg border-2 whitespace-nowrap ${
           pillColor
-        } ${isHovered && !isSelected ? 'shadow-xl font-extrabold' : 'shadow-md'}`}>
+        } ${(isHovered || isOpen) && !isSelected ? 'shadow-xl font-extrabold' : 'shadow-md'}`}>
           {priceDisplay}
         </div>
 
@@ -862,17 +994,247 @@ export default function DiscoverScreens() {
   const renderVenueMarker = (venue: VenueGroup) => (
     <VenueMarker
       venue={venue}
-      isActive={activeVenueKey === venue.key}
+      isActive={selectedVenueKey === venue.key}
       isHovered={!!hoveredScreenId && venue.listings.some(l => l.id === hoveredScreenId)}
       addedCount={venue.listings.filter(l => selectedScreenIds.has(l.id)).length}
       isHighlightedZone={venue.listings.some(l => highlightedZoneIds.has(l.id))}
-      onClick={() => openVenue(venue.key)}
+      onClick={() => {
+        markMarkerClick();
+        openVenue(venue.key);
+      }}
       onMouseEnter={() => setHoveredScreenId(venue.listings[0].id)}
       onMouseLeave={() => setHoveredScreenId(null)}
     />
   );
 
-  const venuePanel = activeVenue ? (
+  const resultsLabel = "All results";
+
+  // Quick filter chips — desktop header and the mobile row under the search pill: Indoor/Outdoor,
+  // then one chip per venue family with its screen count in this search (families with nothing
+  // here are hidden unless selected). Type words in the search box ("gym") light their family up.
+  const impliedFamilies = useMemo(() => new Set<string>(parseSearchQuery(filters.search).families), [filters.search]);
+  const chipClass = (active: boolean, implied = false) => `shrink-0 h-9 px-4 rounded-full text-sm font-medium border transition-colors ${
+    active
+      ? 'border-slate-900 bg-slate-900 text-white'
+      : implied
+        ? 'border-primary text-primary bg-primary/5'
+        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+  }`;
+  const toggleFamily = (slug: string) => {
+    setFilters(f => ({ ...f, families: f.families.includes(slug) ? f.families.filter(x => x !== slug) : [...f.families, slug] }));
+    setPage(1);
+  };
+  const quickChips = [
+    ...(["indoor", "outdoor"] as const).map(env => (
+      <button
+        key={`env-${env}`}
+        type="button"
+        aria-pressed={filters.environment === env}
+        onClick={() => { setFilters(f => ({ ...f, environment: f.environment === env ? "" : env })); setPage(1); }}
+        className={chipClass(filters.environment === env)}
+      >
+        {env === "indoor" ? "Indoor screens" : "Outdoor screens"}
+      </button>
+    )),
+    <div key="sep" className="w-px h-6 bg-slate-200 mx-0.5 shrink-0 self-center" aria-hidden="true" />,
+    ...VENUE_FAMILIES
+      .map(f => ({ ...f, count: facets?.families[f.slug] ?? 0 }))
+      .filter(f => f.count > 0 || filters.families.includes(f.slug))
+      .sort((a, b) => b.count - a.count)
+      .map(f => {
+        const active = filters.families.includes(f.slug);
+        return (
+          <button
+            key={`family-${f.slug}`}
+            type="button"
+            aria-pressed={active}
+            aria-label={`${f.label}, ${f.count.toLocaleString("en-IN")} screens`}
+            onClick={() => toggleFamily(f.slug)}
+            className={chipClass(active, impliedFamilies.has(f.slug))}
+          >
+            {f.label}
+            <span className={`ml-1.5 text-xs ${active ? 'text-white/70' : 'text-slate-400'}`}>{f.count.toLocaleString("en-IN")}</span>
+          </button>
+        );
+      }),
+  ];
+
+  // Venue type multi-select (Filters dialog): grouped by family, with counts for this search
+  const venueTypeOptions = VENUE_FAMILIES.flatMap(f =>
+    typesInFamily(f.slug)
+      .map(t => ({ t, count: facets?.types[t.slug] ?? 0 }))
+      .filter(({ t, count }) => count > 0 || filters.venueTypes.includes(t.slug))
+      .map(({ t, count }) => ({ value: t.slug, label: `${f.label} · ${t.label} (${count.toLocaleString("en-IN")})` }))
+  );
+
+  // "Nearest to map centre" searches the visible map area (like "Search this area") and sorts by
+  // distance from its centre. "Nearest to searched place" only makes sense with a place searched.
+  const sortOptions: DiscoverSort[] = [
+    "recommended", "price_asc", "price_desc",
+    ...(lat !== undefined && !areaSearch ? (["distance"] as DiscoverSort[]) : []),
+    "map_center", "footfall", "value", "package_size", "newest",
+  ];
+  const sortSelect = (
+    <Select
+      value={effectiveSort}
+      onValueChange={(v) => {
+        const next = v as DiscoverSort;
+        if (next === "map_center" && !areaSearch) searchThisArea();
+        setSortBy(next);
+      }}
+    >
+      <SelectTrigger className="w-auto min-w-[150px] max-w-[230px] h-9 border-none bg-slate-100 text-sm font-medium rounded-full" aria-label="Sort by">
+        <SelectValue placeholder="Sort by" />
+      </SelectTrigger>
+      <SelectContent>
+        {sortOptions.map(s => <SelectItem key={s} value={s}>{SORT_LABELS[s]}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+
+  const resultsCountLabel = isLoading ? 'Searching...' : `Over ${totalPhysicalScreensCount.toLocaleString()} screens`;
+  const resultsPlaceLabel = areaSearch ? "This map area" : locationName;
+
+  const resultsHeader = (
+    <div className="flex justify-between items-end gap-3">
+      <div className="min-w-0">
+        <h2 className="text-lg font-semibold text-slate-900">{resultsCountLabel}</h2>
+        {resultsPlaceLabel && <p className="text-sm text-slate-500 truncate">{resultsPlaceLabel}</p>}
+      </div>
+      {sortSelect}
+    </div>
+  );
+
+  const resultsList = isLoading ? (
+    <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+      <Loader2 className="h-8 w-8 animate-spin mb-4 text-slate-300" />
+    </div>
+  ) : listScreens.length === 0 ? (
+    <div className="text-center py-20">
+      <h3 className="text-lg font-medium text-slate-700">No exact matches</h3>
+      <p className="text-slate-500 text-sm mt-1">
+        {effectiveSort === "value" && screens.length > 0
+          ? "None of these screens list their daily footfall, so they can't be ranked by value. Try another sort."
+          : "Try changing or removing some of your filters."}
+      </p>
+      <Button
+        variant="outline"
+        className="mt-4 rounded-full"
+        onClick={() => { setFilters(EMPTY_FILTERS); setSortBy("recommended"); }}
+      >
+        Clear all filters
+      </Button>
+    </div>
+  ) : (
+    <div className="flex flex-col">
+      {effectiveSort === "value" && (
+        <p className="text-xs text-slate-500 mb-4">
+          Ranked by price per day for every 1,000 people who pass by daily. Screens that don't list their footfall are left out.
+        </p>
+      )}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 pb-8">
+        {listScreens.map(screen => {
+          const key = venueKeyFor(screen);
+          const venue = key ? venueByKey.get(key) : undefined;
+          const moreAtVenue = venue && venue.listings.length > 1 ? venue.totalScreens - screenCount(screen) : 0;
+          return (
+            <ScreenResultCard
+              key={screen.id}
+              screen={screen}
+              typeFacts={typeFactsFor(screen)}
+              isAdded={selectedScreenIds.has(screen.id)}
+              isHighlighted={hoveredScreenId === screen.id}
+              isSelected={detailScreenId === screen.id}
+              moreAtVenue={moreAtVenue}
+              priceOverride={zonePriceOverrides.get(screen.id)}
+              showValue={effectiveSort === "value"}
+              onOpen={() => openScreen(screen)}
+              onToggleAdd={() => toggleScreenSelection(screen)}
+              onOpenVenue={venue ? () => openVenue(venue.key) : undefined}
+              onHoverChange={(hovered) => setHoveredScreenId(hovered ? screen.id : null)}
+              cardRef={(el) => { listItemRefs.current.set(screen.id, el); }}
+            />
+          );
+        })}
+      </div>
+      {!activeZoneScreens && (
+        <div className="flex flex-col items-center gap-2 pb-8">
+          <p className="text-xs text-slate-500">
+            Showing {listScreens.length.toLocaleString("en-IN")} of {listTotal.toLocaleString("en-IN")} listings
+          </p>
+          {hasNextPage && (
+            <Button
+              variant="outline"
+              className="rounded-full shadow-sm"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+            >
+              {isFetchingNextPage ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading…</> : "Load more"}
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // Mobile sheet header: what's visible at peek. Results → count, sort, book; screen/venue → a
+  // compact summary (tap it to raise the sheet) with the add button right there.
+  const expandSheet = () => setSheetSnap(1);
+  const mobileSheetHeader = detailScreen && panel.kind === "screen" ? (() => {
+    const p = priceInfo(detailScreen, zonePriceOverrides.get(detailScreen.id));
+    const added = selectedScreenIds.has(detailScreen.id);
+    return (
+      <div className="flex items-center gap-3 px-4 pb-3">
+        <button type="button" onClick={expandSheet} className="flex items-center gap-3 flex-1 min-w-0 text-left" aria-label={`Show details for ${detailScreen.venueName}`}>
+          <ScreenPhoto src={primaryPhoto(detailScreen)} family={screenFamily(detailScreen)} alt={detailScreen.venueName} className="w-16 h-14 rounded-xl shrink-0" iconClassName="w-6 h-6" />
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-slate-900 line-clamp-1">{detailScreen.venueName}</div>
+            <div className="text-xs text-slate-500 line-clamp-1">{localityLine(detailScreen)}</div>
+            <div className="text-sm font-bold text-slate-900">
+              {formatRupees(p.total)}<span className="text-xs font-normal text-slate-500">/day{p.screens > 1 ? ` · ${p.screens} screens` : ""}</span>
+            </div>
+          </div>
+        </button>
+        <Button
+          size="sm"
+          className={`rounded-full h-10 px-4 font-semibold shrink-0 ${added ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
+          onClick={() => toggleScreenSelection(detailScreen)}
+          aria-pressed={added}
+        >
+          {added ? <><Check className="w-4 h-4 mr-1" /> Added</> : "Add"}
+        </Button>
+      </div>
+    );
+  })() : activeVenue ? (
+    <button type="button" onClick={expandSheet} className="flex items-center gap-3 px-4 pb-3 w-full text-left">
+      <ScreenPhoto src={activeVenue.image} family={activeVenue.family} alt={activeVenue.name} className="w-16 h-14 rounded-xl shrink-0" iconClassName="w-6 h-6" />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold text-slate-900 line-clamp-1">{activeVenue.name}</div>
+        <div className="text-xs text-slate-500">
+          {activeVenue.totalScreens} screens · from {formatRupees(activeVenue.minPrice)}/day
+        </div>
+      </div>
+      <span className="text-xs font-semibold text-primary shrink-0">View</span>
+    </button>
+  ) : (
+    <div className="flex items-center justify-between gap-2 px-4 pb-3">
+      <button type="button" onClick={() => setSheetSnap(sheetSnap === 0 ? 1 : sheetSnap)} className="min-w-0 text-left">
+        <div className="text-base font-semibold text-slate-900">{resultsCountLabel}</div>
+        {resultsPlaceLabel && <div className="text-xs text-slate-500 truncate">{resultsPlaceLabel}</div>}
+      </button>
+      <div className="flex items-center gap-2 shrink-0">
+        {sheetSnap > 0 && sortSelect}
+        {selectedScreenIds.size > 0 && (
+          <Button size="sm" className="rounded-full h-9 px-3.5 font-semibold" onClick={proceedToCreateCampaign}>
+            Book ({selectedScreenIds.size})
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+
+  // Sidebar content for the venue / screen states (null = show the results list)
+  const panelContent = activeVenue ? (
     <VenuePanel
       key={activeVenue.key}
       venue={activeVenue}
@@ -881,13 +1243,36 @@ export default function DiscoverScreens() {
       cartCount={selectedScreenIds.size}
       onToggle={toggleScreenSelection}
       onAddMany={addScreensToCampaign}
-      onOpenDetails={(s) => setDetailModalScreen(s)}
+      onOpenDetails={(s) => openScreen(s, activeVenue.key)}
       onHover={setHoveredScreenId}
-      onBack={() => setActiveVenueKey(null)}
+      onBack={() => navigatePanel({ kind: "results" })}
       onBook={proceedToCreateCampaign}
-      backLabel={isMobile ? (viewMode === 'mobile_list' ? "Back to list" : "Back to map") : "All results"}
+      backLabel={resultsLabel}
       isMobile={isMobile}
     />
+  ) : detailScreen ? (
+    <ScreenDetailPanel
+      key={detailScreen.id}
+      screen={detailScreen}
+      venue={detailVenue}
+      similar={similarScreens}
+      isAdded={selectedScreenIds.has(detailScreen.id)}
+      priceOverride={zonePriceOverrides.get(detailScreen.id)}
+      backLabel={panel.kind === "screen" && panel.fromVenue && venueByKey.get(panel.fromVenue) ? venueByKey.get(panel.fromVenue)!.name : resultsLabel}
+      onBack={goBack}
+      onClose={isMobile ? () => navigatePanel({ kind: "results" }) : undefined}
+      onToggle={() => toggleScreenSelection(detailScreen)}
+      onOpenScreen={(s) => openScreen(s)}
+      onOpenVenue={detailVenue && detailVenue.listings.length > 1 ? () => openVenue(detailVenue.key) : undefined}
+      zoneInfo={zoneInfo}
+      isZoneBooked={zoneInfo ? zoneInfo.screenIds.every(id => selectedScreenIds.has(id)) : false}
+      onViewZone={handleViewZone}
+      onBookZone={handleBookZone}
+    />
+  ) : panel.kind === "screen" ? (
+    <div className="flex flex-1 items-center justify-center h-full text-slate-400">
+      <Loader2 className="h-6 w-6 animate-spin" />
+    </div>
   ) : null;
 
   return (
@@ -969,8 +1354,8 @@ export default function DiscoverScreens() {
                 <Button variant="outline" className="rounded-full border-slate-200 shadow-sm hover:bg-slate-50 text-slate-700 shrink-0 h-9 px-4">
                   <SlidersHorizontal className="w-4 h-4 mr-2" />
                   Filters
-                  {Object.values(filters).flat().some(Boolean) && (
-                    <Badge className="ml-2 bg-slate-900 text-white border-0 px-1.5 py-0 min-w-0">1</Badge>
+                  {activeFilterCount(filters) > 0 && (
+                    <Badge className="ml-2 bg-slate-900 text-white border-0 px-1.5 py-0 min-w-0">{activeFilterCount(filters)}</Badge>
                   )}
                 </Button>
               </DialogTrigger>
@@ -1001,10 +1386,10 @@ export default function DiscoverScreens() {
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Venue Type</label>
                       <MultiSelect
-                        placeholder="All Venues"
-                        selected={filters.venueCategories}
-                        onChange={(v) => setFilters({ ...filters, venueCategories: v })}
-                        options={(advancedFilters?.venueTypes || VENUE_CATEGORIES).map(c => ({ label: c, value: c }))}
+                        placeholder="All venue types"
+                        selected={filters.venueTypes}
+                        onChange={(v) => { setFilters({ ...filters, venueTypes: v, venueCategories: [] }); setPage(1); }}
+                        options={venueTypeOptions}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1039,7 +1424,7 @@ export default function DiscoverScreens() {
                     className="w-full bg-slate-900 hover:bg-slate-800 text-white" 
                     onClick={() => setShowAdvancedFilters(false)}
                   >
-                    Show {screens.length} screens
+                    {isLoading ? "Searching…" : `Show ${totalPhysicalScreensCount.toLocaleString("en-IN")} screens`}
                   </Button>
                 </div>
               </DialogContent>
@@ -1047,49 +1432,7 @@ export default function DiscoverScreens() {
 
             <div className="w-px h-6 bg-slate-200 mx-1 shrink-0"></div>
 
-            {[
-              { label: 'Indoor', value: 'Indoor', type: 'env' },
-              { label: 'Outdoor', value: 'Outdoor Digital', type: 'env' },
-              { label: 'Corporate Park', value: 'Corporate Park', type: 'venue' },
-              { label: 'Apartment', value: 'Apartment', type: 'venue' },
-              { label: 'Restaurant', value: 'Restaurant', type: 'venue' },
-              { label: 'Cafe', value: 'Café', type: 'venue' },
-              { label: 'Mall', value: 'Mall', type: 'venue' },
-              { label: 'Gym', value: 'Gym', type: 'venue' },
-              { label: 'Hospital', value: 'Hospital', type: 'venue' },
-              { label: 'Petrol Pump', value: 'Petrol Bunk', type: 'venue' }
-            ].map(({ label, value, type }) => {
-              const isActive = type === 'env' 
-                ? filters.environmentTypes.includes(value)
-                : filters.venueCategories.includes(value);
-
-              return (
-                <button
-                  key={label}
-                  onClick={() => {
-                    if (type === 'env') {
-                      const newEnvs = filters.environmentTypes.includes(value)
-                        ? filters.environmentTypes.filter(e => e !== value)
-                        : [...filters.environmentTypes, value];
-                      setFilters({ ...filters, environmentTypes: newEnvs });
-                    } else {
-                      const newVenues = filters.venueCategories.includes(value)
-                        ? filters.venueCategories.filter(v => v !== value)
-                        : [...filters.venueCategories, value];
-                      setFilters({ ...filters, venueCategories: newVenues });
-                    }
-                    setPage(1);
-                  }}
-                  className={`shrink-0 h-9 px-4 rounded-full text-sm font-medium border transition-colors ${
-                    isActive
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+            {quickChips}
             </div>
           </div>
         </div>
@@ -1098,100 +1441,30 @@ export default function DiscoverScreens() {
       {/* Main Split View */}
       <div className="flex flex-1 overflow-hidden relative">
         
-        {/* Left List Area (Grid) */}
-        <div className={`
-          flex flex-col bg-white overflow-y-auto z-10 transition-all duration-300
-          ${isMobile ? (viewMode === 'mobile_list' ? 'absolute inset-0 w-full' : 'hidden') : 'w-[55%] relative'}
-        `}>
-          {!isMobile && venuePanel ? venuePanel : (
+        {/* Left List Area (desktop). On mobile the same content lives in the bottom sheet. */}
+        {!isMobile && (
+        <div
+          ref={listScrollRef}
+          className={`flex flex-col bg-white z-10 w-[55%] relative ${panelContent ? 'overflow-hidden' : 'overflow-y-auto'}`}
+        >
+          {panelContent ? panelContent : (
           <div className="p-6">
-            <div className="flex justify-between items-end mb-6">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  {isLoading ? 'Searching...' : `Over ${totalPhysicalScreensCount.toLocaleString()} screens`}
-                </h2>
-                {locationName && <p className="text-sm text-slate-500">{locationName}</p>}
-              </div>
-              
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-[140px] h-9 border-none bg-slate-100 text-sm font-medium rounded-full">
-                  <SelectValue placeholder="Sort By" />
-                </SelectTrigger>
-                <SelectContent>
-                  {lat !== undefined && <SelectItem value="distance">Distance</SelectItem>}
-                  <SelectItem value="popularity">Popularity</SelectItem>
-                  <SelectItem value="price">Price</SelectItem>
-                  <SelectItem value="newest">Newest</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                <Loader2 className="h-8 w-8 animate-spin mb-4 text-slate-300" />
-              </div>
-            ) : screens.length === 0 ? (
-              <div className="text-center py-20">
-                <h3 className="text-lg font-medium text-slate-700">No exact matches</h3>
-                <p className="text-slate-500 text-sm mt-1">Try changing or removing some of your filters.</p>
-                <Button 
-                  variant="outline" 
-                  className="mt-4 rounded-full"
-                  onClick={() => setFilters({ state: "", city: "", venueCategories: [], screenCategories: [], environmentTypes: [], trafficTypes: [], userIntents: [], locationTags: [], minPrice: "", maxPrice: "", search: "" })}
-                >
-                  Clear all filters
-                </Button>
-              </div>
-            ) : (
-              <div className="flex flex-col">
-                <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6 pb-8">
-                  {screens.slice(0, page * 20).map(screen => (
-                    <ScreenListCard
-                      key={screen.id}
-                      screen={screen}
-                      isAdded={selectedScreenIds.has(screen.id)}
-                      isHighlighted={hoveredScreenId === screen.id}
-                      onHoverStart={() => setHoveredScreenId(screen.id)}
-                      onHoverEnd={() => setHoveredScreenId(null)}
-                      onOpenDetails={() => setDetailModalScreen(screen)}
-                      onToggleAdd={() => toggleScreenSelection(screen)}
-                      cardRef={(el) => { listItemRefs.current.set(screen.id, el); }}
-                      {...(() => {
-                        const key = venueKeyFor(screen);
-                        const venue = key ? venueByKey.get(key) : undefined;
-                        return venue && venue.listings.length > 1
-                          ? { venueListingCount: venue.listings.length, venueScreenCount: venue.totalScreens, onOpenVenue: () => openVenue(venue.key) }
-                          : {};
-                      })()}
-                    />
-                  ))}
-                </div>
-                {screens.length > page * 20 && (
-                  <div className="flex justify-center pb-24 sm:pb-8">
-                    <Button 
-                      variant="outline" 
-                      className="rounded-full shadow-sm"
-                      onClick={() => setPage(p => p + 1)}
-                    >
-                      Load More
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="mb-6">{resultsHeader}</div>
+            {resultsList}
           </div>
           )}
         </div>
+        )}
 
-        {/* Right Map View */}
         <div className={`
           flex-1 bg-slate-50 relative p-0 sm:p-6 sm:pb-6 md:border-l border-slate-200
-          ${isMobile ? (viewMode === 'mobile_map' ? 'block absolute inset-0 z-0' : 'hidden') : 'block'}
+          ${isMobile ? 'block absolute inset-0 z-0' : 'block'}
         `}>
-          
-          {/* Mobile Floating Search Pill */}
-          {isMobile && viewMode === 'mobile_map' && (
-            <div className="absolute top-4 left-4 right-4 z-20 flex items-center gap-2">
+
+          {/* Mobile Floating Search Pill + quick filters */}
+          {isMobile && (
+            <div className="absolute top-3 left-0 right-0 z-20 flex flex-col gap-2">
+            <div className="px-4 flex items-center gap-2">
               <div 
                 className="flex-1 bg-white rounded-full shadow-lg border border-slate-200 px-4 h-12 flex items-center gap-3 cursor-pointer"
                 onClick={() => setShowMobileSearch(true)}
@@ -1216,6 +1489,10 @@ export default function DiscoverScreens() {
                 <SlidersHorizontal className="w-5 h-5 text-slate-700" />
               </Button>
             </div>
+            <div className="flex gap-2 overflow-x-auto px-4 pb-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none] [&>button]:h-8 [&>button]:px-3.5 [&>button]:text-[13px] [&>button]:shadow-sm">
+              {quickChips}
+            </div>
+            </div>
           )}
 
           <div className="w-full h-full sm:rounded-2xl overflow-hidden shadow-none sm:shadow-md border-0 sm:border border-slate-200/60 bg-slate-200 relative z-0">
@@ -1226,11 +1503,22 @@ export default function DiscoverScreens() {
               defaultZoom={5}
               gestureHandling="greedy"
               disableDefaultUI={true}
-              zoomControl={true}
+              zoomControl={!isMobile}
+              clickableIcons={false}
+              onClick={handleMapClick}
               style={{ width: '100%', height: '100%' }}
             >
+              {showSearchArea && !activeZoneName && (
+                <button
+                  type="button"
+                  onClick={searchThisArea}
+                  className={`absolute ${isMobile ? 'top-[124px]' : 'top-4'} left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 whitespace-nowrap rounded-full bg-white px-4 h-10 text-sm font-semibold text-slate-900 shadow-lg border border-slate-200 hover:bg-slate-50 animate-in fade-in slide-in-from-top-2`}
+                >
+                  <Search className="w-4 h-4" /> Search this area
+                </button>
+              )}
               {activeZoneName && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2 rounded-full shadow-lg flex items-center gap-2 font-medium text-sm animate-in fade-in slide-in-from-top-4">
+                <div className={`absolute ${isMobile ? 'top-[124px]' : 'top-4'} left-1/2 -translate-x-1/2 z-[100] whitespace-nowrap bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2 rounded-full shadow-lg flex items-center gap-2 font-medium text-sm animate-in fade-in slide-in-from-top-4`}>
                   Viewing Zone: {activeZoneName}
                   <button 
                     onClick={() => { setActiveZoneScreens(null); setActiveZoneName(null); setHighlightedZoneIds(new Set()); }}
@@ -1240,20 +1528,20 @@ export default function DiscoverScreens() {
                   </button>
                 </div>
               )}
-              {venueGroups.map((venue) => {
+              {mapVenues.map((venue) => {
                 if (venue.listings.length === 1) {
                   const screen = venue.listings[0];
                   return (
                     <AdvancedMarker
                       key={screen.id}
                       position={{ lat: parseFloat(String(screen.latitude)), lng: parseFloat(String(screen.longitude)) }}
-                      zIndex={hoveredScreenId === screen.id ? 100 : 1}
+                      zIndex={detailScreenId === screen.id ? 200 : hoveredScreenId === screen.id ? 100 : 1}
                     >
-                      {renderCustomMarker(screen, mapScreens.indexOf(screen))}
+                      {renderCustomMarker(screen)}
                     </AdvancedMarker>
                   );
                 }
-                const isActive = activeVenueKey === venue.key;
+                const isActive = selectedVenueKey === venue.key;
                 const isHovered = !!hoveredScreenId && venue.listings.some(l => l.id === hoveredScreenId);
                 return (
                   <AdvancedMarker
@@ -1269,103 +1557,32 @@ export default function DiscoverScreens() {
           </div>
         </div>
 
-        {/* Mobile View Toggle */}
-        {isMobile && !activeVenue && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300">
-            <div className="bg-slate-900 text-white rounded-full shadow-2xl p-1 flex items-center">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className={`rounded-full px-6 transition-all ${viewMode === 'mobile_list' ? 'bg-slate-700 text-white' : 'text-slate-300 hover:text-white'}`}
-                onClick={() => setViewMode('mobile_list')}
-              >
-                <List className="w-4 h-4 mr-2" />
-                List
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className={`rounded-full px-6 transition-all ${viewMode === 'mobile_map' ? 'bg-slate-700 text-white' : 'text-slate-300 hover:text-white'}`}
-                onClick={() => setViewMode('mobile_map')}
-              >
-                <MapIcon className="w-4 h-4 mr-2" />
-                Map
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Mobile Map Bottom Carousel */}
-      {isMobile && viewMode === 'mobile_map' && mapScreens.length > 0 && !activeVenue && (
-        <div className="absolute bottom-20 left-0 right-0 z-40 pb-4">
-          <div className="overflow-hidden" ref={emblaRef}>
-            <div className="flex touch-pan-y">
-              {mapScreens.map((screen) => (
-                <div className="flex-[0_0_90%] min-w-0 pl-4 first:pl-6 last:pr-6" key={screen.id}>
-                  <div 
-                    className="bg-white rounded-2xl shadow-xl border border-slate-200 h-32 p-2.5 flex gap-3 cursor-pointer"
-                    onClick={() => setDetailModalScreen(screen)}
-                  >
-                    {/* Compact Image */}
-                    <div className="relative w-24 h-full shrink-0 rounded-xl overflow-hidden bg-slate-200">
-                      {(screen.screenImages?.[0] || screen.images?.[0]) ? (
-                        <img 
-                          src={screen.screenImages?.[0] || screen.images?.[0]} 
-                          alt={screen.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <VenueIconFallback category={screen.category || ""} name={screen.name} />
-                      )}
-                    </div>
-                    {/* Compact Details */}
-                    <div className="flex flex-col flex-1 justify-center py-1">
-                      <h3 className="font-bold text-slate-900 text-sm line-clamp-1">{screen.venueName}, {screen.city}</h3>
-                      <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{screen.name} • {screen.category}</p>
-                      <div className="flex items-center text-xs font-medium text-slate-500 mt-1.5">
-                        <Users className="w-3 h-3 mr-1" />
-                        {((screen.avgDailyFootfall || 0) / 1000).toFixed(1)}k daily
-                      </div>
-                      <div className="mt-auto pt-1">
-                        <span className="font-bold text-slate-900">₹{calculateScreenPricePerDay(screen).toLocaleString()}</span>
-                        <span className="text-slate-500 text-[10px]"> / day</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+      {/* Mobile: results / screen / venue in a sheet over the map (peek · half · full) */}
+      {isMobile && (
+        <MapBottomSheet
+          snap={sheetSnap}
+          onSnapChange={setSheetSnap}
+          header={sheetSnap === 0 || !panelContent ? mobileSheetHeader : null}
+        >
+          {panelContent ? (
+            <div className="flex-1 min-h-0 flex flex-col">{panelContent}</div>
+          ) : (
+            <div ref={listScrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 pt-1 pb-8">
+              {resultsList}
             </div>
-          </div>
-        </div>
+          )}
+        </MapBottomSheet>
       )}
-
-      {/* Mobile: venue panel as a full-screen sheet over the map */}
-      {isMobile && venuePanel && (
-        <div className="fixed inset-0 z-[45] bg-white flex flex-col animate-in slide-in-from-bottom-8 fade-in duration-200">
-          {venuePanel}
-        </div>
-      )}
-
-      <ScreenDetailsModal 
-        isOpen={!!detailModalScreen}
-        onClose={() => setDetailModalScreen(null)}
-        screen={detailModalScreen}
-        onAdd={toggleScreenSelection}
-        isAdded={detailModalScreen ? selectedScreenIds.has(detailModalScreen.id) : false}
-        zoneInfo={zoneInfo}
-        allZoneScreens={zoneScreens}
-        onViewZone={handleViewZone}
-        onBookZone={handleBookZone}
-        isZoneBooked={zoneInfo ? zoneInfo.screenIds.every(id => selectedScreenIds.has(id)) : false}
-      />
 
       {/* Mobile Search Modal */}
       {isMobile && (
         <Dialog open={showMobileSearch} onOpenChange={setShowMobileSearch}>
           <DialogContent className="sm:max-w-[425px] overflow-hidden rounded-2xl border-0 p-0 shadow-2xl mt-safe top-24 transform -translate-y-0">
             <div className="bg-white p-6 flex flex-col gap-6">
-              <h2 className="text-xl font-bold text-slate-900">Where to promote?</h2>
+              <DialogTitle className="text-xl font-bold text-slate-900">Where to promote?</DialogTitle>
+              <DialogDescription className="sr-only">Choose a location and radius to find screens nearby.</DialogDescription>
               
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location</label>

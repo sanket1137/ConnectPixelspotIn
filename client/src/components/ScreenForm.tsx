@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { MapPin, Upload, Check, Users, DollarSign, Monitor } from "lucide-react";
+import { MapPin, Upload, Check, Users, DollarSign, Monitor, Building2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +21,8 @@ import {
   GENDER_ORIENTATIONS,
   INCOME_LEVELS,
 } from "@shared/constants";
+import { attributesFor, validateCustomAttributes, validateVenueAttributes, type CustomAttribute, type VenueAttributes } from "@shared/venueAttributes";
+import { VenueAttributeFields, VenueTypeSelect, attributesToFormValues, venueTypeSlugFor } from "@/components/screens/VenueAttributeFields";
 
 const screenFormSchema = z.object({
   // Section 1 - Screen Identity
@@ -88,7 +90,12 @@ const screenFormSchema = z.object({
 export type ScreenFormData = z.infer<typeof screenFormSchema>;
 
 interface ScreenFormProps {
-  onSubmit: (data: ScreenFormData & { screenImages: string[]; surroundingImages: string[] }) => void;
+  onSubmit: (data: ScreenFormData & {
+    screenImages: string[];
+    surroundingImages: string[];
+    venueAttributes: VenueAttributes;
+    customAttributes: CustomAttribute[];
+  }) => void;
   initialData?: Partial<ScreenFormData>;
   submitButtonText?: string;
   isLoading?: boolean;
@@ -108,6 +115,10 @@ export function ScreenForm({
     (initialData as any)?.existingSurroundingImages || []
   );
   const [selectedState, setSelectedState] = useState<string>("");
+  // Venue-specific details ("About this venue") — kept as strings while editing, validated on submit
+  const [attrValues, setAttrValues] = useState<Record<string, string>>(() => attributesToFormValues((initialData as any)?.venueAttributes));
+  const [customAttributes, setCustomAttributes] = useState<CustomAttribute[]>(() => (initialData as any)?.customAttributes || []);
+  const [attrErrors, setAttrErrors] = useState<Record<string, string>>({});
   const [uploadingScreen, setUploadingScreen] = useState(false);
   const [uploadingSurrounding, setUploadingSurrounding] = useState(false);
   
@@ -171,6 +182,9 @@ export function ScreenForm({
       setSelectedState(stateValue);
     }
   }, [initialData?.state]);
+
+  // The venue-details section follows the selected venue type
+  const watchedVenueCategory = form.watch("venueCategory");
 
   // Watch state field to update selectedState and filter cities
   const watchedState = form.watch("state");
@@ -301,10 +315,28 @@ export function ScreenForm({
   };
 
   const handleFormSubmit = (data: ScreenFormData) => {
+    // Venue-specific details: checked against the chosen venue type's definitions (numbers, ranges,
+    // options). Blank fields are fine — they're simply not shown to advertisers.
+    const typeSlug = venueTypeSlugFor(data.venueCategory);
+    const attrs = validateVenueAttributes(typeSlug, attrValues);
+    const custom = validateCustomAttributes(customAttributes);
+    if (attrs.errors.length || custom.errors.length) {
+      const byKey: Record<string, string> = {};
+      for (const def of attributesFor(typeSlug)) {
+        const msg = attrs.errors.find((e) => e.startsWith(def.label));
+        if (msg) byKey[def.key] = msg;
+      }
+      setAttrErrors(byKey);
+      toast({ title: "Check the venue details", description: [...attrs.errors, ...custom.errors].join(" · "), variant: "destructive" });
+      return;
+    }
+    setAttrErrors({});
     onSubmit({
       ...data,
       screenImages,
       surroundingImages,
+      venueAttributes: attrs.value,
+      customAttributes: custom.value,
     });
   };
 
@@ -541,38 +573,11 @@ export function ScreenForm({
                 name="venueCategory"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Venue Category</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-venue-category">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent className="max-h-[300px]">
-                        <SelectItem value="Airport">Airport</SelectItem>
-                        <SelectItem value="Apartment">Apartment</SelectItem>
-                        <SelectItem value="Bus Stop">Bus Stop</SelectItem>
-                        <SelectItem value="Café">Café</SelectItem>
-                        <SelectItem value="Cinema">Cinema</SelectItem>
-                        <SelectItem value="Co-working">Co-working</SelectItem>
-                        <SelectItem value="College">College</SelectItem>
-                        <SelectItem value="Corporate Park">Corporate Park</SelectItem>
-                        <SelectItem value="Flyover">Flyover</SelectItem>
-                        <SelectItem value="Gym">Gym</SelectItem>
-                        <SelectItem value="Highway">Highway</SelectItem>
-                        <SelectItem value="Hospital">Hospital</SelectItem>
-                        <SelectItem value="Mall">Mall</SelectItem>
-                        <SelectItem value="Metro">Metro</SelectItem>
-                        <SelectItem value="Office Building">Office Building</SelectItem>
-                        <SelectItem value="Restaurant">Restaurant</SelectItem>
-                        <SelectItem value="Retail Store">Retail Store</SelectItem>
-                        <SelectItem value="Road Junction">Road Junction</SelectItem>
-                        <SelectItem value="Road Side">Road Side</SelectItem>
-                        <SelectItem value="Salon">Salon</SelectItem>
-                        <SelectItem value="Shopping Complex">Shopping Complex</SelectItem>
-                        <SelectItem value="Stadium">Stadium</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Venue Type</FormLabel>
+                    <FormControl>
+                      <VenueTypeSelect value={field.value} onChange={field.onChange} triggerTestId="select-venue-category" />
+                    </FormControl>
+                    <FormDescription>Decides which venue details you're asked for below.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -831,6 +836,30 @@ export function ScreenForm({
                 )}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* About this venue — fields depend on the venue type chosen in Section 2 */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              <CardTitle>About this venue</CardTitle>
+            </div>
+            <CardDescription>The numbers advertisers use to judge audience size and value</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VenueAttributeFields
+              venueCategory={watchedVenueCategory}
+              values={attrValues}
+              onChange={(key, value) => {
+                setAttrValues((prev) => ({ ...prev, [key]: value }));
+                if (attrErrors[key]) setAttrErrors(({ [key]: _, ...rest }) => rest);
+              }}
+              custom={customAttributes}
+              onCustomChange={setCustomAttributes}
+              errors={attrErrors}
+            />
           </CardContent>
         </Card>
 

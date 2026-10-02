@@ -32,7 +32,7 @@ import React from "react";
 import { Map, AdvancedMarker, InfoWindow, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Slider } from "@/components/ui/slider";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 
 const defaultCenter = {
@@ -505,7 +505,8 @@ export default function CreateCampaign() {
 
       // Create bookings for each selected screen
       const bookingPromises = selectedScreensFull.map(screen => {
-        const price = calculateScreenPricePerDay(screen) * durationDays;
+        const dailyPrice = zonePriceOverrides.get(screen.id) ?? calculateScreenPricePerDay(screen);
+        const price = dailyPrice * durationDays;
 
         return apiRequest("POST", "/api/advertiser/bookings", {
           screenId: screen.id,
@@ -1013,6 +1014,8 @@ export default function CreateCampaign() {
       {currentStep === 1 && isMobile && (
         <Sheet open={isFilterPanelOpen} onOpenChange={setIsFilterPanelOpen}>
           <SheetContent side="left" className="w-[85vw] sm:w-80 p-0 flex flex-col overflow-y-auto">
+            <SheetTitle className="sr-only">Filters</SheetTitle>
+            <SheetDescription className="sr-only">Narrow the screens shown for your campaign.</SheetDescription>
             {renderFilterPanelContent()}
           </SheetContent>
         </Sheet>

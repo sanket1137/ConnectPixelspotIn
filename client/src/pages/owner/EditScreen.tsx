@@ -137,6 +137,9 @@ export default function EditScreen() {
     contentRestrictions: (screen as any).contentRestrictions || [],
     existingScreenImages: screen.screenImages || [],
     existingSurroundingImages: screen.surroundingImages || [],
+    // venue-specific details (phase 5/6) — edited in the "About this venue" section
+    venueAttributes: screen.venueAttributes || {},
+    customAttributes: screen.customAttributes || [],
   };
 
   return (
