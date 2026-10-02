@@ -3,7 +3,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Map, AdvancedMarker, InfoWindow, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
-import { MapPin, Check, Users, Monitor, Loader2, Home, Sun, SunMoon, X, Layers, List, Map as MapIcon } from "lucide-react";
+import { MapPin, Check, Users, Monitor, Loader2, Home, Sun, SunMoon, X, Layers, List, Map as MapIcon, AlertTriangle } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VENUE_CATEGORIES } from "@shared/constants";
@@ -12,6 +12,8 @@ import { MultiLocationSearch, LocationItem } from "@/components/map/MultiLocatio
 import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
 import { getScreenCountDisplay, calculateTotalPhysicalScreens, calculateScreenPricePerDay } from "@shared/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { VenueMarker } from "@/components/map/VenueMarker";
+import { groupScreensByVenue, type VenueGroup } from "@/lib/venueGroups";
 
 interface Props {
   locations: LocationItem[];
@@ -319,6 +321,98 @@ export default function Step3_ScreenDiscovery({
     setHighlightedZoneIds(new Set());
   };
 
+  // Group screens into venues (same as DiscoverScreens)
+  const venueGroups = useMemo(() => groupScreensByVenue(filteredScreens), [filteredScreens]);
+
+  // Custom Map Marker Content — single screen (matching DiscoverScreens pin style)
+  const renderCustomMarker = (screen: Screen) => {
+    const isOpen = detailModalScreen?.id === screen.id;
+    const isHovered = highlightedId === screen.id && !isOpen;
+    const isSelected = selectedScreenIds.includes(screen.id);
+    const isHighlightedZone = highlightedZoneIds.has(screen.id) || Boolean(screen.zoneId || screen.zoneName);
+    const hasMultiScreen = !!(screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1);
+    const isBulkMandatory = !!screen.bulkBookingMandatory;
+
+    // Use zone price override if we have one for this screen, else regular price
+    const hasZoneOverride = zonePriceOverrides?.[screen.id] !== undefined;
+    const basePrice = calculateScreenPricePerDay(screen);
+    const price = zonePriceOverrides?.[screen.id] ?? basePrice ?? 0;
+    const formatPrice = (p: number) => p >= 1000 ? `₹${(p / 1000).toFixed(1).replace('.0', '')}k` : `₹${Number(p).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+    let priceDisplay = formatPrice(price);
+    if (hasMultiScreen && isBulkMandatory && !hasZoneOverride && screen.numberOfScreens) {
+      const unitPrice = Math.round(price / screen.numberOfScreens);
+      priceDisplay = `${formatPrice(unitPrice)} × ${screen.numberOfScreens}`;
+    }
+
+    const pillColor = isOpen
+      ? 'bg-blue-600 text-white border-white ring-4 ring-blue-600/25'
+      : isSelected
+        ? 'bg-green-600 text-white border-white'
+        : isHighlightedZone
+          ? 'bg-amber-500 text-white border-white'
+          : isHovered
+            ? 'bg-slate-900 text-white border-slate-900'
+            : 'bg-white text-slate-800 border-white hover:bg-slate-50';
+
+    const caretColor = isOpen
+      ? 'border-t-blue-600'
+      : isSelected
+        ? 'border-t-green-600'
+        : isHighlightedZone
+          ? 'border-t-amber-500'
+          : isHovered
+            ? 'border-t-slate-900'
+            : 'border-t-white';
+
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`${screen.venueName || screen.name}, ${priceDisplay} per day`}
+        aria-pressed={isOpen}
+        className={`relative flex flex-col items-center transition-all duration-300 cursor-pointer ${
+          isHovered || isOpen ? 'scale-125 z-50' : 'scale-100 z-10'
+        }`}
+        onMouseEnter={() => setHighlightedId(screen.id)}
+        onMouseLeave={() => setHighlightedId(null)}
+        onClick={() => handlePinClick(screen)}
+      >
+        {/* Price pill */}
+        <div className={`px-3 py-1.5 rounded-full font-bold text-[13px] shadow-lg border-2 whitespace-nowrap flex items-center gap-1 ${
+          pillColor
+        } ${(isHovered || isOpen) && !isSelected ? 'shadow-xl font-extrabold' : 'shadow-md'}`}>
+          {isHighlightedZone && !isSelected && <Layers className="w-3.5 h-3.5" />}
+          {priceDisplay}
+        </div>
+
+        {/* Multi-screen / bulk-mandatory badges */}
+        {(hasMultiScreen || isBulkMandatory) && (
+          <div className="mt-0.5 flex items-center gap-1 justify-center flex-wrap">
+            {hasMultiScreen && !isBulkMandatory && (
+              <div className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shadow-sm border ${
+                isSelected ? 'bg-green-700 text-white border-green-700' : 'bg-violet-600 text-white border-violet-600'
+              }`}>
+                <Layers className="w-2.5 h-2.5" />
+                <span>×{screen.numberOfScreens}</span>
+              </div>
+            )}
+
+            {isBulkMandatory && (
+              <div className="flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shadow-sm bg-amber-500 text-white border border-amber-500">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                <span>All required</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Caret */}
+        <div className={`w-0 h-0 -mt-px border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] ${caretColor}`} />
+      </div>
+    );
+  };
+
   const locationLabel = locations.map(l => l.label).join(", ") || "selected locations";
 
   const ScreenCard = ({ screen }: { screen: Screen }) => {
@@ -574,21 +668,40 @@ export default function Step3_ScreenDiscovery({
               </div>
             )}
             <MapController />
-            {filteredScreens.map(screen => {
-              const isSelected = selectedScreenIds.includes(screen.id);
-              const isHovered = highlightedId === screen.id;
-              const isHighlightedZone = highlightedZoneIds.has(screen.id);
-              const basePrice = calculateScreenPricePerDay(screen);
-              const price = zonePriceOverrides?.[screen.id] ?? basePrice ?? 0;
-              const priceDisplay = price >= 1000
-                ? `₹${(price / 1000).toFixed(1).replace('.0', '')}k`
-                : `₹${Number(price).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-
+            {venueGroups.map((venue) => {
+              if (venue.listings.length === 1) {
+                const screen = venue.listings[0];
+                return (
+                  <AdvancedMarker
+                    key={screen.id}
+                    position={{ lat: parseFloat(String(screen.latitude)), lng: parseFloat(String(screen.longitude)) }}
+                    zIndex={detailModalScreen?.id === screen.id ? 200 : highlightedId === screen.id ? 100 : selectedScreenIds.includes(screen.id) ? 20 : 1}
+                  >
+                    {renderCustomMarker(screen)}
+                  </AdvancedMarker>
+                );
+              }
+              const isHovered = !!highlightedId && venue.listings.some(l => l.id === highlightedId);
+              const addedCount = venue.listings.filter(l => selectedScreenIds.includes(l.id)).length;
+              const isVenueActive = detailModalScreen ? venue.listings.some(l => l.id === detailModalScreen.id) : false;
               return (
-                <AdvancedMarker key={screen.id} position={{ lat: parseFloat(String(screen.latitude)), lng: parseFloat(String(screen.longitude)) }} onClick={() => setDetailModalScreen(screen)}>
-                  <div className={`relative flex flex-col items-center cursor-pointer transition-all ${isHovered ? 'scale-125' : 'scale-100'}`} onMouseEnter={() => setHighlightedId(screen.id)} onMouseLeave={() => setHighlightedId(null)}>
-                    <div className={`px-3 py-1.5 rounded-full font-bold text-[13px] border-2 shadow-sm whitespace-nowrap ${isSelected ? 'bg-green-600 text-white' : isHighlightedZone ? 'bg-amber-500 text-white' : 'bg-white text-slate-800'}`}>{priceDisplay}</div>
-                  </div>
+                <AdvancedMarker
+                  key={`venue-${venue.key}`}
+                  position={{ lat: venue.lat, lng: venue.lng }}
+                  zIndex={isVenueActive ? 200 : isHovered ? 100 : addedCount > 0 ? 20 : 2}
+                >
+                  <VenueMarker
+                    venue={venue}
+                    isActive={isVenueActive}
+                    isHovered={isHovered}
+                    addedCount={addedCount}
+                    isHighlightedZone={venue.listings.some(l => highlightedZoneIds.has(l.id) || Boolean(l.zoneId || l.zoneName))}
+                    onClick={() => {
+                      handlePinClick(venue.listings[0]);
+                    }}
+                    onMouseEnter={() => setHighlightedId(venue.listings[0].id)}
+                    onMouseLeave={() => setHighlightedId(null)}
+                  />
                 </AdvancedMarker>
               );
             })}
