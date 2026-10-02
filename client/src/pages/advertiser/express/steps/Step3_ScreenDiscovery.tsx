@@ -3,7 +3,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Map, AdvancedMarker, InfoWindow, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
-import { MapPin, Check, Users, Monitor, Loader2, Home, Sun, SunMoon, X, Layers } from "lucide-react";
+import { MapPin, Check, Users, Monitor, Loader2, Home, Sun, SunMoon, X, Layers, List, Map as MapIcon } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VENUE_CATEGORIES } from "@shared/constants";
@@ -11,6 +11,7 @@ import type { Screen, ZoneInfo } from "@shared/schema";
 import { MultiLocationSearch, LocationItem } from "@/components/map/MultiLocationSearch";
 import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
 import { getScreenCountDisplay, calculateTotalPhysicalScreens, calculateScreenPricePerDay } from "@shared/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Props {
   locations: LocationItem[];
@@ -73,6 +74,8 @@ export default function Step3_ScreenDiscovery({
 }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const isMobile = useIsMobile();
+  const [viewMode, setViewMode] = useState<"list" | "map">("map");
 
   const defaultMapLoc = locations.find(l => l.type === 'map' && l.lat);
   const [initialCenter] = useState(
@@ -459,8 +462,13 @@ export default function Step3_ScreenDiscovery({
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        <div ref={listRef} className="w-[55%] flex flex-col bg-slate-50 border-r border-slate-200">
+      <div className="flex flex-1 overflow-hidden relative">
+        <div
+          ref={listRef}
+          className={`flex flex-col bg-slate-50 border-r border-slate-200 ${
+            isMobile ? (viewMode === "list" ? "absolute inset-0 w-full z-10" : "hidden") : "w-[55%] relative"
+          }`}
+        >
           {/* Screen Selection Bar */}
           <div className="shrink-0 px-4 py-2.5 bg-white border-b border-slate-200 flex items-center justify-between gap-2 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
             <div className="flex items-center gap-2">
@@ -552,7 +560,7 @@ export default function Step3_ScreenDiscovery({
           </div>
         </div>
 
-        <div className="flex-1 relative bg-slate-200">
+        <div className={`flex-1 relative bg-slate-200 ${isMobile ? (viewMode === "map" ? "block absolute inset-0 z-0" : "hidden") : "block"}`}>
           <Map mapId="express-screens-map" defaultCenter={initialCenter} defaultZoom={initialZoom} disableDefaultUI zoomControl style={{ width: "100%", height: "100%" }}>
             {activeZoneName && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2 rounded-full shadow-lg flex items-center gap-2 font-medium text-sm animate-in fade-in slide-in-from-top-4">
@@ -586,6 +594,32 @@ export default function Step3_ScreenDiscovery({
             })}
           </Map>
         </div>
+
+        {/* Mobile View Toggle */}
+        {isMobile && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300">
+            <div className="bg-slate-900 text-white rounded-full shadow-2xl p-1 flex items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`rounded-full px-6 transition-all ${viewMode === "list" ? "bg-slate-700 text-white" : "text-slate-300 hover:text-white"}`}
+                onClick={() => setViewMode("list")}
+              >
+                <List className="w-4 h-4 mr-2" />
+                List
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`rounded-full px-6 transition-all ${viewMode === "map" ? "bg-slate-700 text-white" : "text-slate-300 hover:text-white"}`}
+                onClick={() => setViewMode("map")}
+              >
+                <MapIcon className="w-4 h-4 mr-2" />
+                Map
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       <ScreenDetailsModal

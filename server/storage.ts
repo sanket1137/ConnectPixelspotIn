@@ -25,6 +25,37 @@ const PUBLIC_SCREENS_TTL = 300_000; // 5 minutes
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { checkAndCreateERPNextLead } from "./services/erpnext";
+import {
+  buildSearchText, parseSearchQuery, resolveEnvironmentClass, resolveScreenVenueType,
+  typesInFamily, getVenueType, resolveVenueType, VENUE_FAMILIES, VENUE_TYPES, type VenueFamilySlug,
+} from "@shared/venueTaxonomy";
+
+// Discover sort options (+ legacy 'price'/'popularity' with sortOrder)
+export type ScreenSort =
+  | 'recommended' | 'price_asc' | 'price_desc' | 'distance' | 'map_center' | 'footfall' | 'value' | 'package_size' | 'newest'
+  | 'price' | 'popularity';
+
+// JS string array → Postgres text[] literal, e.g. ["a","b\"c"] → {"a","b\"c"}
+function toPgArray(values: string[]): string {
+  return `{${values.map(v => `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+}
+
+// Screen fields that venue_type / environment_class / search_text are derived from
+const VENUE_DERIVED_INPUTS = ["venueCategory", "venueName", "name", "location", "city", "state", "pincode", "host", "environmentType"] as const;
+
+// Canonical venue type, indoor/outdoor class and search text for a screen row — filled on every
+// create/update so filters and search never depend on how a vendor spelled the category.
+function deriveVenueFields(s: {
+  venueCategory?: string | null; venueName?: string | null; name?: string | null; location?: string | null;
+  city?: string | null; state?: string | null; pincode?: string | null; host?: string | null; environmentType?: string | null;
+}) {
+  const venueType = resolveScreenVenueType(s)?.type.slug ?? null;
+  return {
+    venueType,
+    environmentClass: resolveEnvironmentClass(s.environmentType, venueType),
+    searchText: buildSearchText({ ...s, venueType }),
+  };
+}
 
 import { 
   users, screens, campaigns, bookings, payments,
@@ -52,17 +83,23 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, or, desc, asc, sql as drizzleSql, inArray, isNull, count, like } from "drizzle-orm";
-import { normalizeCityName } from "@shared/constants";
+import { normalizeCityName, getVenueCategoryVariants, normalizeVenueCategory, VENUE_CATEGORY_ALIASES } from "@shared/constants";
 import { notifyUser } from "./websocket";
 
 /** Convert a raw DB row (snake_case keys) to camelCase to match drizzle schema types.
  *  Recursively converts nested plain objects (e.g. from row_to_json). */
+// jsonb columns whose inner keys are data (snake_case attribute keys like "avg_flat_value"),
+// not column names — passed through untouched so every read path returns the same keys
+const JSON_DATA_COLUMNS = new Set(["venue_attributes", "custom_attributes"]);
+
 function mapRowToCamel<T>(row: Record<string, any>): T {
   const mapped: Record<string, any> = {};
   for (const key of Object.keys(row)) {
     const camelKey = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
     const val = row[key];
-    if (val !== null && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
+    if (JSON_DATA_COLUMNS.has(key)) {
+      mapped[camelKey] = val;
+    } else if (val !== null && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
       mapped[camelKey] = mapRowToCamel(val);
     } else {
       mapped[camelKey] = val;
@@ -82,7 +119,7 @@ export interface IStorage {
   updateUserRole(id: string, role: string): Promise<User | undefined>;
   updateUserLogin(id: string, ip: string): Promise<void>;
   verifyUserEmail(id: string): Promise<User | undefined>;
-  verifyUserMobile(id: string): Promise<User | undefined>;
+  verifyUserMobile(id: string, mobileNumber?: string): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
   getUsersByRole(role: string): Promise<User[]>;
   
@@ -106,6 +143,20 @@ export interface IStorage {
   updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined>;
   updateScreenStatus(id: string, status: string, rejectionReason?: string): Promise<Screen | undefined>;
   deleteScreen(id: string): Promise<boolean>;
+  getScreensForImageManager(params: {
+    venueCategory?: string;
+    venueName?: string;
+    host?: string;
+    environmentType?: string;
+    category?: string;
+    city?: string;
+    state?: string;
+    status?: string;
+    hasImages?: 'yes' | 'no' | 'all';
+    search?: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ screens: Screen[]; total: number }>;
   
   // Campaign methods
   getCampaign(id: string): Promise<Campaign | undefined>;
@@ -270,19 +321,7 @@ export interface IStorage {
   getRecentCampaignsEnriched(advertiserId: string): Promise<any[]>;
 
   // Screens: filtered at SQL level with optional pagination
-  getFilteredScreens(filters: {
-    city?: string; type?: string; minPrice?: number; maxPrice?: number;
-    pincode?: string; lat?: number; lng?: number; radiusKm?: number;
-    locations?: Array<{ type: 'city' | 'map', lat?: number, lng?: number, radiusKm?: number, city?: string }>;
-    venueCategories?: string[]; environmentTypes?: string[];
-    environmentTags?: string[]; userIntents?: string[]; locationTags?: string[];
-    minBookingDays?: number;
-    limit?: number; offset?: number;
-    search?: string;
-    page?: number; pageSize?: number;
-    sortBy?: 'distance' | 'price' | 'popularity' | 'newest';
-    sortOrder?: 'asc' | 'desc';
-  }): Promise<Screen[] | { screens: Screen[]; total: number }>;
+  getFilteredScreens(filters: Parameters<DatabaseStorage["getFilteredScreens"]>[0]): Promise<Screen[] | { screens: Screen[]; total: number }>;
 
   // Screens: paginated with filters for admin panel
   getScreensPaginated(params: {
@@ -365,8 +404,12 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async verifyUserMobile(id: string): Promise<User | undefined> {
-    const [user] = await db.update(users).set({ mobileVerified: true }).where(eq(users.id, id)).returning();
+  async verifyUserMobile(id: string, mobileNumber?: string): Promise<User | undefined> {
+    const updateObj: Partial<InsertUser> = { mobileVerified: true };
+    if (mobileNumber) {
+      updateObj.mobileNumber = mobileNumber;
+    }
+    const [user] = await db.update(users).set(updateObj).where(eq(users.id, id)).returning();
     if (user && user.emailVerified && user.mobileVerified) {
       checkAndCreateERPNextLead(user).catch(err => console.error("[ERPNext] Error on verifyUserMobile:", err));
     }
@@ -611,13 +654,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createScreen(insertScreen: InsertScreen): Promise<Screen> {
-    const [screen] = await db.insert(screens).values(insertScreen).returning();
+    // (cast: drizzle-zod infers the optional `unit` inside custom_attributes as unknown)
+    const [screen] = await db.insert(screens).values({ ...insertScreen, ...deriveVenueFields(insertScreen) } as typeof screens.$inferInsert).returning();
     publicCache.invalidatePublicScreens();
     return screen;
   }
 
   async updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined> {
-    const [screen] = await db.update(screens).set(data).where(eq(screens.id, id)).returning();
+    // Re-derive venue type / environment class / search text whenever a field they depend on changes
+    let derived = {};
+    if (VENUE_DERIVED_INPUTS.some((k) => k in data)) {
+      const [current] = await db.select().from(screens).where(eq(screens.id, id));
+      if (current) derived = deriveVenueFields({ ...current, ...data });
+    }
+    const [screen] = await db.update(screens).set({ ...data, ...derived } as Partial<typeof screens.$inferInsert>).where(eq(screens.id, id)).returning();
     publicCache.invalidatePublicScreens();
     return screen || undefined;
   }
@@ -1755,15 +1805,29 @@ export class DatabaseStorage implements IStorage {
     boundsN?: number; boundsS?: number; boundsE?: number; boundsW?: number;
     locations?: Array<{ type: 'city' | 'map', lat?: number, lng?: number, radiusKm?: number, city?: string }>;
     venueCategories?: string[]; environmentTypes?: string[];
+    families?: string[]; venueTypes?: string[]; environment?: 'indoor' | 'outdoor';
+    state?: string; screenCategories?: string[]; trafficTypes?: string[];
+    fields?: 'pins'; // slim rows for the map
     environmentTags?: string[]; userIntents?: string[]; locationTags?: string[]; minBookingDays?: number;
     types?: string[]; occupationMixes?: string[]; userMoods?: string[]; genderOrientations?: string[]; incomeLevels?: string[];
     limit?: number; offset?: number;
     search?: string;
     page?: number; pageSize?: number;
-    sortBy?: 'distance' | 'price' | 'popularity' | 'newest';
+    sortBy?: ScreenSort;
     sortOrder?: 'asc' | 'desc';
   }): Promise<Screen[] | { screens: Screen[]; total: number }> {
     const conditions: ReturnType<typeof drizzleSql>[] = [drizzleSql`status IN ('active', 'approved')`];
+
+    // Filters the Discover page always sent but the server used to ignore
+    if (filters.state) {
+      conditions.push(drizzleSql`LOWER(TRIM(state)) = LOWER(TRIM(${filters.state}))`);
+    }
+    if (filters.screenCategories && filters.screenCategories.length > 0) {
+      conditions.push(drizzleSql`LOWER(category) = ANY(${toPgArray(filters.screenCategories.map(c => c.toLowerCase()))}::text[])`);
+    }
+    if (filters.trafficTypes && filters.trafficTypes.length > 0) {
+      conditions.push(drizzleSql`LOWER(traffic_type) = ANY(${toPgArray(filters.trafficTypes.map(t => t.toLowerCase()))}::text[])`);
+    }
 
     if (filters.city) {
       const normalizedCity = normalizeCityName(filters.city);
@@ -1782,22 +1846,50 @@ export class DatabaseStorage implements IStorage {
       conditions.push(drizzleSql`pincode = ${filters.pincode}`);
     }
     if (filters.search) {
+      // Every word must match: in search_text (names, address, city, type labels, host — lowercased,
+      // accent-free), or — for venue-type words like "gym" / "hoarding" — by the screen's type.
+      // Rows inserted by raw SQL before the normalise script ran fall back to their plain columns.
+      const searchCol = drizzleSql`COALESCE(search_text, LOWER(CONCAT_WS(' ', venue_name, name, location, city, state, host, venue_category)))`;
+      for (const term of parseSearchQuery(filters.search).terms) {
+        const text = drizzleSql`${searchCol} LIKE ${`%${term.text}%`}`;
+        conditions.push(term.types.length
+          ? drizzleSql`(${text} OR venue_type = ANY(${toPgArray(term.types)}::text[]))`
+          : text);
+      }
+    }
+
+    // Venue type filter: family chips + type multi-select, plus the legacy venueCategories param
+    // (?venue=Apartment links) resolved through the same taxonomy. One screen matches if its
+    // canonical type is any of the requested ones.
+    const wantedTypes = new Set<string>(filters.venueTypes || []);
+    for (const f of filters.families || []) typesInFamily(f as VenueFamilySlug).forEach(t => wantedTypes.add(t.slug));
+    const unresolvedCategories: string[] = [];
+    for (const v of filters.venueCategories || []) {
+      const t = resolveVenueType(v);
+      if (t) wantedTypes.add(t.type.slug);
+      else unresolvedCategories.push(v);
+    }
+    if (wantedTypes.size > 0 || unresolvedCategories.length > 0) {
+      const types = Array.from(wantedTypes);
+      // raw spellings for rows the normalise script hasn't typed yet
+      const rawAliases = types.flatMap(slug => {
+        const t = getVenueType(slug);
+        return t ? [t.label, ...t.aliases].map(a => a.toLowerCase()) : [];
+      }).concat(unresolvedCategories.map(v => v.toLowerCase().trim()));
       conditions.push(drizzleSql`(
-        LOWER(name) LIKE LOWER(${`%${filters.search}%`})
-        OR LOWER(location) LIKE LOWER(${`%${filters.search}%`})
-        OR LOWER(city) LIKE LOWER(${`%${filters.search}%`})
-        OR LOWER(venue_name) LIKE LOWER(${`%${filters.search}%`})
+        venue_type = ANY(${toPgArray(types)}::text[])
+        OR (venue_type IS NULL AND LOWER(TRIM(venue_category)) = ANY(${toPgArray(rawAliases)}::text[]))
       )`);
     }
 
-    if (filters.venueCategories && filters.venueCategories.length > 0) {
-      const venueArrStr = `{${filters.venueCategories.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
-      conditions.push(drizzleSql`venue_category = ANY(${venueArrStr}::text[])`);
+    // Indoor / outdoor: Outdoor = Outdoor + Outdoor Digital + Semi-Outdoor, any letter case
+    const wantedEnv = new Set<string>(filters.environment ? [filters.environment] : []);
+    for (const e of filters.environmentTypes || []) {
+      const cls = resolveEnvironmentClass(e);
+      if (cls) wantedEnv.add(cls);
     }
-    
-    if (filters.environmentTypes && filters.environmentTypes.length > 0) {
-      const envArrStr = `{${filters.environmentTypes.map(e => `"${e.replace(/"/g, '\\"')}"`).join(',')}}`;
-      conditions.push(drizzleSql`environment_type = ANY(${envArrStr}::text[])`);
+    if (wantedEnv.size > 0) {
+      conditions.push(drizzleSql`environment_class = ANY(${toPgArray(Array.from(wantedEnv))}::text[])`);
     }
 
     if (filters.environmentTags && filters.environmentTags.length > 0) {
@@ -1887,13 +1979,9 @@ export class DatabaseStorage implements IStorage {
       ) <= ${filters.radiusKm}`);
     }
 
-    const whereClause = drizzleSql.join(conditions, drizzleSql` AND `);
-
-    let haversineSelect = drizzleSql``;
-    let orderClause = drizzleSql`ORDER BY avg_daily_footfall DESC`;
-
-    if (filters.lat !== undefined && filters.lng !== undefined) {
-      haversineSelect = drizzleSql`, (
+    const hasOrigin = filters.lat !== undefined && filters.lng !== undefined;
+    const distanceExpr = hasOrigin
+      ? drizzleSql`(
         6371 * acos(
           LEAST(1.0, GREATEST(-1.0,
             cos(radians(${filters.lat})) * cos(radians(latitude::float)) *
@@ -1901,43 +1989,87 @@ export class DatabaseStorage implements IStorage {
             sin(radians(${filters.lat})) * sin(radians(latitude::float))
           ))
         )
-      ) AS distance_km`;
-    }
+      )`
+      : null;
+    const haversineSelect = distanceExpr ? drizzleSql`, ${distanceExpr} AS distance_km` : drizzleSql``;
 
-    if (filters.sortBy === 'price') {
-      orderClause = filters.sortOrder === 'asc' ? drizzleSql`ORDER BY price_per_day ASC` : drizzleSql`ORDER BY price_per_day DESC`;
-    } else if (filters.sortBy === 'newest') {
-      orderClause = filters.sortOrder === 'asc' ? drizzleSql`ORDER BY created_at ASC` : drizzleSql`ORDER BY created_at DESC`;
-    } else if (filters.sortBy === 'distance' && filters.lat !== undefined && filters.lng !== undefined) {
-      orderClause = filters.sortOrder === 'desc' ? drizzleSql`ORDER BY distance_km DESC` : drizzleSql`ORDER BY distance_km ASC`;
-    } else if (filters.sortBy === 'popularity') {
-      orderClause = filters.sortOrder === 'asc' ? drizzleSql`ORDER BY avg_daily_footfall ASC` : drizzleSql`ORDER BY avg_daily_footfall DESC`;
+    // What the advertiser actually pays per day — same rule as calculateScreenPricePerDay (bulk-
+    // mandatory packages are priced as the whole venue: price_per_day * number_of_screens)
+    const effectivePrice = drizzleSql`(CASE
+      WHEN is_multi_screen AND number_of_screens > 1 AND bulk_booking_mandatory
+        THEN (price_per_day * number_of_screens)
+      ELSE price_per_day END)`;
+
+    // All sorts run in SQL so pagination is correct; `id` is the tie-breaker so pages never repeat
+    // or skip a screen. Legacy sortBy=price/popularity/distance + sortOrder still work.
+    const desc = filters.sortOrder === 'desc';
+    let order: ReturnType<typeof drizzleSql>;
+    switch (filters.sortBy) {
+      case 'price_asc': order = drizzleSql`${effectivePrice} ASC`; break;
+      case 'price_desc': order = drizzleSql`${effectivePrice} DESC`; break;
+      case 'price': order = desc ? drizzleSql`${effectivePrice} DESC` : drizzleSql`${effectivePrice} ASC`; break;
+      case 'footfall':
+        // placeholder footfall (footfall_note = 'hidden') ranks as unknown
+        order = drizzleSql`(CASE WHEN footfall_note = 'hidden' THEN NULL ELSE avg_daily_footfall END) DESC NULLS LAST`;
+        break;
+      case 'value':
+        // cost per 1,000 daily footfall; screens without (real) footfall can't be compared, so they're left out
+        conditions.push(drizzleSql`avg_daily_footfall > 0 AND footfall_note IS DISTINCT FROM 'hidden'`);
+        order = drizzleSql`(${effectivePrice}::float / avg_daily_footfall) ASC`;
+        break;
+      case 'package_size': order = drizzleSql`(CASE WHEN is_multi_screen THEN COALESCE(number_of_screens, 1) ELSE 1 END) DESC, avg_daily_footfall DESC NULLS LAST`; break;
+      case 'newest': order = filters.sortOrder === 'asc' ? drizzleSql`created_at ASC` : drizzleSql`created_at DESC`; break;
+      case 'distance':
+      case 'map_center':
+        order = distanceExpr ? (desc ? drizzleSql`distance_km DESC` : drizzleSql`distance_km ASC`) : drizzleSql`avg_daily_footfall DESC NULLS LAST`;
+        break;
+      case 'popularity':
+        order = filters.sortOrder === 'asc' ? drizzleSql`avg_daily_footfall ASC NULLS FIRST` : drizzleSql`avg_daily_footfall DESC NULLS LAST`;
+        break;
+      default: // 'recommended'
+        order = drizzleSql`avg_daily_footfall DESC NULLS LAST`;
     }
+    const orderClause = drizzleSql`ORDER BY ${order}, id`;
+    const where = drizzleSql.join(conditions, drizzleSql` AND `); // 'value' may have added a condition
+
+    // Map pins: every match, only the columns pins/clusters/venue panel/card facts need
+    const columns = filters.fields === 'pins'
+      ? drizzleSql`id, name, venue_name, venue_category, venue_type, environment_class, latitude, longitude, city, state, location,
+          price_per_day, is_multi_screen, number_of_screens, bulk_booking_mandatory, min_booking_days,
+          category, type, size, display_format, duration_per_slot, loop_duration, max_brands_per_loop, playback_slots_per_hour,
+          avg_daily_footfall, avg_dwell_time, income_level, zone_id, (SELECT z.name FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_name, status, venue_attributes, footfall_note,
+          custom_operating_hours_start, custom_operating_hours_end, operating_hours_preset, operational_hours,
+          LEFT(description, 400) AS description,
+          screen_images[1:1] AS screen_images, images[1:1] AS images, surrounding_images[1:1] AS surrounding_images,
+          location_tags, lifestyle_tags, interest_segments, user_intent`
+      : drizzleSql`*, (SELECT z.name FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_name`;
+
+    const toScreen = (r: any) => {
+      const screen = mapRowToCamel<Screen & { distanceKm?: number; zoneName?: string }>(r);
+      screen.zoneId = r.zone_name ? screen.zoneId : null;
+      if (r.zone_name) (screen as any).zoneName = r.zone_name;
+      if (r.distance_km !== undefined) screen.distanceKm = parseFloat(r.distance_km) || 0;
+      delete (screen as any).searchText; // internal search column — never sent to browsers
+      delete (screen as any).bundlePricePerDay; // internal admin column — never sent to browsers
+      return screen as Screen;
+    };
 
     // If page/pageSize provided, return paginated result with total count
     if (filters.page && filters.pageSize) {
       const countResult = await db.execute(
-        drizzleSql`SELECT COUNT(*)::int AS total FROM screens WHERE ${whereClause}`
+        drizzleSql`SELECT COUNT(*)::int AS total FROM screens WHERE ${where}`
       );
       const total = (countResult.rows[0] as any)?.total ?? 0;
 
       const offset = (filters.page - 1) * filters.pageSize;
       const dataResult = await db.execute(
-        drizzleSql`SELECT *, (SELECT z.name FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_name ${haversineSelect} FROM screens WHERE ${whereClause} ${orderClause} LIMIT ${filters.pageSize} OFFSET ${offset}`
+        drizzleSql`SELECT ${columns} ${haversineSelect} FROM screens WHERE ${where} ${orderClause} LIMIT ${filters.pageSize} OFFSET ${offset}`
       );
-      
-      const screens = (dataResult.rows as any[]).map(r => {
-        const screen = mapRowToCamel<Screen & { distanceKm?: number; zoneName?: string }>(r);
-        screen.zoneId = r.zone_name ? screen.zoneId : null;
-        if (r.zone_name) (screen as any).zoneName = r.zone_name;
-        if (r.distance_km !== undefined) screen.distanceKm = parseFloat(r.distance_km) || 0;
-        return screen as Screen;
-      });
-      return { screens, total };
+      return { screens: (dataResult.rows as any[]).map(toScreen), total };
     }
 
     // Legacy: return array (backward compatibility)
-    let query = drizzleSql`SELECT *, (SELECT z.name FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_name ${haversineSelect} FROM screens WHERE ${whereClause} ${orderClause}`;
+    let query = drizzleSql`SELECT ${columns} ${haversineSelect} FROM screens WHERE ${where} ${orderClause}`;
     if (filters.limit) {
       query = drizzleSql`${query} LIMIT ${filters.limit}`;
     }
@@ -1946,13 +2078,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await db.execute(query);
-    return (result.rows as any[]).map(r => {
-      const screen = mapRowToCamel<Screen & { distanceKm?: number; zoneName?: string }>(r);
-      screen.zoneId = r.zone_name ? screen.zoneId : null;
-      if (r.zone_name) (screen as any).zoneName = r.zone_name;
-      if (r.distance_km !== undefined) screen.distanceKm = parseFloat(r.distance_km) || 0;
-      return screen as Screen;
-    });
+    return (result.rows as any[]).map(toScreen);
   }
 
   async getScreenLocations() {
@@ -2034,6 +2160,84 @@ export class DatabaseStorage implements IStorage {
     return { screens: (dataResult.rows as any[]).map(r => mapRowToCamel<Screen>(r)), total };
   }
 
+  async getScreensForImageManager(params: {
+    venueCategory?: string;
+    venueName?: string;
+    host?: string;
+    environmentType?: string;
+    category?: string;
+    city?: string;
+    state?: string;
+    status?: string;
+    hasImages?: 'yes' | 'no' | 'all';
+    search?: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ screens: Screen[]; total: number }> {
+    const conditions: ReturnType<typeof drizzleSql>[] = [];
+
+    if (params.venueCategory) {
+      // A taxonomy type ("Apartment") matches every spelling of it via venue_type; anything else
+      // matches the raw text exactly (as before)
+      const t = resolveVenueType(params.venueCategory);
+      conditions.push(t
+        ? drizzleSql`(venue_type = ${t.type.slug} OR LOWER(TRIM(venue_category)) = LOWER(TRIM(${params.venueCategory})))`
+        : drizzleSql`LOWER(venue_category) = LOWER(${params.venueCategory})`);
+    }
+    if (params.venueName) {
+      conditions.push(drizzleSql`LOWER(venue_name) LIKE LOWER(${`%${params.venueName}%`})`);
+    }
+    if (params.host) {
+      conditions.push(drizzleSql`LOWER(host) LIKE LOWER(${`%${params.host}%`})`);
+    }
+    if (params.environmentType) {
+      conditions.push(drizzleSql`LOWER(environment_type) = LOWER(${params.environmentType})`);
+    }
+    if (params.category) {
+      conditions.push(drizzleSql`LOWER(category) = LOWER(${params.category})`);
+    }
+    if (params.city) {
+      const normalizedCity = normalizeCityName(params.city);
+      conditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${normalizedCity}%`})`);
+    }
+    if (params.state) {
+      conditions.push(drizzleSql`LOWER(state) = LOWER(${params.state})`);
+    }
+    if (params.status) {
+      conditions.push(drizzleSql`status = ${params.status}`);
+    }
+    if (params.hasImages === 'no') {
+      conditions.push(drizzleSql`(screen_images IS NULL OR array_length(screen_images, 1) IS NULL OR array_length(screen_images, 1) = 0)`);
+    } else if (params.hasImages === 'yes') {
+      conditions.push(drizzleSql`screen_images IS NOT NULL AND array_length(screen_images, 1) > 0`);
+    }
+    if (params.search) {
+      conditions.push(drizzleSql`(
+        LOWER(name) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(location) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(city) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(venue_name) LIKE LOWER(${`%${params.search}%`})
+        OR LOWER(host) LIKE LOWER(${`%${params.search}%`})
+      )`);
+    }
+
+    const whereClause = conditions.length > 0
+      ? drizzleSql`WHERE ${drizzleSql.join(conditions, drizzleSql` AND `)}`
+      : drizzleSql``;
+
+    const countResult = await db.execute(
+      drizzleSql`SELECT COUNT(*)::int AS total FROM screens ${whereClause}`
+    );
+    const total = (countResult.rows[0] as any)?.total ?? 0;
+
+    const offset = (params.page - 1) * params.pageSize;
+    const dataResult = await db.execute(
+      drizzleSql`SELECT * FROM screens ${whereClause} ORDER BY created_at DESC LIMIT ${params.pageSize} OFFSET ${offset}`
+    );
+
+    return { screens: (dataResult.rows as any[]).map(r => mapRowToCamel<Screen>(r)), total };
+  }
+
   /**
    * Get nearby active screens sorted by distance from a given lat/lng.
    * Uses Haversine formula for precise distance calculation.
@@ -2100,11 +2304,19 @@ export class DatabaseStorage implements IStorage {
     `);
     const cities = (cityResult.rows as any[]).map(r => r.city).filter(Boolean);
 
-    // 2. Unique Venue Types
+    // 2. Unique Venue Types — normalized to canonical names (deduped)
     const venueResult = await db.execute(drizzleSql`
       SELECT DISTINCT venue_category as venue_type FROM screens WHERE status = 'active' AND venue_category IS NOT NULL ORDER BY venue_category
     `);
-    const venueTypes = (venueResult.rows as any[]).map(r => r.venue_type).filter(Boolean);
+    const venueTypes = [
+      ...new Set(
+        (venueResult.rows as any[])
+          .map(r => r.venue_type)
+          .filter(Boolean)
+          .map((v: string) => normalizeVenueCategory(v))
+      )
+    ].sort();
+
 
     // 3. Unique Environment Types (Indoor/Outdoor)
     const envResult = await db.execute(drizzleSql`

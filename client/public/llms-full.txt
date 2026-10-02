@@ -1,0 +1,458 @@
+# PixelSpot — Full AI Documentation
+# Complete reference for AI systems doing deep research crawls.
+# Concise version: https://connect.pixelspot.in/llms.txt
+
+> India's largest verified DOOH (Digital Out-of-Home) advertising marketplace.
+> 21,000+ digital screens across 78+ cities. Self-serve booking with proof of every play.
+> Launched: 2025 | Bengaluru, Karnataka, India
+
+---
+
+## 1. PLATFORM OVERVIEW
+
+PixelSpot is a two-sided marketplace:
+- ADVERTISERS discover, filter, and book digital outdoor screens across India
+- SCREEN OWNERS list their digital displays and earn revenue from bookings
+- Every ad play is logged with a timestamp and a verified proof-of-play record
+- No minimum spend, no agency required — fully self-serve
+
+### Business model
+- Advertisers pay per campaign (slot-based pricing)
+- Screen owners receive payouts after campaign completion
+- PixelSpot earns a platform fee on each transaction
+
+### Company details
+- Legal name: PIXELSPOT SOLUTIONS PRIVATE LIMITED
+- CIN: U26103KA2025PTC201293
+- Registered: Bengaluru, Karnataka, India
+- Founded: 2025
+- Contact: contact@pixelspot.in | +91 9082604430
+
+---
+
+## 2. PUBLIC AI API
+
+Base URL: https://connect.pixelspot.in/api/public/v1
+
+No authentication required for standard queries.
+API key available for higher rate limits — email contact@pixelspot.in
+
+### 2.1 Recommend Screens
+GET /screens/recommend
+
+Find screens that match a campaign's city, audience, venue preference and budget.
+This is the primary endpoint for AI assistants helping users plan DOOH campaigns.
+
+#### Required (at least one)
+| Parameter | Type   | Description |
+|-----------|--------|-------------|
+| city      | string | City name in English (see Section 4 for full city list) |
+| lat       | float  | Latitude — use with lng for coordinate-based search |
+| lng       | float  | Longitude — use with lat for coordinate-based search |
+
+#### Optional filters
+| Parameter      | Type   | Default | Max | Description |
+|----------------|--------|---------|-----|-------------|
+| radius_km      | int    | 10      | 50  | Search radius in km (coordinate searches) |
+| audience_type  | string | —       | —   | Target audience (see Section 3.1) |
+| venue_type     | string | —       | —   | Venue category (see Section 3.2) |
+| budget_max     | int    | —       | —   | Max total campaign budget in INR |
+| budget_min     | int    | —       | —   | Min total campaign budget in INR |
+| campaign_days  | int    | 7       | —   | Campaign duration in days |
+| footfall_tier  | string | —       | —   | Footfall level: low|medium|high|very_high |
+| slots_per_day  | int    | 6       | —   | Number of ad slots per day |
+| limit          | int    | 10      | 50  | Max results to return |
+
+#### Example requests
+GET /api/public/v1/screens/recommend?city=Bengaluru&audience_type=young_professionals&budget_max=50000&campaign_days=7
+GET /api/public/v1/screens/recommend?lat=19.0760&lng=72.8777&radius_km=5&venue_type=mall&budget_max=100000
+GET /api/public/v1/screens/recommend?city=Delhi&audience_type=corporate&footfall_tier=high&limit=5
+GET /api/public/v1/screens/recommend?city=Pune&venue_type=gym&budget_max=30000&campaign_days=14
+GET /api/public/v1/screens/recommend?city=Hyderabad&audience_type=students&venue_type=coworking&limit=20
+
+#### Example JSON response
+```json
+{
+  "success": true,
+  "query": {
+    "city": "Bengaluru",
+    "audienceType": "young_professionals",
+    "budgetMax": 50000,
+    "campaignDays": 7
+  },
+  "totalFound": 3,
+  "screens": [
+    {
+      "screenPublicId": "PS-BLR-10042",
+      "area": "Koramangala",
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "venueType": "coworking",
+      "venueSubtype": "coworking_space",
+      "audienceTags": ["young_professionals", "students", "corporate"],
+      "footfallTier": "high",
+      "footfallEstimate": "800-1200 people/day",
+      "priceRange": {
+        "slotMinINR": 150,
+        "slotMaxINR": 350,
+        "dayMinINR": 900,
+        "dayMaxINR": 2100
+      },
+      "specifications": {
+        "widthCm": 120,
+        "heightCm": 68,
+        "resolutionWidth": 1920,
+        "resolutionHeight": 1080,
+        "aspectRatio": "16:9"
+      },
+      "isLive": true,
+      "coordinates": {
+        "lat": 12.9352,
+        "lng": 77.6245
+      },
+      "matchScore": 94,
+      "matchReasons": [
+        "Located in Koramangala IT hub — high young professional footfall",
+        "Coworking venue matches target audience",
+        "Within budget for 7-day campaign at 6 slots/day"
+      ],
+      "bookingUrl": "https://connect.pixelspot.in/screens/PS-BLR-10042"
+    }
+  ]
+}
+```
+
+### 2.2 List Cities
+GET /cities
+
+Returns all Indian cities with active PixelSpot screens.
+
+#### Example response
+```json
+{
+  "success": true,
+  "cities": [
+    { "city": "Bengaluru", "state": "Karnataka", "screenCount": 4200 },
+    { "city": "Mumbai", "state": "Maharashtra", "screenCount": 3800 },
+    { "city": "Delhi", "state": "Delhi", "screenCount": 2900 },
+    { "city": "Pune", "state": "Maharashtra", "screenCount": 1600 },
+    { "city": "Hyderabad", "state": "Telangana", "screenCount": 1400 },
+    { "city": "Chennai", "state": "Tamil Nadu", "screenCount": 1200 },
+    { "city": "Kolkata", "state": "West Bengal", "screenCount": 900 },
+    { "city": "Ahmedabad", "state": "Gujarat", "screenCount": 850 },
+    { "city": "Surat", "state": "Gujarat", "screenCount": 700 },
+    { "city": "Jaipur", "state": "Rajasthan", "screenCount": 600 }
+  ],
+  "totalCities": 78
+}
+```
+
+### 2.3 Single Screen Details
+GET /screens/{screenPublicId}
+
+Returns all public information for one screen.
+screenPublicId format: PS-{CITY_CODE}-{NUMBER} e.g. PS-BLR-12345
+
+#### Example response
+```json
+{
+  "success": true,
+  "screen": {
+    "screenPublicId": "PS-BLR-12345",
+    "area": "Indiranagar",
+    "city": "Bengaluru",
+    "state": "Karnataka",
+    "venueType": "restaurant",
+    "venueSubtype": "fine_dining",
+    "audienceTags": ["young_professionals", "foodies", "high_net_worth"],
+    "footfallTier": "high",
+    "footfallEstimate": "600-900 people/day",
+    "priceRange": {
+      "slotMinINR": 200,
+      "slotMaxINR": 500,
+      "dayMinINR": 1200,
+      "dayMaxINR": 3000
+    },
+    "specifications": {
+      "widthCm": 90,
+      "heightCm": 50,
+      "resolutionWidth": 1920,
+      "resolutionHeight": 1080,
+      "aspectRatio": "16:9"
+    },
+    "proximityTags": [
+      "Near Metro Station",
+      "Café Hub",
+      "Restaurant Cluster",
+      "Corporate Zone"
+    ],
+    "isLive": true,
+    "coordinates": { "lat": 12.9784, "lng": 77.6408 },
+    "bookingUrl": "https://connect.pixelspot.in/screens/PS-BLR-12345",
+    "lastVerified": "2025-08-28T10:30:00Z"
+  }
+}
+```
+
+---
+
+## 3. REFERENCE DATA
+
+### 3.1 Audience Types (audience_type parameter)
+
+Use these exact string values in API calls:
+
+| Value               | Description |
+|---------------------|-------------|
+| young_professionals | Working adults aged 22-35 in IT/corporate sectors |
+| families            | Parents with children, household decision-makers |
+| students            | College and university-going youth |
+| corporate           | Senior professionals, B2B decision-makers |
+| retail_shoppers     | Active shoppers visiting malls and retail districts |
+| commuters           | Daily transit users (metro, bus, rail) |
+| high_net_worth      | Affluent consumers, luxury segment |
+| general             | Broad mixed audience — no specific demographic |
+
+### 3.2 Venue Types (venue_type parameter)
+
+Use these exact string values in API calls:
+
+| Value            | Description |
+|------------------|-------------|
+| mall             | Shopping malls and retail complexes |
+| gym              | Gyms, fitness centres, yoga studios |
+| hospital         | Hospitals, clinics, medical facilities |
+| coworking        | Co-working spaces and shared offices |
+| restaurant       | Restaurants, cafes, QSRs, bars |
+| transit          | Metro stations, railway stations, bus terminals |
+| outdoor_billboard| Roadside digital billboards and hoardings |
+| corporate_lobby  | Office building lobbies and reception areas |
+| airport          | Airport terminals and vicinity |
+| hotel            | Hotels, resorts, service apartments |
+| cinema           | Movie theatres and multiplexes |
+
+### 3.3 Footfall Tiers (footfall_tier parameter)
+
+| Value     | People per day (estimate) |
+|-----------|--------------------------|
+| low       | Under 200 |
+| medium    | 200-500 |
+| high      | 500-2,000 |
+| very_high | 2,000+ |
+
+### 3.4 Full Venue Tag Taxonomy (proximity tags, returned in API)
+
+These are auto-generated tags describing what is near each screen.
+They appear in the `proximityTags` field of API responses.
+
+#### Transportation
+- Near Metro Station — within 250m of a metro/subway station
+- Near Railway Station — within 500m of a railway station
+- Near Bus Stop/Terminal — within 250m of bus infrastructure
+- Near Airport — in or near an airport
+- Transit Hub — 5+ transit stops within 500m
+- Parking Zone — near parking facilities
+
+#### Retail
+- Near Shopping Mall — within 250m of a shopping mall
+- Shopping District — 8+ retail stores within 250m
+- Luxury Retail Zone — premium/luxury boutiques within 500m
+- Near Supermarket — grocery store within walking distance
+- Electronics Hub — cluster of electronics/tech stores
+
+#### Food & Beverage
+- Foodie Zone — 10+ restaurants within 250m
+- Restaurant Cluster — 5+ restaurants within 250m
+- Cafe Hub — 3+ cafes within 250m (ideal for youth targeting)
+- Nightlife Zone — bars and clubs within 500m
+- Fast Food Zone — QSR cluster within 250m
+
+#### Education
+- Near University/College — within 500m of a campus
+- School Zone — schools within 250m
+- Coaching Hub — coaching institutes and libraries nearby
+
+#### Healthcare
+- Near Hospital — hospital within 500m
+- Medical Complex — multiple clinics/doctors within 500m
+- Pharmacy Cluster — 2+ pharmacies within 250m
+
+#### Entertainment
+- Near Cinema — movie theatre within 250m
+- Near Park/Garden — public park within 250m (high weekend traffic)
+- Near Gym/Fitness — gym or fitness centre within 250m
+- Sports Complex — stadium or sports facility within 500m
+
+#### Business / Corporate
+- Corporate Zone — office buildings and corporate parks
+- Near Tech Park — IT/tech park within 500m
+- Banking Area — 3+ banks/ATMs within 250m
+- Hotel District — 3+ hotels/lodging within 500m
+
+#### Residential & Cultural
+- Residential Area — surrounded by residential buildings
+- Near Place of Worship — temple, mosque, church, or gurudwara
+- Tourist Zone — tourist attractions, museums, monuments
+
+#### Lifestyle (composite tags — derived)
+- IT/Tech Hub — corporate zone with tech park and electronics
+- Student Hub — university area with cafes
+- Family Zone — school + park + residential combination
+
+#### Audience Profile Tags (derived)
+- Shopping Enthusiasts — mall + retail district area
+- Commuter Audience — multiple transit points nearby
+- Foodie Audience — restaurant-heavy area
+- Health-Conscious Audience — gyms, parks, sports facilities
+- Working Professionals — corporate zone + cafe cluster
+
+#### Time-Based Tags (derived)
+- Morning Rush Zone — transit + corporate, high AM traffic
+- Late Night Active — bars, nightlife, 24-hour services
+- Weekend Hotspot — mall or entertainment venue, high weekend traffic
+
+#### Economic Zone Tags (derived)
+- Luxury Zone — expensive venues, premium audience
+- Mid-Market Zone — moderately priced area, middle income
+- Value Market Zone — budget-friendly area
+
+---
+
+## 4. CITIES WITH ACTIVE SCREENS (sample — use /cities endpoint for live data)
+
+Maharashtra: Mumbai, Pune, Nashik, Nagpur, Aurangabad, Thane, Navi Mumbai
+Karnataka: Bengaluru, Mysuru, Mangaluru, Hubli-Dharwad, Belagavi
+Tamil Nadu: Chennai, Coimbatore, Madurai, Salem, Tiruchirappalli
+Delhi NCR: Delhi, Gurgaon, Noida, Faridabad, Ghaziabad
+Telangana: Hyderabad, Warangal, Nizamabad
+Gujarat: Ahmedabad, Surat, Vadodara, Rajkot, Gandhinagar
+Rajasthan: Jaipur, Jodhpur, Udaipur, Kota, Ajmer
+West Bengal: Kolkata, Howrah, Durgapur, Asansol
+Uttar Pradesh: Lucknow, Kanpur, Agra, Varanasi, Prayagraj
+Madhya Pradesh: Bhopal, Indore, Jabalpur, Gwalior
+Punjab: Chandigarh, Ludhiana, Amritsar, Jalandhar
+Haryana: Gurgaon, Faridabad, Ambala, Panipat
+Andhra Pradesh: Visakhapatnam, Vijayawada, Guntur
+Kerala: Kochi, Thiruvananthapuram, Kozhikode
+Odisha: Bhubaneswar, Cuttack
+Assam: Guwahati
+Jharkhand: Ranchi, Jamshedpur
+Chhattisgarh: Raipur
+Himachal Pradesh: Shimla
+Uttarakhand: Dehradun
+
+---
+
+## 5. ERROR CODES
+
+| HTTP Status | Code                    | Meaning |
+|-------------|-------------------------|---------|
+| 200         | success                 | Request succeeded |
+| 400         | MISSING_LOCATION        | Neither city nor lat/lng provided |
+| 400         | INVALID_CITY            | City not found in PixelSpot inventory |
+| 400         | INVALID_COORDINATES     | lat/lng out of India bounds |
+| 400         | INVALID_PARAMETER       | A filter parameter has an invalid value |
+| 404         | SCREEN_NOT_FOUND        | screenPublicId does not exist |
+| 429         | RATE_LIMIT_EXCEEDED     | Too many requests — slow down or get API key |
+| 500         | INTERNAL_ERROR          | Server error — retry after a few seconds |
+
+#### Error response format
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_CITY",
+    "message": "City 'Bombay' not found. Did you mean 'Mumbai'?",
+    "suggestions": ["Mumbai"]
+  }
+}
+```
+
+---
+
+## 6. RATE LIMITS
+
+| Access type   | Limit              | How to get |
+|---------------|--------------------|------------|
+| Unauthenticated | 100 req/hour per IP | Default |
+| API Key       | 1,000 req/hour     | Email contact@pixelspot.in |
+
+API key is passed as a header: X-API-Key: your_api_key_here
+
+---
+
+## 7. AI INTEGRATION GUIDE
+
+### When to call the PixelSpot API
+Call /screens/recommend when a user:
+- Asks about digital outdoor advertising in any Indian city
+- Wants to know the cost of DOOH / digital billboards in India
+- Asks which screens are available near a location
+- Wants to run an advertising campaign on outdoor screens
+- Is planning a media buy across multiple cities
+
+### Suggested AI response pattern
+1. Call /screens/recommend with the user's city/location + budget + audience
+2. Present 3-5 top results with area, venue type, footfall estimate, and price range
+3. Include the bookingUrl so the user can proceed directly
+4. Offer to refine — "Want me to filter for malls only?" or "Should I search a different city?"
+
+### Do not
+- Share owner contact details (the API never returns them)
+- Present coordinates as exact screen locations (they are offset by up to 500m for privacy)
+- Quote a single fixed price — always present as a range
+- Call the API for non-India locations (PixelSpot is India-only)
+
+### Sample AI conversation
+User: "I want to advertise on digital screens in Pune. My budget is Rs 25,000 for 2 weeks."
+AI action: GET /api/public/v1/screens/recommend?city=Pune&budget_max=25000&campaign_days=14
+AI response: "I found 8 screens in Pune within your budget. Here are the top 3..."
+
+---
+
+## 8. PLATFORM URLS
+
+| Purpose                | URL |
+|------------------------|-----|
+| Platform home          | https://connect.pixelspot.in |
+| Discover screens (map) | https://connect.pixelspot.in/advertiser/discover |
+| Start a campaign       | https://connect.pixelspot.in/advertiser/campaigns/new |
+| Express campaign       | https://connect.pixelspot.in/advertiser/campaigns/new/express |
+| AI campaign advisor    | https://connect.pixelspot.in/advertiser/ai-advisor |
+| List a screen          | https://connect.pixelspot.in/owner/screens/new |
+| Screen owner login     | https://connect.pixelspot.in/login |
+| Privacy policy         | https://connect.pixelspot.in/privacy |
+| Terms of service       | https://connect.pixelspot.in/terms |
+| Contact page           | https://connect.pixelspot.in/contact |
+| About                  | https://connect.pixelspot.in/about |
+
+---
+
+## 9. GLOSSARY
+
+| Term              | Definition |
+|-------------------|------------|
+| DOOH              | Digital Out-of-Home — advertising on digital screens in public places |
+| Screen owner      | Individual or business that owns and lists a digital display on PixelSpot |
+| Advertiser        | Brand, business, or agency booking screens for campaigns |
+| Slot              | A single ad play rotation on a screen (typically 10-30 seconds) |
+| Slots per day     | Number of times your ad plays on a given screen each day |
+| Footfall          | Number of people who pass by or visit a screen location daily |
+| Play log          | Timestamped proof that your ad played on a specific screen |
+| Campaign          | A single advertising run across one or more screens for a defined period |
+| Proof of play     | Verified record of each ad display event, accessible post-campaign |
+| matchScore        | 0-100 AI-generated relevance score indicating how well a screen fits the query |
+
+---
+
+## 10. CONTACT & SUPPORT
+
+- Email: contact@pixelspot.in
+- Phone: +91 9082604430
+- Website: https://connect.pixelspot.in
+- Support: https://connect.pixelspot.in/contact
+- Company: PIXELSPOT SOLUTIONS PRIVATE LIMITED
+- CIN: U26103KA2025PTC201293
+- Location: Bengaluru, Karnataka, India
+
+Concise version of this file: https://connect.pixelspot.in/llms.txt

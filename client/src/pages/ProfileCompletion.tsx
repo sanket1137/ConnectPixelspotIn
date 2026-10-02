@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,7 +11,7 @@ import {
   Form,
   FormControl,
   FormField,
-  FormItem,
+FormItem,
   FormLabel,
   FormMessage,
   FormDescription,
@@ -64,46 +65,72 @@ const INDUSTRIES = [
 ];
 
 const profileSchema = z.object({
-  mobileNumber: z.string().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
-  companyName: z.string().min(2, "Company name is required"),
-  accountType: z.enum(["brand", "agency"]).optional(),
-  brandName: z.string().optional(),
-  agencyName: z.string().optional(),
-  industry: z.string().min(1, "Please select an industry"),
-  address: z.string().min(5, "Address is required"),
-  city: z.string().min(2, "City is required"),
-  state: z.string().min(1, "Please select a state"),
-  gstNumber: z.string().optional(),
-}).refine((data) => {
+  mobileNumber: z.string().nullish().or(z.literal("")),
+  companyName: z.string().trim().min(2, "Company name is required (minimum 2 characters)"),
+  accountType: z.enum(["brand", "agency"]).nullish().or(z.literal("")),
+  brandName: z.string().nullish().or(z.literal("")),
+  agencyName: z.string().nullish().or(z.literal("")),
+  industry: z.string().trim().min(1, "Please select an industry"),
+  address: z.string().trim().min(2, "Address is required"),
+  city: z.string().trim().min(2, "City is required"),
+  state: z.string().trim().min(1, "Please select a state"),
+  gstNumber: z.string().nullish().or(z.literal("")),
+}).superRefine((data, ctx) => {
   // For advertisers: if accountType is set, require corresponding name field
-  if (data.accountType === "brand" && !data.brandName) {
-    return false;
+  if (data.accountType === "brand" && !data.brandName?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Please enter your brand name",
+      path: ["brandName"],
+    });
   }
-  if (data.accountType === "agency" && !data.agencyName) {
-    return false;
+  if (data.accountType === "agency" && !data.agencyName?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Please enter your agency name",
+      path: ["agencyName"],
+    });
   }
-  return true;
-}, {
-  message: "Please provide your brand or agency name",
-  path: ["accountType"],
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
 export default function ProfileCompletion() {
-  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  const { user, loading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [mobileVerified, setMobileVerified] = useState(false);
 
+  // Redirect if not logged in or if profile is already complete
+  useEffect(() => {
+    if (!loading && !user) {
+      setLocation("/login");
+      return;
+    }
+    if (!loading && user && (user.profileCompleted || user.role === "admin")) {
+      const targetRoute = user.role === "admin" ? "/admin" 
+        : user.role === "screen_owner" ? "/owner" 
+        : user.role === "agency" ? "/agency" 
+        : "/advertiser";
+      setLocation(targetRoute);
+    }
+  }, [user, loading, setLocation]);
+
+  // Treat backend mobileVerified as true ONLY if the mobile number is also actually stored.
+  // If mobile_verified=true but mobile_number=null (stuck state), we force the user to re-verify.
+  const isAlreadyMobileVerified = !!(user?.mobileVerified && user?.mobileNumber);
+
+  const effectiveMobileVerified = mobileVerified || isAlreadyMobileVerified;
+
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
       mobileNumber: user?.mobileNumber || "",
       companyName: user?.companyName || "",
-      accountType: user?.accountType as "brand" | "agency" | undefined,
+      accountType: (user?.accountType as "brand" | "agency") || undefined,
       brandName: user?.brandName || "",
       agencyName: user?.agencyName || "",
       industry: user?.industry || "",
@@ -113,8 +140,31 @@ export default function ProfileCompletion() {
       gstNumber: user?.gstNumber || "",
     },
   });
-  
+
   const watchedAccountType = form.watch("accountType");
+
+  // Sync user data into the form ONLY ONCE when user first loads.
+  // DO NOT clobber user-entered fields when mobile OTP verification updates user.mobileVerified.
+  const hasInitializedRef = useRef(false);
+  useEffect(() => {
+    if (user && !hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      form.reset({
+        mobileNumber: user.mobileNumber || "",
+        companyName: user.companyName || "",
+        accountType: (user.accountType as "brand" | "agency") || undefined,
+        brandName: user.brandName || "",
+        agencyName: user.agencyName || "",
+        industry: user.industry || "",
+        address: user.address || "",
+        city: user.city || "",
+        state: user.state || "",
+        gstNumber: user.gstNumber || "",
+      });
+    } else if (user?.mobileNumber && !form.getValues("mobileNumber")) {
+      form.setValue("mobileNumber", user.mobileNumber);
+    }
+  }, [user]);
 
   const sendOTPMutation = useMutation({
     mutationFn: async (mobile: string) => {
@@ -141,7 +191,7 @@ export default function ProfileCompletion() {
         // If parsing fails, use the full error message
         errorMessage = error.message.replace(/^\d+:\s*/, '');
       }
-      
+
       toast({
         title: "Error",
         description: errorMessage,
@@ -174,7 +224,7 @@ export default function ProfileCompletion() {
       } catch (e) {
         errorMessage = error.message.replace(/^\d+:\s*/, '');
       }
-      
+
       toast({
         title: "Verification Failed",
         description: errorMessage,
@@ -185,18 +235,35 @@ export default function ProfileCompletion() {
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
-      return await apiRequest("PUT", "/api/profile", {
+      const res = await apiRequest("PUT", "/api/profile", {
         ...data,
         name: user?.name,
       });
+      return await res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      if (!data?.user?.profileCompleted) {
+        toast({
+          title: "Profile Incomplete",
+          description: "Your profile details were updated, but some required fields are still missing to complete your profile.",
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: "Profile Completed",
-        description: "Your profile has been updated successfully",
+        description: "Your profile has been updated successfully! Redirecting to dashboard...",
       });
+      queryClient.setQueryData(["/api/auth/me"], data.user);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      window.location.href = "/";
+      const targetRole = data.user.role || user?.role;
+      const targetRoute = targetRole === "admin" ? "/admin"
+        : targetRole === "screen_owner" ? "/owner"
+          : targetRole === "agency" ? "/agency"
+            : "/advertiser";
+      setTimeout(() => {
+        window.location.href = targetRoute;
+      }, 500);
     },
     onError: (error: Error) => {
       // Extract the actual error message from the API response
@@ -210,7 +277,7 @@ export default function ProfileCompletion() {
       } catch (e) {
         errorMessage = error.message.replace(/^\d+:\s*/, '');
       }
-      
+
       toast({
         title: "Error",
         description: errorMessage,
@@ -220,10 +287,10 @@ export default function ProfileCompletion() {
   });
 
   const handleSendOTP = () => {
-    const mobile = form.getValues("mobileNumber");
+    const mobile = form.getValues("mobileNumber") || "";
     const mobileRegex = /^[6-9]\d{9}$/;
-    
-    if (!mobileRegex.test(mobile)) {
+
+    if (!mobileRegex.test(mobile.trim())) {
       toast({
         title: "Invalid Mobile Number",
         description: "Enter a valid 10-digit mobile number",
@@ -232,16 +299,34 @@ export default function ProfileCompletion() {
       return;
     }
 
-    sendOTPMutation.mutate(mobile);
+    sendOTPMutation.mutate(mobile.trim());
   };
 
   const handleVerifyOTP = () => {
-    const mobile = form.getValues("mobileNumber");
-    verifyOTPMutation.mutate({ mobile, code: otp });
+    const mobile = form.getValues("mobileNumber") || "";
+    verifyOTPMutation.mutate({ mobile: mobile.trim(), code: otp.trim() });
+  };
+
+  const onInvalid = (errors: any) => {
+    console.error("Profile completion form validation errors:", errors);
+    const messages: string[] = [];
+    for (const [, err] of Object.entries(errors)) {
+      if (err && (err as any).message) {
+        messages.push((err as any).message);
+      }
+    }
+    const description = messages.length > 0
+      ? messages.slice(0, 3).join(". ")
+      : "Please fill in all required fields correctly";
+    toast({
+      title: "Missing or Invalid Fields",
+      description,
+      variant: "destructive",
+    });
   };
 
   const onSubmit = (data: ProfileFormData) => {
-    if (!mobileVerified && !user?.mobileVerified) {
+    if (!effectiveMobileVerified) {
       toast({
         title: "Mobile Verification Required",
         description: "Please verify your mobile number before completing your profile",
@@ -250,7 +335,31 @@ export default function ProfileCompletion() {
       return;
     }
 
-    updateProfileMutation.mutate(data);
+    const mobileToSubmit = (data.mobileNumber || form.getValues("mobileNumber") || user?.mobileNumber || "").trim();
+    if (!mobileToSubmit || !/^[6-9]\d{9}$/.test(mobileToSubmit)) {
+      toast({
+        title: "Invalid Mobile Number",
+        description: "Please enter a valid 10-digit mobile number and verify it",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (user?.role === "advertiser" && !data.accountType) {
+      toast({
+        title: "Account Type Required",
+        description: "Please select whether you are a Brand or an Agency",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const finalData = {
+      ...data,
+      mobileNumber: mobileToSubmit,
+    };
+
+    updateProfileMutation.mutate(finalData);
   };
 
   return (
@@ -265,7 +374,7 @@ export default function ProfileCompletion() {
           </div>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
               {/* Mobile Number Verification */}
               <Card className="p-6">
                 <div className="space-y-4">
@@ -285,10 +394,11 @@ export default function ProfileCompletion() {
                             <Input
                               placeholder="Enter 10-digit mobile number"
                               {...field}
-                              disabled={mobileVerified || user?.mobileVerified}
+                              readOnly={effectiveMobileVerified}
+                              className={effectiveMobileVerified ? "bg-muted cursor-not-allowed text-muted-foreground" : ""}
                               data-testid="input-mobile"
                             />
-                            {!mobileVerified && !user?.mobileVerified && (
+                            {!effectiveMobileVerified && (
                               <Button
                                 type="button"
                                 onClick={handleSendOTP}
@@ -301,14 +411,14 @@ export default function ProfileCompletion() {
                           </div>
                         </FormControl>
                         <FormMessage />
-                        {(mobileVerified || user?.mobileVerified) && (
+                        {effectiveMobileVerified && (
                           <p className="text-sm text-green-600">✓ Mobile number verified</p>
                         )}
                       </FormItem>
                     )}
                   />
 
-                  {otpSent && !mobileVerified && !user?.mobileVerified && (
+                  {otpSent && !mobileVerified && !isAlreadyMobileVerified && (
                     <div className="space-y-2">
                       <Label>Enter OTP</Label>
                       <div className="flex gap-2">
@@ -404,9 +514,9 @@ export default function ProfileCompletion() {
                             <FormItem>
                               <FormLabel>Brand Name *</FormLabel>
                               <FormControl>
-                                <Input 
-                                  placeholder="Enter your brand name" 
-                                  {...field} 
+                                <Input
+                                  placeholder="Enter your brand name"
+                                  {...field}
                                   data-testid="input-brand-name"
                                 />
                               </FormControl>
@@ -425,9 +535,9 @@ export default function ProfileCompletion() {
                             <FormItem>
                               <FormLabel>Agency Name *</FormLabel>
                               <FormControl>
-                                <Input 
-                                  placeholder="Enter your agency name" 
-                                  {...field} 
+                                <Input
+                                  placeholder="Enter your agency name"
+                                  {...field}
                                   data-testid="input-agency-name"
                                 />
                               </FormControl>
@@ -471,9 +581,9 @@ export default function ProfileCompletion() {
                       <FormItem>
                         <FormLabel>GST Number (Optional)</FormLabel>
                         <FormControl>
-                          <Input 
-                            placeholder="Enter GST number if available" 
-                            {...field} 
+                          <Input
+                            placeholder="Enter GST number if available"
+                            {...field}
                             data-testid="input-gst"
                           />
                         </FormControl>

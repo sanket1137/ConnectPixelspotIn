@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "--env-file=.env.localcopy", "server/index.ts"],
+      "port": 5000
+    },
+    {
+      "name": "dev-original-env",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "--env-file=.env.development", "server/index.ts"],
+      "port": 5000
+    }
+  ]
+}

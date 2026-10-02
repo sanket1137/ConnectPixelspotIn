@@ -144,7 +144,7 @@ export default function AdminSupportTickets() {
                 </TableRow>
               ) : (
                 filteredTickets.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE).map(ticket => (
-                  <TableRow key={ticket.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setLocation(`/tickets/${ticket.id}`)}>
+                  <TableRow key={ticket.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setLocation(`/admin/tickets/${ticket.id}`)}>
                     <TableCell className="font-mono text-xs">{ticket.id.split('-')[0]}</TableCell>
                     <TableCell>
                       <div className="font-medium">{ticket.user?.name || 'Unknown'}</div>
@@ -174,7 +174,7 @@ export default function AdminSupportTickets() {
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={(e) => {
                         e.stopPropagation();
-                        setLocation(`/tickets/${ticket.id}`);
+                        setLocation(`/admin/tickets/${ticket.id}`);
                       }}>
                         <Eye className="w-4 h-4" />
                       </Button>

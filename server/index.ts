@@ -2,7 +2,12 @@
 import { config } from "dotenv";
 import { resolve } from "path";
 
-if (process.env.NODE_ENV === "production") {
+if (process.env.USE_PROD_DB === "true" || process.env.ENV_FILE === ".env.production") {
+  const envPath = resolve(process.cwd(), ".env.production");
+  config({ path: envPath, override: true });
+  process.env.NODE_ENV = "development";
+  console.log("✅ Loaded environment from .env.production (Local Dev mode)");
+} else if (process.env.NODE_ENV === "production") {
   const envPath = resolve(process.cwd(), ".env.production");
   config({ path: envPath, override: true });
   console.log("✅ Loaded environment from .env.production");
@@ -82,7 +87,7 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
+  if (app.get("env") === "development" || process.env.LOCAL_DEV === "true") {
     const { setupVite } = await import("./vite");
     await setupVite(app, server);
   } else {

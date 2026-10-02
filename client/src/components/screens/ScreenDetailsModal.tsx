@@ -5,7 +5,7 @@ import { Screen, ZoneInfo } from '@shared/schema';
 import { MapPin, Users, Monitor, Clock, PlayCircle, Eye, CalendarDays, ExternalLink, X, PlusCircle, CheckCircle2, Layers, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { getScreenCountDisplay } from "@shared/utils";
+import { getScreenCountDisplay, calculateScreenPricePerDay } from "@shared/utils";
 
 interface ScreenDetailsModalProps {
   isOpen: boolean;
@@ -231,12 +231,15 @@ export function ScreenDetailsModal({
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div>
                     <div className="text-2xl font-bold text-slate-900">
-                      ₹{(zoneInfo!.pricePerDay || 0).toLocaleString()}
-                      <span className="text-sm font-normal text-slate-500"> /day (zone)</span>
+                      ₹{Math.round((zoneInfo!.pricePerDay || 0) / (zoneInfo!.screenIds.length || 1)).toLocaleString()}
+                      <span className="text-sm font-normal text-slate-500"> /screen/day</span>
+                    </div>
+                    <div className="text-xs font-medium text-slate-600 mt-0.5">
+                      ₹{(zoneInfo!.pricePerDay || 0).toLocaleString()}/day total ({zoneInfo!.screenIds.length} screens in zone)
                     </div>
                     <div className="text-xs font-medium text-slate-500 flex items-center mt-1">
                       <CalendarDays className="h-3 w-3 mr-1" />
-                      Min. {zoneInfo!.minBookingDays} days · {zoneInfo!.screenIds.length} screens total
+                      Min. {zoneInfo!.minBookingDays} days · All {zoneInfo!.screenIds.length} screens booked together
                     </div>
                   </div>
                   <div className="flex gap-2 w-full sm:w-auto">
@@ -279,9 +282,14 @@ export function ScreenDetailsModal({
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <div className="text-2xl font-bold text-slate-900">
-                    ₹{(screen.pricePerDay || 0).toLocaleString()}
+                    ₹{calculateScreenPricePerDay(screen).toLocaleString()}
                     <span className="text-sm font-normal text-slate-500"> /day</span>
                   </div>
+                  {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && screen.bulkBookingMandatory && (
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      ₹{(screen.pricePerDay || 0).toLocaleString()}/screen × {screen.numberOfScreens} screens (Full venue package)
+                    </div>
+                  )}
                   <div className="text-xs font-medium text-slate-500 flex items-center mt-1">
                     <CalendarDays className="h-3 w-3 mr-1" />
                     Min. {screen.minBookingDays} days booking
