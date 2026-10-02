@@ -713,9 +713,16 @@ export default function DiscoverScreens() {
 
   const handlePlaceSelect = (place: google.maps.places.PlaceResult | null, inputValue: string) => {
     setLocationName(inputValue);
+    setAreaSearch(null);
+    setShowSearchArea(false);
+    if (sortBy === "map_center") {
+      setSortBy("recommended");
+    }
+    setPage(1);
+
     if (place?.geometry?.location) {
-      setLat(place.geometry.location.lat());
-      setLng(place.geometry.location.lng());
+      const newLat = typeof place.geometry.location.lat === "function" ? place.geometry.location.lat() : Number(place.geometry.location.lat);
+      const newLng = typeof place.geometry.location.lng === "function" ? place.geometry.location.lng() : Number(place.geometry.location.lng);
       
       let type = "city";
       if (place.types) {
@@ -728,30 +735,98 @@ export default function DiscoverScreens() {
       }
       setLocationType(type);
       
+      let targetRadius = radiusKm;
+      if (type === "poi") {
+        targetRadius = 10;
+        setRadiusKm(10);
+      } else if (type === "locality" || type === "city") {
+        targetRadius = 15;
+        setRadiusKm(15);
+      }
+
+      let bounds: google.maps.LatLngBoundsLiteral | null = null;
       if (place.geometry.viewport) {
-        const bounds = place.geometry.viewport.toJSON();
+        bounds = typeof place.geometry.viewport.toJSON === "function" ? place.geometry.viewport.toJSON() : place.geometry.viewport;
         setLocationBounds(bounds);
       } else {
         setLocationBounds(null);
       }
-
-      if (type === "poi") {
-        setRadiusKm(10);
-      } else if (type === "locality" || type === "city") {
-        setRadiusKm(15);
-      }
       
+      setLat(newLat);
+      setLng(newLng);
       setFilters(prev => ({ ...prev, search: "" }));
       setActiveZoneScreens(null);
       setActiveZoneName(null);
+
+      // Force map and circle to update immediately
+      if (map) {
+        if (bounds && (type === "country" || type === "administrative_area_level_1")) {
+          if (circleRef.current) {
+            circleRef.current.setMap(null);
+            circleRef.current = null;
+          }
+          map.fitBounds(bounds);
+        } else {
+          if (!circleRef.current && window.google) {
+            circleRef.current = new window.google.maps.Circle({
+              strokeColor: "#0f766e",
+              strokeOpacity: 0.3,
+              strokeWeight: 2,
+              fillColor: "#0f766e",
+              fillOpacity: 0.1,
+              map,
+            });
+          }
+          if (circleRef.current) {
+            circleRef.current.setCenter({ lat: newLat, lng: newLng });
+            circleRef.current.setRadius(targetRadius * 1000);
+            circleRef.current.setVisible(true);
+            const circleBounds = circleRef.current.getBounds();
+            if (circleBounds) {
+              map.fitBounds(circleBounds);
+            } else {
+              map.setCenter({ lat: newLat, lng: newLng });
+              map.setZoom(type === "poi" ? 14 : 12);
+            }
+          } else {
+            map.setCenter({ lat: newLat, lng: newLng });
+            map.setZoom(type === "poi" ? 14 : 12);
+          }
+        }
+      }
     } else if (inputValue) {
-      setLat(undefined);
-      setLng(undefined);
-      setLocationBounds(null);
-      setLocationType("city");
-      setFilters(prev => ({ ...prev, search: inputValue }));
-      setActiveZoneScreens(null);
-      setActiveZoneName(null);
+      if (geocodingLib && window.google) {
+        const geocoder = new geocodingLib.Geocoder();
+        geocoder.geocode({ address: inputValue, componentRestrictions: { country: "in" } }, (results, status) => {
+          if (status === "OK" && results && results[0]) {
+            handlePlaceSelect(results[0], inputValue);
+          } else {
+            setLat(undefined);
+            setLng(undefined);
+            setLocationBounds(null);
+            setLocationType("city");
+            setFilters(prev => ({ ...prev, search: inputValue }));
+            setActiveZoneScreens(null);
+            setActiveZoneName(null);
+            if (circleRef.current) {
+              circleRef.current.setMap(null);
+              circleRef.current = null;
+            }
+          }
+        });
+      } else {
+        setLat(undefined);
+        setLng(undefined);
+        setLocationBounds(null);
+        setLocationType("city");
+        setFilters(prev => ({ ...prev, search: inputValue }));
+        setActiveZoneScreens(null);
+        setActiveZoneName(null);
+        if (circleRef.current) {
+          circleRef.current.setMap(null);
+          circleRef.current = null;
+        }
+      }
     } else {
       setLat(undefined);
       setLng(undefined);
@@ -760,6 +835,10 @@ export default function DiscoverScreens() {
       setFilters(prev => ({ ...prev, search: "" }));
       setActiveZoneScreens(null);
       setActiveZoneName(null);
+      if (circleRef.current) {
+        circleRef.current.setMap(null);
+        circleRef.current = null;
+      }
     }
   };
 
@@ -771,14 +850,23 @@ export default function DiscoverScreens() {
     toast({ title: "Locating...", description: "Getting your current location." });
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setLocationName("Current Location");
-        setLat(position.coords.latitude);
-        setLng(position.coords.longitude);
-        setPage(1);
+        const { latitude, longitude } = position.coords;
+        const mockPlace: any = {
+          geometry: {
+            location: {
+              lat: () => latitude,
+              lng: () => longitude,
+            }
+          },
+          formatted_address: "Current Location",
+          name: "Current Location"
+        };
+        handlePlaceSelect(mockPlace, "Current Location");
       },
       (error) => {
         toast({ title: "Location Error", description: "Could not get your location.", variant: "destructive" });
-      }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -1318,7 +1406,7 @@ export default function DiscoverScreens() {
                   <SearchAutocomplete 
                     onPlaceSelect={handlePlaceSelect} 
                     className="w-full"
-                    initialValue={filters.search}
+                    value={locationName}
                   />
                </div>
 
@@ -1593,9 +1681,12 @@ export default function DiscoverScreens() {
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location</label>
                 <SearchAutocomplete 
-                  onPlaceSelect={(place, val) => { handlePlaceSelect(place, val); }} 
+                  onPlaceSelect={(place, val) => {
+                    handlePlaceSelect(place, val);
+                    setShowMobileSearch(false);
+                  }} 
                   className="w-full h-12 text-base"
-                  initialValue={filters.search}
+                  value={locationName}
                 />
               </div>
               

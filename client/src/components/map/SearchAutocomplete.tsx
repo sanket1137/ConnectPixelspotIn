@@ -12,20 +12,22 @@ interface SearchAutocompleteProps {
   placeholder?: string;
   className?: string;
   initialValue?: string;
+  value?: string;
 }
 
 export function SearchAutocomplete({
   onPlaceSelect,
   placeholder = "Where to promote?",
   className = "",
-  initialValue = ""
+  initialValue = "",
+  value,
 }: SearchAutocompleteProps) {
-  const [inputValue, setInputValue] = useState(initialValue);
+  const [inputValue, setInputValue] = useState(value !== undefined ? value : initialValue);
   const [isOpen, setIsOpen] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   
   const placesLib = useMapsLibrary('places');
-  const map = useMap();
+  const map = useMap("discover-screens-map") || useMap();
   
   const [autocompleteService, setAutocompleteService] = useState<google.maps.places.AutocompleteService | null>(null);
   const [placesService, setPlacesService] = useState<google.maps.places.PlacesService | null>(null);
@@ -33,6 +35,13 @@ export function SearchAutocomplete({
   
   const { toast } = useToast();
   const debouncedInput = useDebounce(inputValue, 300);
+
+  useEffect(() => {
+    const val = value !== undefined ? value : initialValue;
+    if (val !== undefined) {
+      setInputValue(val);
+    }
+  }, [value, initialValue]);
 
   useEffect(() => {
     if (!placesLib) return;
@@ -107,14 +116,20 @@ export function SearchAutocomplete({
     setInputValue(prediction.description);
     setIsOpen(false);
     
-    if (!placesService) return;
+    const service = placesService || (placesLib ? new placesLib.PlacesService(map || document.createElement('div')) : null);
+    if (!service) {
+      onPlaceSelect(null, prediction.description);
+      return;
+    }
     
-    placesService.getDetails({
+    service.getDetails({
       placeId: prediction.place_id,
       fields: ['geometry', 'name', 'formatted_address', 'place_id', 'types']
     }, (place, status) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && place) {
         onPlaceSelect(place, prediction.description);
+      } else {
+        onPlaceSelect(null, prediction.description);
       }
     });
   };
@@ -134,7 +149,11 @@ export function SearchAutocomplete({
               if (e.key === 'Enter') {
                 e.preventDefault();
                 setIsOpen(false);
-                onPlaceSelect(null, inputValue);
+                if (predictions.length > 0) {
+                  handlePredictionSelect(predictions[0]);
+                } else {
+                  onPlaceSelect(null, inputValue);
+                }
               }
             }}
             onClick={() => setIsOpen(true)}
