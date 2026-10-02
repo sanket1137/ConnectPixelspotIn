@@ -2562,6 +2562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...parseScreenFilters(req.query),
         fields: 'pins', sortBy: 'recommended', page: undefined, pageSize: undefined, limit: undefined, offset: undefined,
       });
+      res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
       res.json(Array.isArray(result) ? result : result.screens);
     } catch (error) {
       console.error("Get screen pins error:", error);
@@ -2573,6 +2574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/screens", async (req, res) => {
     try {
       const result = await storage.getFilteredScreens(parseScreenFilters(req.query));
+      res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
       res.json(result);
     } catch (error) {
       console.error("Get screens error:", error);
@@ -2602,6 +2604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         types[t.slug] = (types[t.slug] || 0) + n;
         families[t.family] = (families[t.family] || 0) + n;
       }
+      res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
       res.json({ total, families, types });
     } catch (error) {
       console.error("Get screen facets error:", error);

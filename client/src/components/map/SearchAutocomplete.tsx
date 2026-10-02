@@ -108,7 +108,7 @@ export function SearchAutocomplete({
         setIsLocating(false);
         toast({ title: "Location Error", description: "Could not get your location.", variant: "destructive" });
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: false, timeout: 4000, maximumAge: 300000 }
     );
   };
 

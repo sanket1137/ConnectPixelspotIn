@@ -90,6 +90,38 @@ function activeFilterCount(f: DiscoverFilters): number {
   );
 }
 
+const CACHED_LOCATION_KEY = "pixelspot_user_location";
+
+interface CachedLocation {
+  lat: number;
+  lng: number;
+  locationName: string;
+  timestamp: number;
+}
+
+function getStoredLocation(): CachedLocation | null {
+  try {
+    const raw = localStorage.getItem(CACHED_LOCATION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.lat === "number" && typeof parsed.lng === "number" && (Date.now() - parsed.timestamp < 7 * 24 * 60 * 60 * 1000)) {
+      return parsed;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function saveStoredLocation(lat: number, lng: number, locationName: string) {
+  try {
+    localStorage.setItem(CACHED_LOCATION_KEY, JSON.stringify({
+      lat,
+      lng,
+      locationName,
+      timestamp: Date.now(),
+    }));
+  } catch (e) {}
+}
+
 export default function DiscoverScreens() {
   const map = useMap("discover-screens-map");
   const { toast } = useToast();
@@ -116,14 +148,15 @@ export default function DiscoverScreens() {
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>(0);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
 
-  // Search State
-  const [lat, setLat] = useState<number | undefined>();
-  const [lng, setLng] = useState<number | undefined>();
+  // Search State - loads instantly from cached location or default Bengaluru (0ms delay)
+  const storedLocation = useMemo(() => getStoredLocation(), []);
+  const [lat, setLat] = useState<number | undefined>(() => storedLocation?.lat ?? 12.9716);
+  const [lng, setLng] = useState<number | undefined>(() => storedLocation?.lng ?? 77.5946);
   const [radiusKm, setRadiusKm] = useState<number>(15);
-  const [locationName, setLocationName] = useState<string>("");
+  const [locationName, setLocationName] = useState<string>(() => storedLocation?.locationName ?? "Bengaluru");
   const [locationType, setLocationType] = useState<string>("city");
   const [locationBounds, setLocationBounds] = useState<google.maps.LatLngBoundsLiteral | null>(null);
-  const [initialLocationLoaded, setInitialLocationLoaded] = useState(false);
+  const [initialLocationLoaded, setInitialLocationLoaded] = useState(true);
   const geocodingLib = useMapsLibrary("geocoding");
 
   // Filters State
@@ -307,30 +340,21 @@ export default function DiscoverScreens() {
   });
 
   useEffect(() => {
-    // If we've already done the initial location fetch, do nothing.
-    if (initialLocationLoaded) return;
-    
-    // If the library is not yet loaded, we must wait.
-    if (!geocodingLib) return;
-
-    const geocoder = new geocodingLib.Geocoder();
-
     // A shared link to a venue (?place=lat,lng) or a screen (?screen=id) searches around that
     // place, not around the viewer, so the linked venue/screen is actually in the results
-    const startAt = (pLat: number, pLng: number) => {
-      setLat(pLat);
-      setLng(pLng);
-      setRadiusKm(5);
-      geocoder.geocode({ location: { lat: pLat, lng: pLng } }, (results, status) => {
-        const comp = status === "OK" ? results?.[0]?.address_components.find(c => c.types.includes("sublocality") || c.types.includes("locality")) : undefined;
-        setLocationName(comp?.long_name || "");
-      });
-      setInitialLocationLoaded(true);
-    };
     if (panel.kind === "venue") {
       const [pLat, pLng] = panel.key.split(",").map(Number);
       if (!isNaN(pLat) && !isNaN(pLng)) {
-        startAt(pLat, pLng);
+        setLat(pLat);
+        setLng(pLng);
+        setRadiusKm(5);
+        if (geocodingLib) {
+          const geocoder = new geocodingLib.Geocoder();
+          geocoder.geocode({ location: { lat: pLat, lng: pLng } }, (results, status) => {
+            const comp = status === "OK" ? results?.[0]?.address_components.find(c => c.types.includes("sublocality") || c.types.includes("locality")) : undefined;
+            if (comp?.long_name) setLocationName(comp.long_name);
+          });
+        }
         return;
       }
     }
@@ -341,69 +365,61 @@ export default function DiscoverScreens() {
           const s = Array.isArray(rows) ? rows[0] : null;
           const sLat = s ? parseFloat(String(s.latitude)) : NaN;
           const sLng = s ? parseFloat(String(s.longitude)) : NaN;
-          if (!isNaN(sLat) && !isNaN(sLng)) startAt(sLat, sLng);
-          else setInitialLocationLoaded(true);
+          if (!isNaN(sLat) && !isNaN(sLng)) {
+            setLat(sLat);
+            setLng(sLng);
+            setRadiusKm(5);
+          }
         })
-        .catch(() => setInitialLocationLoaded(true));
+        .catch(() => {});
       return;
     }
 
-    const fetchFallbackIPLocation = async () => {
-      try {
-        const response = await fetch("https://ipapi.co/json/");
-        if (response.ok) {
-          const data = await response.json();
-          if (data.latitude && data.longitude && data.city) {
-            setLat(data.latitude);
-            setLng(data.longitude);
-            setLocationName(data.city);
-            setInitialLocationLoaded(true);
-            return;
-          }
-        }
-      } catch (err) {
-        console.error("IP fallback failed", err);
-      }
-      
-      // Ultimate fallback: Just load everything
-      setInitialLocationLoaded(true);
-    };
-
+    // Fast native browser geolocation (runs immediately in background, does not block screens)
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          setLat(latitude);
-          setLng(longitude);
           
-          // Reverse geocode to get the city name
-          geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (results, status) => {
-            if (status === "OK" && results && results[0]) {
-              // Find locality or administrative_area_level_2
-              const cityComponent = results[0].address_components.find(c => 
-                c.types.includes("locality") || c.types.includes("administrative_area_level_2")
-              );
-              if (cityComponent) {
-                setLocationName(cityComponent.long_name);
-              } else {
-                setLocationName("Current Location");
-              }
-            } else {
-              setLocationName("Current Location");
+          // Check if distance from currently set location is significant (> 3km)
+          setLat((prevLat) => {
+            if (prevLat !== undefined) {
+              const diff = Math.abs(prevLat - latitude) + Math.abs((lng ?? 0) - longitude);
+              if (diff < 0.03) return prevLat;
             }
-            setInitialLocationLoaded(true);
+            return latitude;
           });
+          setLng((prevLng) => {
+            if (prevLng !== undefined && lat !== undefined) {
+              const diff = Math.abs(lat - latitude) + Math.abs(prevLng - longitude);
+              if (diff < 0.03) return prevLng;
+            }
+            return longitude;
+          });
+
+          if (geocodingLib) {
+            const geocoder = new geocodingLib.Geocoder();
+            geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (results, status) => {
+              if (status === "OK" && results?.[0]) {
+                const comp = results[0].address_components.find(c => 
+                  c.types.includes("locality") || c.types.includes("administrative_area_level_2")
+                );
+                const city = comp?.long_name || "Current Location";
+                setLocationName(city);
+                saveStoredLocation(latitude, longitude, city);
+              }
+            });
+          } else {
+            saveStoredLocation(latitude, longitude, locationName || "Current Location");
+          }
         },
         () => {
-          // Declining location access is a normal choice, not an error — fall back to IP location
-          fetchFallbackIPLocation();
+          // If denied, cached/default location is already loaded
         },
-        { timeout: 5000, maximumAge: 60000 }
+        { enableHighAccuracy: false, timeout: 3500, maximumAge: 300000 }
       );
-    } else {
-      fetchFallbackIPLocation();
     }
-  }, [initialLocationLoaded, geocodingLib]);
+  }, [geocodingLib]);
 
   // `screens`: every match (slim pin rows) — map, counts, venue grouping, similar screens.
   // `listScreens`: full rows on the list pages loaded so far. "View zone" shows just the zone.
@@ -754,6 +770,7 @@ export default function DiscoverScreens() {
       
       setLat(newLat);
       setLng(newLng);
+      saveStoredLocation(newLat, newLng, inputValue);
       setFilters(prev => ({ ...prev, search: "" }));
       setActiveZoneScreens(null);
       setActiveZoneName(null);
