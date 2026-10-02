@@ -383,8 +383,23 @@ export class DatabaseStorage implements IStorage {
 
   // Screen methods
   async getScreen(id: string): Promise<Screen | undefined> {
-    const [screen] = await db.select().from(screens).where(eq(screens.id, id));
-    return screen || undefined;
+    const rows = await db
+      .select({
+        screen: screens,
+        activeZoneId: zones.id,
+        zoneName: zones.name,
+      })
+      .from(screens)
+      .leftJoin(zones, and(eq(screens.zoneId, zones.id), eq(zones.status, "active")))
+      .where(eq(screens.id, id))
+      .limit(1);
+    if (!rows.length) return undefined;
+    const { screen, activeZoneId, zoneName } = rows[0];
+    return {
+      ...screen,
+      zoneId: activeZoneId || null,
+      zoneName: activeZoneId ? zoneName : null,
+    } as any;
   }
 
   async getScreenByShortId(shortId: string): Promise<Screen | undefined> {
@@ -416,21 +431,46 @@ export class DatabaseStorage implements IStorage {
     // Return screens with 'active' or 'approved' status (available for booking)
     const cached = publicCache.get<Screen[]>('pub:approvedScreens');
     if (cached) return cached;
-    const activeScreens = await db.select().from(screens).where(inArray(screens.status, ["active", "approved"]));
-    console.log(`   💾 [getApprovedScreens] Found ${activeScreens.length} active/approved screens in database`);
-    if (activeScreens.length > 0) {
-      console.log(`      Sample cities: ${activeScreens.slice(0, 5).map(s => s.city).join(', ')}`);
-    }
+    const result = await db
+      .select({
+        screen: screens,
+        activeZoneId: zones.id,
+        zoneName: zones.name,
+      })
+      .from(screens)
+      .leftJoin(zones, and(eq(screens.zoneId, zones.id), eq(zones.status, "active")))
+      .where(inArray(screens.status, ["active", "approved"]));
+
+    const activeScreens = result.map(({ screen, activeZoneId, zoneName }) => ({
+      ...screen,
+      zoneId: activeZoneId || null,
+      zoneName: activeZoneId ? zoneName : null,
+    }));
     publicCache.set('pub:approvedScreens', activeScreens, PUBLIC_SCREENS_TTL);
-    return activeScreens;
+    return activeScreens as any[];
   }
 
   async getPublicScreens(): Promise<Screen[]> {
     const cached = publicCache.get<Screen[]>('pub:publicScreens');
     if (cached) return cached;
-    const result = await db.select().from(screens).where(inArray(screens.status, ["active", "approved"])).orderBy(desc(screens.createdAt));
-    publicCache.set('pub:publicScreens', result, PUBLIC_SCREENS_TTL);
-    return result;
+    const result = await db
+      .select({
+        screen: screens,
+        activeZoneId: zones.id,
+        zoneName: zones.name,
+      })
+      .from(screens)
+      .leftJoin(zones, and(eq(screens.zoneId, zones.id), eq(zones.status, "active")))
+      .where(inArray(screens.status, ["active", "approved"]))
+      .orderBy(desc(screens.createdAt));
+
+    const mapped = result.map(({ screen, activeZoneId, zoneName }) => ({
+      ...screen,
+      zoneId: activeZoneId || null,
+      zoneName: activeZoneId ? zoneName : null,
+    }));
+    publicCache.set('pub:publicScreens', mapped, PUBLIC_SCREENS_TTL);
+    return mapped as any[];
   }
 
   async getDistinctCities(): Promise<string[]> {
@@ -1883,11 +1923,13 @@ export class DatabaseStorage implements IStorage {
 
       const offset = (filters.page - 1) * filters.pageSize;
       const dataResult = await db.execute(
-        drizzleSql`SELECT * ${haversineSelect} FROM screens WHERE ${whereClause} ${orderClause} LIMIT ${filters.pageSize} OFFSET ${offset}`
+        drizzleSql`SELECT *, (SELECT z.name FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_name ${haversineSelect} FROM screens WHERE ${whereClause} ${orderClause} LIMIT ${filters.pageSize} OFFSET ${offset}`
       );
       
       const screens = (dataResult.rows as any[]).map(r => {
-        const screen = mapRowToCamel<Screen & { distanceKm?: number }>(r);
+        const screen = mapRowToCamel<Screen & { distanceKm?: number; zoneName?: string }>(r);
+        screen.zoneId = r.zone_name ? screen.zoneId : null;
+        if (r.zone_name) (screen as any).zoneName = r.zone_name;
         if (r.distance_km !== undefined) screen.distanceKm = parseFloat(r.distance_km) || 0;
         return screen as Screen;
       });
@@ -1895,7 +1937,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Legacy: return array (backward compatibility)
-    let query = drizzleSql`SELECT * ${haversineSelect} FROM screens WHERE ${whereClause} ${orderClause}`;
+    let query = drizzleSql`SELECT *, (SELECT z.name FROM zones z WHERE z.id = screens.zone_id AND z.status = 'active') AS zone_name ${haversineSelect} FROM screens WHERE ${whereClause} ${orderClause}`;
     if (filters.limit) {
       query = drizzleSql`${query} LIMIT ${filters.limit}`;
     }
@@ -1905,7 +1947,9 @@ export class DatabaseStorage implements IStorage {
 
     const result = await db.execute(query);
     return (result.rows as any[]).map(r => {
-      const screen = mapRowToCamel<Screen & { distanceKm?: number }>(r);
+      const screen = mapRowToCamel<Screen & { distanceKm?: number; zoneName?: string }>(r);
+      screen.zoneId = r.zone_name ? screen.zoneId : null;
+      if (r.zone_name) (screen as any).zoneName = r.zone_name;
       if (r.distance_km !== undefined) screen.distanceKm = parseFloat(r.distance_km) || 0;
       return screen as Screen;
     });

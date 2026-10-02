@@ -12,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { VENUE_CATEGORIES } from "@shared/constants";
-import { ArrowLeft, Target, MapPin, Filter as FilterIcon, Check, Map as MapIcon, Image as ImageIcon, X, Trash2, Search, SlidersHorizontal, ChevronRight, ChevronLeft, AlertTriangle, ArrowRight, LayoutGrid, Users } from "lucide-react";
+import { ArrowLeft, Target, MapPin, Filter as FilterIcon, Check, Map as MapIcon, Image as ImageIcon, X, Trash2, Search, SlidersHorizontal, ChevronRight, ChevronLeft, AlertTriangle, ArrowRight, LayoutGrid, Users, Layers } from "lucide-react";
 import { calculateScreenCampaignPrice, getScreenCountDisplay, calculateTotalPhysicalScreens, calculateScreenPricePerDay } from "@shared/utils";
 import {
   Dialog,
@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import type { Screen } from "@shared/schema";
+import type { Screen, ZoneInfo } from "@shared/schema";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import ScreenCard from "@/components/ScreenCard";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -183,6 +183,36 @@ export default function CreateCampaign() {
 
   // Zone State
   const [zonePriceOverrides, setZonePriceOverrides] = useState<globalThis.Map<string, number>>(new globalThis.Map());
+  const [zoneInfo, setZoneInfo] = useState<ZoneInfo | null>(null);
+  const [zoneScreens, setZoneScreens] = useState<Screen[]>([]);
+
+  // Fetch zone info when a map screen is selected
+  useEffect(() => {
+    if (!selectedMapScreen) {
+      setZoneInfo(null);
+      setZoneScreens([]);
+      return;
+    }
+
+    async function fetchZoneInfo() {
+      try {
+        const res = await fetch(`/api/zones/screen/${selectedMapScreen!.id}`);
+        const data = await res.json();
+        if (data.zone) {
+          setZoneInfo(data.zone);
+          const screensRes = await fetch(`/api/zones/${encodeURIComponent(data.zone.zoneName)}/screens`);
+          const screensData = await screensRes.json();
+          setZoneScreens(screensData.screens || []);
+        } else {
+          setZoneInfo(null);
+          setZoneScreens([]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch zone info:", err);
+      }
+    }
+    fetchZoneInfo();
+  }, [selectedMapScreen]);
 
   // Load cart from Discover Screens
   useEffect(() => {
@@ -562,13 +592,72 @@ export default function CreateCampaign() {
     setCurrentStep(2);
   };
 
+  const handleViewZone = () => {
+    if (!zoneInfo || zoneScreens.length === 0) return;
+    setSelectedMapScreen(null);
+    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    zoneScreens.forEach(s => {
+      const lat = parseFloat(String(s.latitude));
+      const lng = parseFloat(String(s.longitude));
+      if (!isNaN(lat) && !isNaN(lng)) {
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+      }
+    });
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+    setMapPanTarget({ lat: centerLat, lng: centerLng, zoom: 11 });
+  };
+
+  const handleBookZone = () => {
+    if (!zoneInfo || zoneScreens.length === 0) return;
+    const screenIds = zoneScreens.map(s => s.id);
+    const pricePerDay = zoneInfo.pricePerDay / zoneScreens.length;
+
+    const isAdding = !screenIds.every(id => selectedScreenIds.includes(id));
+    let nextIds = [...selectedScreenIds];
+    const newOverrides = new globalThis.Map(zonePriceOverrides);
+
+    if (isAdding) {
+      screenIds.forEach(id => {
+        if (!nextIds.includes(id)) nextIds.push(id);
+        newOverrides.set(id, pricePerDay);
+      });
+      toast({
+        title: "Zone Booked",
+        description: `Added all ${screenIds.length} screens from ${zoneInfo.zoneName} to your campaign.`,
+      });
+    } else {
+      nextIds = nextIds.filter(id => !screenIds.includes(id));
+      screenIds.forEach(id => {
+        newOverrides.delete(id);
+      });
+      toast({
+        title: "Zone Removed",
+        description: `Removed ${zoneInfo.zoneName} from your campaign.`,
+      });
+    }
+
+    setSelectedScreenIds(nextIds);
+    setZonePriceOverrides(newOverrides);
+    localStorage.setItem("selectedScreenIds", JSON.stringify(nextIds));
+    localStorage.setItem("zonePriceOverrides", JSON.stringify(Array.from(newOverrides.entries())));
+    setSelectedMapScreen(null);
+  };
+
   const selectAllFiltered = () => {
-    const reachableScreens = screens.map(s => s.id);
-    const newSelection = Array.from(new Set([...selectedScreenIds, ...reachableScreens]));
+    const standaloneScreens = screens.filter(s => !s.zoneId && !s.zoneName).map(s => s.id);
+    const newSelection = Array.from(new Set([...selectedScreenIds, ...standaloneScreens]));
     setSelectedScreenIds(newSelection);
+    localStorage.setItem("selectedScreenIds", JSON.stringify(newSelection));
+    const hasZones = screens.some(s => s.zoneId || s.zoneName);
     toast({
       title: "Selection Updated",
-      description: `Added ${reachableScreens.length} screens to your campaign.`,
+      description: hasZones
+        ? `Added ${standaloneScreens.length} standalone screens. Zone inventory must be booked via zone packages.`
+        : `Added ${standaloneScreens.length} screens to your campaign.`,
     });
   };
 
@@ -907,7 +996,7 @@ export default function CreateCampaign() {
                     disabled={screens.length === 0}
                   >
                     <Check className="mr-1 h-3 w-3" />
-                    Select All {screens.length}
+                    Select All {screens.some(s => s.zoneId || s.zoneName) ? `Standalone (${screens.filter(s => !s.zoneId && !s.zoneName).length})` : `(${screens.length})`}
                   </Button>
                 </div>
               </div>
@@ -988,13 +1077,14 @@ export default function CreateCampaign() {
                   {screens.map((screen) => {
                     const isSelected = selectedScreenIds.includes(screen.id);
                     const isHovered = hoveredScreenId === screen.id;
+                    const isZone = Boolean(screen.zoneId || screen.zoneName);
                     
                     const basePrice = calculateScreenPricePerDay(screen);
                     const price = zonePriceOverrides.get(screen.id) ?? basePrice ?? 0;
                     
                     const priceDisplay = price >= 1000
                       ? `₹${(price / 1000).toFixed(1).replace('.0', '')}k`
-                      : `₹${price}`;
+                      : `₹${Number(price).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
                     return (
                       <AdvancedMarker
@@ -1013,14 +1103,17 @@ export default function CreateCampaign() {
                         >
                           {/* Price bubble */}
                           <div className={`
-                            px-3 py-1.5 rounded-full font-bold text-[13px] border-2 whitespace-nowrap
+                            px-3 py-1.5 rounded-full font-bold text-[13px] border-2 whitespace-nowrap flex items-center gap-1
                             ${isSelected
                               ? 'bg-green-600 text-white border-white shadow-lg'
-                              : isHovered
-                                ? 'bg-slate-900 text-white border-slate-900 shadow-xl'
-                                : 'bg-white text-slate-800 border-white shadow-md hover:bg-slate-50'
+                              : isZone
+                                ? 'bg-amber-500 text-white border-white shadow-md hover:bg-amber-600'
+                                : isHovered
+                                  ? 'bg-slate-900 text-white border-slate-900 shadow-xl'
+                                  : 'bg-white text-slate-800 border-white shadow-md hover:bg-slate-50'
                             }
                           `}>
+                            {isZone && <Layers className="w-3.5 h-3.5" />}
                             {priceDisplay}
                           </div>
                           {/* Triangle caret */}
@@ -1028,7 +1121,7 @@ export default function CreateCampaign() {
                             border-l-[6px] border-l-transparent
                             border-r-[6px] border-r-transparent
                             border-t-[6px]
-                            ${isSelected ? 'border-t-green-600' : isHovered ? 'border-t-slate-900' : 'border-t-white'}
+                            ${isSelected ? 'border-t-green-600' : isZone ? 'border-t-amber-500' : isHovered ? 'border-t-slate-900' : 'border-t-white'}
                           `} />
                         </div>
                       </AdvancedMarker>
@@ -1300,8 +1393,16 @@ export default function CreateCampaign() {
         isOpen={!!selectedMapScreen}
         onClose={() => setSelectedMapScreen(null)}
         screen={selectedMapScreen}
-        onAdd={(screen) => toggleScreenSelection(screen.id)}
+        onAdd={(screen) => {
+          if (zoneInfo) return; // Prevent individual adding of zone screens
+          toggleScreenSelection(screen.id);
+        }}
         isAdded={selectedMapScreen ? selectedScreenIds.includes(selectedMapScreen.id) : false}
+        zoneInfo={zoneInfo}
+        allZoneScreens={zoneScreens}
+        onViewZone={handleViewZone}
+        onBookZone={handleBookZone}
+        isZoneBooked={zoneInfo ? zoneInfo.screenIds.every(id => selectedScreenIds.includes(id)) : false}
       />
     </div>
   );

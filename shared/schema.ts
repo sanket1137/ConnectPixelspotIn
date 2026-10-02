@@ -724,7 +724,7 @@ export const mediaPlans = pgTable("media_plans", {
   budget:       integer("budget").notNull().default(0),
   agencyMargin: integer("agency_margin").notNull().default(0), // % markup, never shown in client PDF
   notes:        text("notes"),
-  status:       text("status").notNull().default("draft"), // draft | sent | executed
+  status:       text("status").notNull().default("draft"), // draft | sent | in_process | converted | rejected | on_hold | executed (legacy)
   clientUserId: varchar("client_user_id"), // linked recipient user ID (registered or unregistered lead)
   clientName:   text("client_name"),       // recipient name
   clientMobile: text("client_mobile"),     // recipient mobile number

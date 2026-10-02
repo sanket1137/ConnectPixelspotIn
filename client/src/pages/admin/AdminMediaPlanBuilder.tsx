@@ -28,6 +28,7 @@ import {
   EyeOff,
   Building2,
   Save,
+  Layers,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -133,6 +134,8 @@ export default function AdminMediaPlanBuilder() {
             size: it.size || "Standard",
             pricePerDay: it.pricePerDay || 0,
             avgDailyFootfall: it.avgDailyFootfall || 0,
+            zoneName: it.zoneName,
+            zoneId: it.zoneId,
           }))
         );
       }
@@ -344,6 +347,25 @@ export default function AdminMediaPlanBuilder() {
               return [...prev, screen];
             });
             toast({ title: `Added ${screen.name || "screen"} to proposal ✓` });
+          }}
+          onAddZone={(zoneScreensToAdd, zoneObj) => {
+            const count = zoneScreensToAdd.length || 1;
+            const zonePrice = zoneObj?.pricePerDay ? Math.round(zoneObj.pricePerDay / count) : undefined;
+            const existingSet = new Set(selectedScreens.map((s) => s.id));
+            const toAdd = zoneScreensToAdd
+              .filter((s) => !existingSet.has(s.id))
+              .map((s) => ({
+                ...s,
+                pricePerDay: zonePrice !== undefined ? zonePrice : s.pricePerDay,
+                zoneName: zoneObj?.zoneName,
+                zoneId: zoneObj?.id || s.zoneId,
+              }));
+            if (toAdd.length === 0) {
+              toast({ title: `Zone "${zoneObj?.zoneName || ""}" is already added to proposal!` });
+              return;
+            }
+            setSelectedScreens((prev) => [...prev, ...toAdd]);
+            toast({ title: `Added ${toAdd.length} screens from ${zoneObj?.zoneName || "zone"} package ✓` });
           }}
           existingIds={existingIds}
         />
@@ -698,7 +720,14 @@ export default function AdminMediaPlanBuilder() {
                         return (
                           <TableRow key={s.id} className="hover:bg-slate-50">
                             <TableCell>
-                              <p className="font-bold text-xs text-slate-900">{s.name}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-bold text-xs text-slate-900">{s.name}</p>
+                                {s.zoneName && (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-300 font-semibold flex items-center gap-1">
+                                    <Layers className="w-3 h-3" /> Zone: {s.zoneName}
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-[11px] text-muted-foreground">{s.city} • {s.venueName || s.location}</p>
                             </TableCell>
                             <TableCell>

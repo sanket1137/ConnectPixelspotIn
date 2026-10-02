@@ -47,11 +47,12 @@ export function registerFlowRoutes(
   // ========== PAYMENT ROUTES (Advertiser) ==========
 
   // Create Razorpay order for a campaign payment
+  // Create Razorpay order for a campaign payment (or individual booking)
   app.post("/api/payments/create-order", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
     try {
       const { campaignId, bookingId } = req.body;
-      if (!campaignId || !bookingId) {
-        return res.status(400).json({ error: "campaignId and bookingId are required" });
+      if (!campaignId) {
+        return res.status(400).json({ error: "campaignId is required" });
       }
 
       const campaign = await storage.getCampaign(campaignId);
@@ -62,38 +63,72 @@ export function registerFlowRoutes(
         return res.status(403).json({ error: "Not your campaign" });
       }
 
-      // Get the specific booking
-      const booking = await storage.getBooking(bookingId);
-      if (!booking) {
-        return res.status(404).json({ error: "Booking not found" });
-      }
-      if (booking.campaignId !== campaignId) {
-        return res.status(400).json({ error: "Booking does not belong to this campaign" });
-      }
-      if (!(booking.ownerApproved === true || booking.status === "approved")) {
-        return res.status(400).json({ error: "Booking is not approved yet" });
-      }
-
-      // Check if this booking already has a completed payment
-      const existingPayment = await storage.getPaymentByBooking(bookingId);
-      if (existingPayment && existingPayment.status === "completed") {
-        return res.status(400).json({ error: "Payment already completed for this booking" });
-      }
-
-      const bookingPrice = booking.price || 0;
-      const basePaise = Math.round(bookingPrice * 100);
-
       const GST_PERCENT = 18;
-      const gstPaise = Math.round(basePaise * GST_PERCENT / 100);
-      const totalPaise = basePaise + gstPaise;
+      let totalPaise = 0;
+      let receipt = "";
+      let existingPayment: any = undefined;
+
+      if (bookingId) {
+        // Get the specific booking
+        const booking = await storage.getBooking(bookingId);
+        if (!booking) {
+          return res.status(404).json({ error: "Booking not found" });
+        }
+        if (booking.campaignId !== campaignId) {
+          return res.status(400).json({ error: "Booking does not belong to this campaign" });
+        }
+        if (!(booking.ownerApproved === true || booking.status === "approved")) {
+          return res.status(400).json({ error: "Booking is not approved yet" });
+        }
+
+        // Check if this booking already has a completed payment
+        existingPayment = await storage.getPaymentByBooking(bookingId);
+        if (existingPayment && existingPayment.status === "completed") {
+          return res.status(400).json({ error: "Payment already completed for this booking" });
+        }
+
+        const bookingPrice = booking.price || 0;
+        const basePaise = Math.round(bookingPrice * 100);
+        const gstPaise = Math.round(basePaise * GST_PERCENT / 100);
+        totalPaise = basePaise + gstPaise;
+        receipt = `bkg_${bookingId.replace(/-/g, "").slice(0, 30)}`;
+      } else {
+        // Campaign-level payment for all approved unpaid bookings
+        const campaignBookings = await storage.getBookingsByCampaign(campaignId);
+        const approvedBookings = campaignBookings.filter(b => b.ownerApproved === true || b.status === "approved");
+
+        if (approvedBookings.length === 0) {
+          return res.status(400).json({ error: "No approved bookings available to pay for" });
+        }
+
+        const unpaidBookings = approvedBookings.filter(b => (b as any).bookingPaymentStatus !== "paid");
+        if (unpaidBookings.length === 0) {
+          return res.status(400).json({ error: "All approved bookings for this campaign have already been paid" });
+        }
+
+        const basePaise = unpaidBookings.reduce((sum, b) => sum + Math.round((b.price || 0) * 100), 0);
+        const gstPaise = Math.round(basePaise * GST_PERCENT / 100);
+        totalPaise = basePaise + gstPaise;
+        receipt = `cmp_${campaignId.replace(/-/g, "").slice(0, 30)}`;
+
+        // Look for existing pending payment for this campaign without bookingId
+        const lastCampaignPayment = await storage.getPaymentByCampaign(campaignId);
+        if (lastCampaignPayment && !lastCampaignPayment.bookingId && lastCampaignPayment.status === "pending") {
+          existingPayment = lastCampaignPayment;
+        }
+      }
+
+      if (totalPaise <= 0) {
+        return res.status(400).json({ error: "Invalid payment amount" });
+      }
 
       // Create Razorpay order with GST-inclusive amount
       const order = await razorpayService.createOrder({
         amount: totalPaise,
-        receipt: `bkg_${bookingId.replace(/-/g, "").slice(0, 30)}`,
+        receipt,
         notes: {
           campaignId,
-          bookingId,
+          ...(bookingId ? { bookingId } : {}),
           advertiserId: req.user!.id,
           campaignName: campaign.name || "",
         },
@@ -109,7 +144,7 @@ export function registerFlowRoutes(
       } else {
         await storage.createPayment({
           campaignId,
-          bookingId,
+          bookingId: bookingId || null,
           advertiserId: req.user!.id,
           amount: totalPaise,
           status: "pending",
@@ -124,9 +159,15 @@ export function registerFlowRoutes(
         currency: order.currency,
         keyId: razorpayService.getPublicKey(),
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Create payment order error:", error);
-      res.status(500).json({ error: "Failed to create payment order" });
+      const rzpDesc = error?.error?.description || error?.message || "Failed to create payment order";
+      if (error?.statusCode === 401 || (error?.error?.code === "BAD_REQUEST_ERROR" && rzpDesc.includes("Authentication failed"))) {
+        return res.status(500).json({
+          error: "Razorpay authentication failed. Please check your RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env",
+        });
+      }
+      res.status(500).json({ error: rzpDesc });
     }
   });
 
@@ -161,21 +202,30 @@ export function registerFlowRoutes(
         status: "completed",
       });
 
-      // Mark this specific booking as paid
+      // Mark bookings as paid
       const paidBookingId = bookingId || payment.bookingId;
       if (paidBookingId) {
         await storage.updateBooking(paidBookingId, {
           bookingPaymentStatus: "paid",
         } as any);
+      } else if (payment.campaignId) {
+        const campaignBookings = await storage.getBookingsByCampaign(payment.campaignId);
+        const approvedBookings = campaignBookings.filter(b => b.ownerApproved === true || b.status === "approved");
+        for (const booking of approvedBookings) {
+          await storage.updateBooking(booking.id, {
+            bookingPaymentStatus: "paid",
+          } as any);
+        }
       }
 
       // Check if ALL approved bookings for the campaign are now paid → update campaign paymentStatus
-      if (payment.campaignId) {
-        const campaignBookings = await storage.getBookingsByCampaign(payment.campaignId);
+      const targetCampaignId = payment.campaignId || campaignId;
+      if (targetCampaignId) {
+        const campaignBookings = await storage.getBookingsByCampaign(targetCampaignId);
         const approvedBookings = campaignBookings.filter(b => b.ownerApproved === true || b.status === "approved");
         const allPaid = approvedBookings.length > 0 && approvedBookings.every(b => (b as any).bookingPaymentStatus === "paid" || b.id === paidBookingId);
-        if (allPaid) {
-          await storage.updateCampaign(payment.campaignId, {
+        if (allPaid || !paidBookingId) {
+          await storage.updateCampaign(targetCampaignId, {
             paymentStatus: "advertiser_paid",
           } as any);
         }
@@ -233,7 +283,7 @@ export function registerFlowRoutes(
         });
       }
 
-      // Notify screen owner of the specific paid booking
+      // Notify screen owner(s)
       if (paidBookingId) {
         const paidBooking = await storage.getBooking(paidBookingId);
         if (paidBooking) {
@@ -245,6 +295,24 @@ export function registerFlowRoutes(
               title: "Advertiser Payment Received",
               message: `Advertiser payment of ₹${(payment.amount / 100).toLocaleString("en-IN")} received for screen "${screen.name}" in campaign "${campaign?.name || ""}". Please confirm your booking.`,
               data: { campaignId: payment.campaignId, bookingId: paidBookingId },
+              actionUrl: `/owner/requests`,
+            });
+          }
+        }
+      } else if (targetCampaignId) {
+        const campaignBookings = await storage.getBookingsByCampaign(targetCampaignId);
+        const approvedBookings = campaignBookings.filter(b => b.ownerApproved === true || b.status === "approved");
+        const notifiedOwners = new Set<string>();
+        for (const booking of approvedBookings) {
+          const screen = await storage.getScreen(booking.screenId);
+          if (screen && screen.ownerId && !notifiedOwners.has(screen.ownerId)) {
+            notifiedOwners.add(screen.ownerId);
+            await storage.createNotification({
+              userId: screen.ownerId,
+              type: "advertiser_payment_received",
+              title: "Advertiser Payment Received",
+              message: `Advertiser payment received for campaign "${campaign?.name || ""}". Please confirm your bookings.`,
+              data: { campaignId: targetCampaignId, bookingId: booking.id },
               actionUrl: `/owner/requests`,
             });
           }
@@ -339,6 +407,20 @@ export function registerFlowRoutes(
           await storage.updateCampaign(existingPayment.campaignId, {
             paymentStatus: "advertiser_paid",
           } as any);
+
+          if (existingPayment.bookingId) {
+            await storage.updateBooking(existingPayment.bookingId, {
+              bookingPaymentStatus: "paid",
+            } as any);
+          } else {
+            const campaignBookings = await storage.getBookingsByCampaign(existingPayment.campaignId);
+            const approvedBookings = campaignBookings.filter(b => b.ownerApproved === true || b.status === "approved");
+            for (const booking of approvedBookings) {
+              await storage.updateBooking(booking.id, {
+                bookingPaymentStatus: "paid",
+              } as any);
+            }
+          }
 
           // Notify advertiser
           await storage.createNotification({

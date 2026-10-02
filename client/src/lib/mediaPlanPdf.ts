@@ -18,6 +18,11 @@ export interface MediaPlanPdfData {
     notes?: string | null;
     agencyMargin: number; // used in calculation, NOT printed in sections 1-3
     agencyName: string;
+    createdByAdmin?: boolean;
+    contactExecutive?: string | null;
+    contactPhone?: string | null;
+    contactEmail?: string | null;
+    contactWebsite?: string | null;
   };
   items: Array<{
     screenName: string;
@@ -32,7 +37,10 @@ export interface MediaPlanPdfData {
     pricePerDay: number; // net
     totalPrice: number; // net
     notes?: string | null;
-    screen?: Partial<Screen>;
+    size?: string | null;
+    zoneName?: string | null;
+    zoneId?: string | null;
+    screen?: Partial<Screen> & { zoneName?: string | null };
   }>;
 }
 
@@ -52,6 +60,12 @@ function formatDate(dateStr: string): string {
 }
 
 function getCategoryName(item: MediaPlanPdfData["items"][0]): string {
+  const zone = item.zoneName || (item.screen as any)?.zoneName;
+  if (zone) {
+    const trimmedZone = zone.trim();
+    return `Zone Network: ${trimmedZone}`;
+  }
+
   const raw =
     item.venueCategory ||
     item.category ||
@@ -118,19 +132,78 @@ function getValidScreenImageUrl(screen?: Partial<Screen>): string | null {
   return null;
 }
 
-// Fetch screen size directly from screen.size field
-function getScreenSize(screen?: Partial<Screen>): string {
-  if (!screen) return "Confirmed at booking";
-  const size = screen.size?.trim();
-  if (size && size !== "Standard" && size !== "N/A" && size !== "null") {
-    return size;
+// Fetch screen size directly from screen.size or screen.resolution field
+function getScreenSize(screen?: Partial<Screen>, directSize?: string | null): string {
+  const isInvalid = (val?: string | null): boolean => {
+    if (!val) return true;
+    const lower = val.trim().toLowerCase();
+    return (
+      lower === "" ||
+      lower === "standard" ||
+      lower === "n/a" ||
+      lower === "na" ||
+      lower === "null" ||
+      lower === "undefined" ||
+      lower === "not specified" ||
+      lower === "confirmed at booking"
+    );
+  };
+
+  // 1. Direct size parameter or screen.size
+  const rawSize = (directSize || screen?.size)?.trim();
+  if (rawSize && !isInvalid(rawSize)) {
+    return rawSize;
   }
-  return "Confirmed at booking";
+
+  // 2. Fallback to resolution if size is empty or "Not specified"
+  const rawRes = screen?.resolution?.trim();
+  if (rawRes && !isInvalid(rawRes)) {
+    return rawRes;
+  }
+
+  // 3. Fallback to rawSize if present
+  if (rawSize && rawSize.toLowerCase() !== "not specified" && rawSize.toLowerCase() !== "confirmed at booking") {
+    return rawSize;
+  }
+
+  return "Standard";
 }
 
 export function printMediaPlan(data: MediaPlanPdfData) {
   const { plan, items } = data;
   const marginMultiplier = 1 + plan.agencyMargin / 100;
+
+  // Determine if proposal is from Admin portal or Agency portal
+  const isCreatedByAdmin =
+    plan.createdByAdmin !== undefined
+      ? Boolean(plan.createdByAdmin)
+      : (plan.agencyName ? plan.agencyName.toLowerCase().includes("pixelspot") : false);
+
+  const agencyDisplayName =
+    plan.agencyName && plan.agencyName !== "Agency" && plan.agencyName !== "Pixelspot Admin"
+      ? plan.agencyName
+      : (isCreatedByAdmin ? "Pixelspot Media Network" : "Media Agency");
+
+  const contactExecutive = isCreatedByAdmin
+    ? (plan.contactExecutive || "Jagpreet Singh")
+    : (plan.contactExecutive || agencyDisplayName || "Media Executive");
+
+  const contactPhone = isCreatedByAdmin
+    ? (plan.contactPhone || "+91 77608 07137")
+    : (plan.contactPhone || "");
+
+  const contactEmail = isCreatedByAdmin
+    ? (plan.contactEmail || "jagpreet@pixelspot.in")
+    : (plan.contactEmail || "");
+
+  const contactWebsite = isCreatedByAdmin
+    ? (plan.contactWebsite || "www.pixelspot.in")
+    : (plan.contactWebsite || "");
+
+  const isUrl = (val?: string | null) => {
+    if (!val) return false;
+    return /^https?:\/\//i.test(val) || /^www\./i.test(val) || val.includes(".com") || val.includes(".in") || val.includes(".org") || val.includes(".co") || val.includes(".io");
+  };
 
   // Global aggregate metrics
   const totalPhysicalScreens = items.reduce((sum, item) => {
@@ -204,7 +277,7 @@ export function printMediaPlan(data: MediaPlanPdfData) {
         g.items.find(
           (i) => i.screen?.screenImages?.[0] || i.screen?.images?.[0]
         ) || g.items[0];
-      const screenSize = getScreenSize(sampleItem?.screen);
+      const screenSize = getScreenSize(sampleItem?.screen, sampleItem?.size);
 
       return `
       <div class="brief-card">
@@ -247,7 +320,7 @@ export function printMediaPlan(data: MediaPlanPdfData) {
         const venuePhotoCards = itemsWithImages
           .map((item) => {
             const imageSrc = getValidScreenImageUrl(item.screen)!;
-            const screenSize = getScreenSize(item.screen);
+            const screenSize = getScreenSize(item.screen, item.size);
 
             return `
               <div class="outdoor-photo-card">
@@ -280,15 +353,15 @@ export function printMediaPlan(data: MediaPlanPdfData) {
 
       if (itemWithImage) {
         const imageSrc = getValidScreenImageUrl(itemWithImage.screen)!;
-        const screenSize = getScreenSize(itemWithImage.screen);
+        const screenSize = getScreenSize(itemWithImage.screen, itemWithImage.size);
 
         referenceImagesHtml = `
           <div class="category-reference-container">
             <div class="category-reference-header">
               <div>
-                <span class="photo-tag">Category Representative Reference Screen</span>
-                <div class="category-reference-title">${group.categoryName} Inventory Setup</div>
-                <div style="font-size: 11px; color: #64748b;">Representative display format across ${group.venueCount} venues (${group.screenCount} screens)</div>
+                <span class="photo-tag" style="${group.categoryName.startsWith("Zone Network:") ? "background:#fef3c7; color:#92400e; border:1px solid #fde68a;" : ""}">${group.categoryName.startsWith("Zone Network:") ? "Zone Network Bundle Package" : "Category Representative Reference Screen"}</span>
+                <div class="category-reference-title">${group.categoryName}</div>
+                <div style="font-size: 11px; color: #64748b;">${group.categoryName.startsWith("Zone Network:") ? `Bundled zone inventory package covering ${group.venueCount} venues (${group.screenCount} screens)` : `Representative display format across ${group.venueCount} venues (${group.screenCount} screens)`}</div>
               </div>
               <div class="category-reference-meta">Screen Size: ${screenSize}</div>
             </div>
@@ -312,11 +385,16 @@ export function printMediaPlan(data: MediaPlanPdfData) {
           ? s.numberOfScreens
           : 1;
 
-      const venueName = item.venueName || item.screenName || "Confirmed at booking";
+      const rawVenue = item.venueName || item.screenName || "Confirmed at booking";
+      const isZoneItem = Boolean(item.zoneName || (s as any).zoneName);
+      const venueName = isZoneItem
+        ? `${rawVenue} <span style="display:inline-block; font-size:10px; background:#fef3c7; color:#92400e; padding:1px 5px; border-radius:4px; font-weight:600; margin-left:4px;">Zone: ${item.zoneName || (s as any).zoneName}</span>`
+        : rawVenue;
+
       const locationArea = `${item.city || ""}${
         item.location ? `, ${item.location}` : ""
       }`.trim() || "Confirmed at booking";
-      const screenSizeText = getScreenSize(s);
+      const screenSizeText = getScreenSize(s, item.size);
       const footfallStr = s.avgDailyFootfall
         ? s.avgDailyFootfall.toLocaleString("en-IN")
         : "Confirmed at booking";
@@ -332,7 +410,7 @@ export function printMediaPlan(data: MediaPlanPdfData) {
       if (s.lifestyleTags) tags.push(...s.lifestyleTags);
       if (s.customAudienceTags) tags.push(...s.customAudienceTags);
       if (s.locationTags) tags.push(...s.locationTags);
-      const uniqueTags = [...new Set(tags)].slice(0, 5);
+      const uniqueTags = Array.from(new Set(tags)).slice(0, 5);
       const targetingStr =
         uniqueTags.length > 0
           ? uniqueTags.join(", ")
@@ -434,7 +512,7 @@ export function printMediaPlan(data: MediaPlanPdfData) {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Pixelspot Media Proposal – ${plan.clientBrand}</title>
+  <title>${isCreatedByAdmin ? "Pixelspot" : agencyDisplayName} Media Proposal – ${plan.clientBrand}</title>
   <style>
     /* Reset & CSS Variables */
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1052,8 +1130,8 @@ export function printMediaPlan(data: MediaPlanPdfData) {
     <!-- BRAND HEADER -->
     <div class="brand-header">
       <div class="brand-logo-area">
-        <h1>${plan.agencyName}</h1>
-        <p>Powered by Pixelspot Media Network</p>
+        <h1>${isCreatedByAdmin ? "Pixelspot Media Network" : agencyDisplayName}</h1>
+        <p>${isCreatedByAdmin ? "Powered by Pixelspot Media Network" : "DOOH Media Planning & Campaign Delivery"}</p>
       </div>
       <div class="meta-box">
         <h2>CAMPAIGN PROPOSAL</h2>
@@ -1066,7 +1144,7 @@ export function printMediaPlan(data: MediaPlanPdfData) {
     <!-- EXECUTIVE OVERVIEW (PAGE 1): COVER + KPIS + CATEGORY BRIEF            -->
     <!-- ===================================================================== -->
     <div class="section-block">
-      <span class="section-kicker">PIXELSPOT MEDIA PROPOSAL</span>
+      <span class="section-kicker">${isCreatedByAdmin ? "PIXELSPOT MEDIA PROPOSAL" : `${agencyDisplayName.toUpperCase()} MEDIA PROPOSAL`}</span>
       <h2 class="section-headline">Campaign Scope & Reach Summary</h2>
       
       <div class="cover-card">
@@ -1188,22 +1266,22 @@ export function printMediaPlan(data: MediaPlanPdfData) {
         <div class="contact-details-grid">
           <div class="contact-item">
             <span class="contact-lbl">Contact Executive</span>
-            <span class="contact-val font-bold">Jagpreet Singh</span>
+            <span class="contact-val font-bold">${contactExecutive}</span>
           </div>
 
           <div class="contact-item">
             <span class="contact-lbl">Direct Call / WhatsApp</span>
-            <span class="contact-val font-bold text-blue">+91 77608 07137</span>
+            <span class="contact-val font-bold text-blue">${contactPhone || "Available on request"}</span>
           </div>
 
           <div class="contact-item">
             <span class="contact-lbl">Email Inquiry</span>
-            <span class="contact-val font-bold text-blue">jagpreet@pixelspot.in</span>
+            <span class="contact-val font-bold text-blue">${contactEmail || "Available on request"}</span>
           </div>
 
           <div class="contact-item">
-            <span class="contact-lbl">Official Platform</span>
-            <span class="contact-val font-bold">www.pixelspot.in</span>
+            <span class="contact-lbl">${isCreatedByAdmin || isUrl(contactWebsite) ? "Official Platform" : "Agency Organization"}</span>
+            <span class="contact-val font-bold">${contactWebsite || agencyDisplayName}</span>
           </div>
         </div>
       </div>
@@ -1221,10 +1299,14 @@ export function printMediaPlan(data: MediaPlanPdfData) {
       <!-- Bottom Company Details Footer -->
       <div class="footer">
         <div class="footer-left">
-          <strong>Pixelspot Media Network</strong> • 📞 <strong>+91 77608 07137</strong> | ✉️ <strong>jagpreet@pixelspot.in</strong> | 🌐 <strong>www.pixelspot.in</strong>
+          ${
+            isCreatedByAdmin
+              ? `<strong>Pixelspot Media Network</strong> • 📞 <strong>+91 77608 07137</strong> | ✉️ <strong>jagpreet@pixelspot.in</strong> | 🌐 <strong>www.pixelspot.in</strong>`
+              : `<strong>${agencyDisplayName}</strong>${contactPhone ? ` • 📞 <strong>${contactPhone}</strong>` : ""}${contactEmail ? ` | ✉️ <strong>${contactEmail}</strong>` : ""}${contactWebsite && isUrl(contactWebsite) ? ` | 🌐 <strong>${contactWebsite}</strong>` : ""}`
+          }
         </div>
         <div class="footer-right">
-          <span>${plan.agencyName} Proposal • Confidential • Valid 7 Days</span>
+          <span>${agencyDisplayName} Proposal • Confidential • Valid 7 Days</span>
         </div>
       </div>
     </div>

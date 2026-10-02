@@ -416,8 +416,8 @@ export default function ExpressCampaignBuilder() {
               }
 
               if (prev.screensData.length === 0) {
-                // Initial load: auto-select all
-                return { ...prev, screensData: mergedScreens, selectedScreenIds: screens.map((s) => s.id) };
+                // Initial load: do NOT auto-select screens by default
+                return { ...prev, screensData: mergedScreens, selectedScreenIds: prev.selectedScreenIds || [] };
               }
               
               // Subsequent load: just update screensData, preserve selectedScreenIds
@@ -456,8 +456,19 @@ export default function ExpressCampaignBuilder() {
             update({ selectedScreenIds: nextIds, zonePriceOverrides: nextOverrides });
             clearError("screens");
           }}
-          onSelectAll={() => update({ selectedScreenIds: state.screensData.map((s) => s.id) })}
-          onClearAll={() => update({ selectedScreenIds: [] })}
+          onSelectAll={(ids?: string[]) => {
+            const toAdd = ids && ids.length > 0 ? ids : state.screensData.map((s) => s.id);
+            const nextIds = Array.from(new Set([...state.selectedScreenIds, ...toAdd]));
+            update({ selectedScreenIds: nextIds });
+            clearError("screens");
+          }}
+          onClearAll={(ids?: string[]) => {
+            if (ids && ids.length > 0) {
+              update({ selectedScreenIds: state.selectedScreenIds.filter((id) => !ids.includes(id)) });
+            } else {
+              update({ selectedScreenIds: [] });
+            }
+          }}
           error={errors.screens}
         />
       ) : (
@@ -549,10 +560,10 @@ export default function ExpressCampaignBuilder() {
                  </span>
                  <span className="text-slate-400 text-sm">•</span>
                  <span className="text-sm font-medium text-slate-600">
-                   ₹{state.screensData.filter(s => state.selectedScreenIds.includes(s.id)).reduce((sum, s) => {
+                   ₹{Number(state.screensData.filter(s => state.selectedScreenIds.includes(s.id)).reduce((sum, s) => {
                      const basePrice = calculateScreenPricePerDay(s);
                      return sum + (state.zonePriceOverrides[s.id] ?? basePrice);
-                   }, 0).toLocaleString()}/day
+                   }, 0)).toLocaleString('en-IN', { maximumFractionDigits: 2 })}/day
                  </span>
               </div>
             )}

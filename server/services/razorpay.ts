@@ -3,20 +3,29 @@
 import Razorpay from "razorpay";
 import crypto from "crypto";
 
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "";
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "";
+function getKeyId(): string {
+  return process.env.RAZORPAY_KEY_ID || "";
+}
+
+function getKeySecret(): string {
+  return process.env.RAZORPAY_KEY_SECRET || "";
+}
 
 let razorpayInstance: Razorpay | null = null;
+let currentKeyId: string = "";
 
 function getRazorpay(): Razorpay {
-  if (!razorpayInstance) {
-    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+  const keyId = getKeyId();
+  const keySecret = getKeySecret();
+  if (!razorpayInstance || currentKeyId !== keyId) {
+    if (!keyId || !keySecret) {
       throw new Error("Razorpay credentials not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET environment variables.");
     }
     razorpayInstance = new Razorpay({
-      key_id: RAZORPAY_KEY_ID,
-      key_secret: RAZORPAY_KEY_SECRET,
+      key_id: keyId,
+      key_secret: keySecret,
     });
+    currentKeyId = keyId;
   }
   return razorpayInstance;
 }
@@ -70,7 +79,7 @@ class RazorpayService {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = params;
     const body = `${razorpay_order_id}|${razorpay_payment_id}`;
     const expectedSignature = crypto
-      .createHmac("sha256", RAZORPAY_KEY_SECRET)
+      .createHmac("sha256", getKeySecret())
       .update(body)
       .digest("hex");
     return expectedSignature === razorpay_signature;
@@ -118,14 +127,14 @@ class RazorpayService {
    * Check if Razorpay is configured
    */
   isConfigured(): boolean {
-    return !!(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET);
+    return !!(getKeyId() && getKeySecret());
   }
 
   /**
    * Get the public key for client-side checkout
    */
   getPublicKey(): string {
-    return RAZORPAY_KEY_ID;
+    return getKeyId();
   }
 }
 

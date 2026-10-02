@@ -4,10 +4,10 @@ import { resolve } from "path";
 
 if (process.env.NODE_ENV === "production") {
   const envPath = resolve(process.cwd(), ".env.production");
-  config({ path: envPath });
+  config({ path: envPath, override: true });
   console.log("✅ Loaded environment from .env.production");
 } else {
-  config();
+  config({ override: true });
 }
 
 import express, { type Request, Response, NextFunction } from "express";

@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   ArrowLeft, 
   Calendar, 
-  DollarSign, 
+  IndianRupee, 
   Monitor, 
   AlertCircle, 
   CheckCircle, 
@@ -336,7 +336,7 @@ export default function CampaignDetails() {
                 }}
                 disabled={isPaymentProcessing}
               >
-                <DollarSign className="mr-2 h-5 w-5" />
+                <IndianRupee className="mr-2 h-5 w-5" />
                 {isPaymentProcessing ? "Processing..." : "Pay Now"}
               </Button>
             </div>
@@ -394,7 +394,7 @@ export default function CampaignDetails() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-sm">
-                          <DollarSign className="h-4 w-4 text-muted-foreground" />
+                          <IndianRupee className="h-4 w-4 text-muted-foreground" />
                           <div>
                             <p className="text-xs text-muted-foreground">Price</p>
                             <p className="font-bold text-primary">₹{booking.price.toLocaleString()}</p>

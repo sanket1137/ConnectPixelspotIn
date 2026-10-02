@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Save, Send, Play, Download, Trash2, Plus, ArrowLeft, Percent,
-  MapPin, Building2, Eye, EyeOff, X, RefreshCw, SlidersHorizontal, Check, Search, Monitor
+  MapPin, Building2, Eye, EyeOff, X, RefreshCw, SlidersHorizontal, Check, Search, Monitor, Layers
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Map, AdvancedMarker, InfoWindow, useMap } from "@vis.gl/react-google-maps";
@@ -38,11 +38,12 @@ function toInputDate(d: string | Date) {
 // ─── Map-based Screen Picker ─────────────────────────────────────────────────
 
 export function ScreenPickerModal({
-  open, onClose, onAdd, existingIds,
+  open, onClose, onAdd, onAddZone, existingIds,
 }: {
   open: boolean;
   onClose: () => void;
   onAdd: (screen: any) => void;
+  onAddZone?: (screens: any[], zoneInfo: any) => void;
   existingIds: Set<string>;
 }) {
   const [venueCategory, setVenueCategory] = useState("all");
@@ -113,9 +114,9 @@ export function ScreenPickerModal({
   const fetchedScreens = Array.isArray(screensData) ? screensData : (screensData.screens || []);
   const screens = activeZoneScreens || fetchedScreens;
 
-  const envTypes = ["all", ...Array.from(new Set(screens.map((s: any) => s.environmentType).filter(Boolean))).sort()];
+  const envTypes: string[] = ["all", ...Array.from(new Set(screens.map((s: any) => String(s.environmentType || "")).filter(Boolean))).sort()];
   // Extract unique gender orientations from userIntents
-  const genderOrientations = ["all", ...Array.from(new Set(screens.flatMap((s: any) => s.userIntents || []))).sort()];
+  const genderOrientations: string[] = ["all", ...Array.from(new Set(screens.flatMap((s: any) => (s.userIntents || []).map((x: any) => String(x || ""))).filter(Boolean))).sort()];
 
   const filtered = screens.filter((s: any) => {
     if (venueCategory !== "all" && s.venueCategory !== venueCategory) return false;
@@ -157,8 +158,8 @@ export function ScreenPickerModal({
     const isHighlightedZone = highlightedZoneIds.has(screen.id);
     const isHovered = highlightedId === screen.id;
     const price = screen.pricePerDay >= 1000
-      ? `₹${(screen.pricePerDay / 1000).toFixed(0)}k`
-      : `₹${screen.pricePerDay}`;
+      ? `₹${(screen.pricePerDay / 1000).toFixed(1).replace('.0', '')}k`
+      : `₹${Number(screen.pricePerDay).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
     return (
       <div className="relative">
         <div className={`
@@ -283,6 +284,64 @@ export function ScreenPickerModal({
       <div className="flex-1 flex overflow-hidden">
         {/* Left List */}
         <div className="w-full md:w-[480px] shrink-0 border-r bg-slate-50/50 overflow-y-auto p-4 flex flex-col gap-4">
+          {activeZoneName && (() => {
+            const currentZoneScreens = activeZoneScreens || screens;
+            const isEntireZoneAdded = currentZoneScreens.length > 0 && currentZoneScreens.every(s => existingIds.has(s.id));
+            return (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-3 flex flex-col gap-2.5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">Zone Network Package</span>
+                      <span className="text-sm font-bold text-slate-900">{activeZoneName} ({currentZoneScreens.length} screens)</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-slate-400 hover:text-slate-700 rounded-full"
+                    onClick={() => {
+                      setActiveZoneScreens(null);
+                      setActiveZoneName(null);
+                      setHighlightedZoneIds(new Set());
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+                <Button
+                  size="sm"
+                  variant={isEntireZoneAdded ? "outline" : "default"}
+                  className={`w-full font-medium text-xs h-8 shadow-sm flex items-center justify-center gap-1.5 ${
+                    isEntireZoneAdded
+                      ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
+                      : "bg-amber-600 hover:bg-amber-700 text-white"
+                  }`}
+                  disabled={isEntireZoneAdded}
+                  onClick={() => {
+                    if (isEntireZoneAdded) return;
+                    if (onAddZone && zoneInfo) {
+                      onAddZone(currentZoneScreens, zoneInfo);
+                    } else {
+                      currentZoneScreens.forEach(s => {
+                        if (!existingIds.has(s.id)) handleAddScreen(s);
+                      });
+                    }
+                  }}
+                >
+                  {isEntireZoneAdded ? (
+                    <><Check className="w-3.5 h-3.5" /> Zone Already Added to Plan ({currentZoneScreens.length} Screens)</>
+                  ) : (
+                    <><Plus className="w-3.5 h-3.5" /> Add Entire Zone to Plan ({currentZoneScreens.length} Screens)</>
+                  )}
+                </Button>
+              </div>
+            );
+          })()}
+
           {filtered.map(screen => {
             const isSelected = existingIds.has(screen.id);
             const isHovered = highlightedId === screen.id;
@@ -325,6 +384,11 @@ export function ScreenPickerModal({
                   <p className="text-xs text-slate-500 line-clamp-1 mb-2">{screen.city}{screen.venueName ? ` • ${screen.venueName}` : ''}</p>
                   
                   <div className="flex gap-1.5 flex-wrap mt-auto">
+                    {screen.zoneId && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-300 font-semibold flex items-center gap-1">
+                        <Layers className="w-3 h-3" /> Zone Inventory
+                      </Badge>
+                    )}
                     {screen.venueCategory && (
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-slate-100 text-slate-600 hover:bg-slate-200">{screen.venueCategory}</Badge>
                     )}
@@ -339,18 +403,30 @@ export function ScreenPickerModal({
                   <div className="mt-3">
                     <Button 
                       size="sm" 
-                      variant={isSelected ? "outline" : "default"} 
-                      className={`w-full h-8 text-xs ${isSelected ? 'text-violet-700 border-violet-200 hover:bg-violet-50' : 'bg-violet-600 hover:bg-violet-700'}`}
+                      variant={isSelected ? "outline" : screen.zoneId ? "secondary" : "default"} 
+                      className={`w-full h-8 text-xs ${
+                        isSelected 
+                          ? 'text-violet-700 border-violet-200 hover:bg-violet-50' 
+                          : screen.zoneId 
+                            ? 'bg-amber-500 hover:bg-amber-600 text-white font-semibold' 
+                            : 'bg-violet-600 hover:bg-violet-700'
+                      }`}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (!isSelected) {
-                          handleAddScreen(screen);
+                          if (screen.zoneId) {
+                            setDetailModalScreen(screen);
+                          } else {
+                            handleAddScreen(screen);
+                          }
                         }
                       }}
                       disabled={isSelected}
                     >
                       {isSelected ? (
                         <><Check className="w-3.5 h-3.5 mr-1.5" /> Added to Plan</>
+                      ) : screen.zoneId ? (
+                        <><Layers className="w-3.5 h-3.5 mr-1.5" /> View Zone & Add</>
                       ) : (
                         <><Plus className="w-3.5 h-3.5 mr-1.5" /> Add to Plan</>
                       )}
@@ -453,14 +529,22 @@ export function ScreenPickerModal({
         }}
         onBookZone={() => {
           if (!zoneInfo || zoneScreens.length === 0) return;
-          zoneScreens.forEach(s => {
-            if (!existingIds.has(s.id)) {
+          const unadded = zoneScreens.filter(s => !existingIds.has(s.id));
+          if (unadded.length === 0) {
+            setDetailModalScreen(null);
+            return;
+          }
+          if (onAddZone) {
+            onAddZone(zoneScreens, zoneInfo);
+          } else {
+            unadded.forEach(s => {
               handleAddScreen(s);
-            }
-          });
+            });
+          }
           setDetailModalScreen(null);
           setHighlightedZoneIds(new Set());
         }}
+        isZoneBooked={zoneScreens.length > 0 && zoneScreens.every(s => existingIds.has(s.id))}
       />
     </div>
   );
@@ -626,6 +710,42 @@ export default function MediaPlanBuilder() {
     }
   };
 
+  // ── Add entire zone to plan ───────────────────────────────────
+  const addZone = async (zoneScreensToAdd: any[], zoneInfoObj?: any) => {
+    if (!planId) {
+      toast({ title: "Save the plan first before adding screens", variant: "destructive" });
+      return;
+    }
+    const screenIdsToAdd = zoneScreensToAdd
+      .filter((s) => !existingIds.has(s.id))
+      .map((s) => s.id);
+
+    if (screenIdsToAdd.length === 0) {
+      toast({ title: `Zone "${zoneInfoObj?.zoneName || "package"}" is already added to the plan!` });
+      return;
+    }
+
+    const calculatedDays = getCampaignDays(startDate, endDate);
+    try {
+      const res = await apiRequest("POST", `/api/agency/media-plans/${planId}/items/bulk`, {
+        screenIds: screenIdsToAdd,
+        days: calculatedDays,
+      });
+      const data = await res.json();
+      if (data.items && data.items.length > 0) {
+        // Refresh the plan to get populated items
+        const updatedRes = await apiRequest("GET", `/api/agency/media-plans/${planId}`);
+        const updatedPlan = await updatedRes.json();
+        setItems(updatedPlan.items || []);
+        toast({ title: `Added ${data.items.length} screens from ${zoneInfoObj?.zoneName || "zone"} (${calculatedDays} day${calculatedDays !== 1 ? "s" : ""})` });
+      } else {
+        toast({ title: `Zone "${zoneInfoObj?.zoneName || "package"}" screens already in plan` });
+      }
+    } catch {
+      toast({ title: "Failed to add zone screens", variant: "destructive" });
+    }
+  };
+
   // ── Update days for an item ────────────────────────────────────
   const updateDays = async (itemId: string, days: number) => {
     if (!planId || days < 1) return;
@@ -682,6 +802,9 @@ export default function MediaPlanBuilder() {
 
   // ── Download / Print ───────────────────────────────────────────
   const handleDownload = () => {
+    const agencyOrgName = user?.companyName || user?.agencyName || user?.name || "Agency";
+    const phone = user?.mobileNumber || user?.phone || "";
+
     printMediaPlan({
       plan: {
         name, clientBrand,
@@ -689,7 +812,12 @@ export default function MediaPlanBuilder() {
         endDate: endDate || new Date().toISOString(),
         notes,
         agencyMargin: margin,
-        agencyName: user?.companyName || user?.name || "Agency",
+        agencyName: agencyOrgName,
+        createdByAdmin: false,
+        contactExecutive: user?.name || agencyOrgName,
+        contactPhone: phone,
+        contactEmail: user?.email || "",
+        contactWebsite: user?.companyName || user?.agencyName || "",
       },
       items: items
         .filter((i) => i.status === "included")
@@ -706,7 +834,10 @@ export default function MediaPlanBuilder() {
           pricePerDay: i.pricePerDay,
           totalPrice: i.totalPrice || i.days * i.pricePerDay,
           notes: i.notes,
+          size: i.screen?.size,
           screen: i.screen,
+          zoneName: i.zoneName || i.screen?.zoneName,
+          zoneId: i.zoneId || i.screen?.zoneId,
         })),
     });
   };
@@ -730,6 +861,7 @@ export default function MediaPlanBuilder() {
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
           onAdd={addScreen}
+          onAddZone={addZone}
           existingIds={existingIds}
         />
       </div>
@@ -932,6 +1064,11 @@ export default function MediaPlanBuilder() {
                           <div className="md:col-span-4">
                             <p className="font-medium text-sm leading-tight flex items-center flex-wrap gap-1">
                               {s.name || item.screenId}
+                              {(item.zoneName || s.zoneName) && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-300 font-semibold flex items-center gap-1">
+                                  <Layers className="w-3 h-3" /> Zone: {item.zoneName || s.zoneName}
+                                </Badge>
+                              )}
                               {isMulti && (
                                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-300 font-semibold">
                                   {numScreens} Screens

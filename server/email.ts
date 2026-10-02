@@ -1,10 +1,11 @@
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import nodemailer from 'nodemailer';
 
 class AWSEmailService {
   private sesClient: SESClient | null = null;
+  private smtpTransporter: nodemailer.Transporter | null = null;
   private fromEmail = 'no-reply@pixelspot.in';
   private initialized: boolean;
-  private usingSMTP: boolean = false;
 
   constructor() {
     this.initialized = this.initializeService();
@@ -29,7 +30,6 @@ class AWSEmailService {
         console.log(`   Region: ${sesRegion}`);
         console.log(`   Method: AWS SES API (HTTPS)`);
         console.log(`   Access Key: ${process.env.AWS_ACCESS_KEY_ID?.substring(0, 8)}...`);
-        console.log(`   ✅ Port 443 (HTTPS) - NOT blocked by firewall`);
         return true;
       } catch (error) {
         console.error('❌ AWS SES API initialization failed:', error);
@@ -37,20 +37,37 @@ class AWSEmailService {
       }
     }
 
-    // Fallback to SMTP if API credentials not available
+    // SMTP configuration (AWS SES SMTP credentials)
     if (process.env.AWS_SES_SMTP_USER && process.env.AWS_SES_SMTP_PASSWORD) {
-      this.usingSMTP = true;
-      console.warn('⚠️  AWS SES configured with SMTP credentials');
-      console.warn('⚠️  SMTP port 587 is BLOCKED by Replit firewall');
-      console.warn('⚠️  Emails will NOT be sent - only logged to console');
-      console.warn('⚠️  For email delivery, please add AWS API credentials:');
-      console.warn('     - AWS_ACCESS_KEY_ID');
-      console.warn('     - AWS_SECRET_ACCESS_KEY');
-      return false;
+      try {
+        const smtpHost = process.env.AWS_SES_SMTP_HOST || `email-smtp.${sesRegion}.amazonaws.com`;
+        this.smtpTransporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: 587,
+          secure: false, // STARTTLS
+          auth: {
+            user: process.env.AWS_SES_SMTP_USER.trim(),
+            pass: process.env.AWS_SES_SMTP_PASSWORD.trim(),
+          },
+        });
+        console.log(`✅ AWS SES SMTP service initialized via nodemailer`);
+        console.log(`   Host: ${smtpHost}:587`);
+        return true;
+      } catch (error) {
+        console.error('❌ AWS SES SMTP initialization failed:', error);
+        return false;
+      }
     }
 
-    console.warn('⚠️  No AWS SES credentials found. Email notifications will be skipped.');
+    console.warn('⚠️  No AWS SES credentials found. Email notifications will be logged to console.');
     return false;
+  }
+
+  private ensureInitialized(): boolean {
+    if (this.sesClient || this.smtpTransporter) {
+      return true;
+    }
+    return this.initializeService();
   }
 
   async sendEmail(options: {
@@ -59,90 +76,78 @@ class AWSEmailService {
     html: string;
     text?: string;
   }): Promise<boolean> {
-    // Mock mode if no credentials or using blocked SMTP
-    if (!this.sesClient || this.usingSMTP) {
-      console.log('\n📧 [CONSOLE LOG - Email Not Sent]');
-      console.log('==========================================');
-      console.log(`📧 To: ${options.to}`);
-      console.log(`📋 Subject: ${options.subject}`);
-      console.log(`📄 Content: ${options.text}`);
-      console.log('==========================================\n');
-      return true; // Return true to not break the flow
+    this.ensureInitialized();
+    // 1. Try AWS SES API if configured
+    if (this.sesClient) {
+      try {
+        const command = new SendEmailCommand({
+          Source: `"Pixelspot" <${this.fromEmail}>`,
+          Destination: {
+            ToAddresses: [options.to],
+          },
+          Message: {
+            Subject: {
+              Data: options.subject,
+              Charset: 'UTF-8',
+            },
+            Body: {
+              Text: {
+                Data: options.text || '',
+                Charset: 'UTF-8',
+              },
+              Html: {
+                Data: options.html,
+                Charset: 'UTF-8',
+              },
+            },
+          },
+        });
+
+        const response = await this.sesClient.send(command);
+        console.log('✅ Email sent successfully via AWS SES API');
+        console.log(`   Message ID: ${response.MessageId}`);
+        console.log(`   To: ${options.to}`);
+        return true;
+      } catch (error: any) {
+        console.error('🚨 AWS SES API Error:', error.message || error);
+      }
     }
 
-    try {
-      const command = new SendEmailCommand({
-        Source: `"Pixelspot" <${this.fromEmail}>`,
-        Destination: {
-          ToAddresses: [options.to],
-        },
-        Message: {
-          Subject: {
-            Data: options.subject,
-            Charset: 'UTF-8',
-          },
-          Body: {
-            Text: {
-              Data: options.text || '',
-              Charset: 'UTF-8',
-            },
-            Html: {
-              Data: options.html,
-              Charset: 'UTF-8',
-            },
-          },
-        },
-      });
-
-      const response = await this.sesClient.send(command);
-      console.log('✅ Email sent successfully via AWS SES API');
-      console.log(`   Message ID: ${response.MessageId}`);
-      console.log(`   To: ${options.to}`);
-      return true;
-    } catch (error: any) {
-      // Log the actual error for debugging
-      console.error('🚨 AWS SES Error:', error.message || error);
-      console.error('   Error Name:', error.name);
-      console.error('   Error Code:', error.Code || error.code);
-      
-      // Handle credential/signature errors
-      if (error.message?.includes('signature') || error.message?.includes('Secret Access Key')) {
-        console.log('\n🚨 AWS CREDENTIAL ERROR - Logging email to console');
+    // 2. Try AWS SES SMTP via nodemailer if configured
+    if (this.smtpTransporter) {
+      try {
+        const info = await this.smtpTransporter.sendMail({
+          from: `"Pixelspot" <${this.fromEmail}>`,
+          to: options.to,
+          subject: options.subject,
+          text: options.text || '',
+          html: options.html,
+        });
+        console.log('✅ Email sent successfully via AWS SES SMTP');
+        console.log(`   Message ID: ${info.messageId}`);
+        console.log(`   To: ${options.to}`);
+        return true;
+      } catch (error: any) {
+        console.error('🚨 AWS SES SMTP Error:', error.message || error);
+        // Fallback to console log so it is visible in development
+        console.log('\n📧 [CONSOLE LOG - SMTP Delivery Failed]');
         console.log('==========================================');
         console.log(`📧 To: ${options.to}`);
         console.log(`📋 Subject: ${options.subject}`);
         console.log(`📄 Content: ${options.text}`);
-        console.log(`⚠️  Fix: Check AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY`);
-        console.log(`⚠️  Remove any whitespace/newlines from secrets`);
         console.log('==========================================\n');
-        return true; // Return true to not break the flow
+        return true; // Don't throw to avoid breaking user flows
       }
-
-      // Handle unverified email error (sandbox mode)
-      if (error.message?.includes('Email address is not verified') || 
-          error.message?.includes('not verified') ||
-          error.Code === 'MessageRejected') {
-        console.log('\n🚀 AWS SES SANDBOX MODE - EMAIL NOT VERIFIED');
-        console.log('==========================================');
-        console.log(`📧 Recipient: ${options.to}`);
-        console.log(`📋 Subject: ${options.subject}`);
-        console.log(`📄 Content: ${options.text}`);
-        console.log(`⚠️  Email would send if recipient was verified in AWS SES`);
-        console.log(`⚠️  Verify email at: https://console.aws.amazon.com/ses/`);
-        console.log('==========================================\n');
-        return true; // Bypass for development
-      }
-
-      // Log all other errors to console with content
-      console.log('\n❌ EMAIL SEND ERROR - Logging to console');
-      console.log('==========================================');
-      console.log(`📧 To: ${options.to}`);
-      console.log(`📋 Subject: ${options.subject}`);
-      console.log(`📄 Content: ${options.text}`);
-      console.log(`❌ Error: ${error.message || error}`);
-      console.log('==========================================\n');
-      return true; // Return true to not break the flow
     }
+
+    // 3. Fallback mock mode if no credentials configured
+    console.log('\n📧 [CONSOLE LOG - Email Credentials Not Configured]');
+    console.log('==========================================');
+    console.log(`📧 To: ${options.to}`);
+    console.log(`📋 Subject: ${options.subject}`);
+    console.log(`📄 Content: ${options.text}`);
+    console.log('==========================================\n');
+    return true; // Return true to not break the flow
   }
 
   async sendOTPEmail(

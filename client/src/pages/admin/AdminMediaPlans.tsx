@@ -49,6 +49,11 @@ import {
   Sparkles,
   RefreshCw,
   UserCheck2,
+  TrendingUp,
+  XCircle,
+  PauseCircle,
+  ArrowRightCircle,
+  Loader2,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -63,7 +68,7 @@ type MediaPlanRow = {
   budget: number;
   agencyMargin: number;
   notes: string | null;
-  status: "draft" | "sent" | "executed";
+  status: "draft" | "sent" | "in_process" | "converted" | "rejected" | "on_hold" | "executed";
   createdAt: string;
   updatedAt: string;
   createdByAdmin: boolean;
@@ -83,19 +88,39 @@ type MetricsData = {
   adminPlansCount: number;
   agencyPlansCount: number;
   totalValue: number;
+  sentCount: number;
+  inProcessCount: number;
+  convertedCount: number;
+  rejectedCount: number;
+  onHoldCount: number;
+  executedCount: number;
+  sentValue: number;
+  inProcessValue: number;
+  convertedValue: number;
+  rejectedValue: number;
+  onHoldValue: number;
   executedValue: number;
+  conversionRate: number;
   registeredClientsCount: number;
   leadClientsCount: number;
 };
 
+// Status config — label, badge colours, and pill style for each proposal outcome
 const STATUS_CONFIG: Record<
   string,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+  { label: string; badgeClass: string; dotClass: string }
 > = {
-  draft: { label: "Draft", variant: "secondary" },
-  sent: { label: "Sent to Client", variant: "outline" },
-  executed: { label: "Executed → Campaign Created", variant: "default" },
+  draft:      { label: "Draft",       badgeClass: "bg-slate-100 text-slate-600 border-slate-200",       dotClass: "bg-slate-400" },
+  sent:       { label: "Sent",        badgeClass: "bg-blue-100 text-blue-700 border-blue-200",           dotClass: "bg-blue-500" },
+  in_process: { label: "In Process",  badgeClass: "bg-amber-100 text-amber-700 border-amber-200",        dotClass: "bg-amber-500" },
+  converted:  { label: "Converted",   badgeClass: "bg-emerald-100 text-emerald-700 border-emerald-200",  dotClass: "bg-emerald-500" },
+  rejected:   { label: "Rejected",    badgeClass: "bg-red-100 text-red-700 border-red-200",              dotClass: "bg-red-500" },
+  on_hold:    { label: "On Hold",     badgeClass: "bg-purple-100 text-purple-700 border-purple-200",     dotClass: "bg-purple-400" },
+  executed:   { label: "Executed",    badgeClass: "bg-green-100 text-green-800 border-green-200",        dotClass: "bg-green-600" },
 };
+
+const PROPOSAL_STATUSES = ["draft", "sent", "in_process", "converted", "rejected", "on_hold"] as const;
+
 
 function fmt(date: string) {
   if (!date) return "N/A";
@@ -138,6 +163,7 @@ export default function AdminMediaPlans() {
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   // Fetch admin media plans & metrics
   const { data: plansData, isLoading, refetch } = useQuery<{
@@ -154,10 +180,37 @@ export default function AdminMediaPlans() {
     adminPlansCount: 0,
     agencyPlansCount: 0,
     totalValue: 0,
+    sentCount: 0,
+    inProcessCount: 0,
+    convertedCount: 0,
+    rejectedCount: 0,
+    onHoldCount: 0,
+    executedCount: 0,
+    sentValue: 0,
+    inProcessValue: 0,
+    convertedValue: 0,
+    rejectedValue: 0,
+    onHoldValue: 0,
     executedValue: 0,
+    conversionRate: 0,
     registeredClientsCount: 0,
     leadClientsCount: 0,
   };
+
+  // Inline status update mutation
+  const updateStatusMutation = async (planId: string, newStatus: string) => {
+    setUpdatingStatusId(planId);
+    try {
+      await apiRequest("PATCH", `/api/admin/media-plans/${planId}/status`, { status: newStatus });
+      qc.invalidateQueries({ queryKey: [`/api/admin/media-plans?duration=${durationFilter}`] });
+      toast({ title: `Status updated to "${STATUS_CONFIG[newStatus]?.label ?? newStatus}"` });
+    } catch {
+      toast({ title: "Failed to update status", variant: "destructive" });
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  };
+
 
   const filtered = useMemo(() => {
     return plans.filter((p) => {
@@ -214,13 +267,13 @@ export default function AdminMediaPlans() {
         </Button>
       </div>
 
-      {/* Metrics Bar with Duration Filter */}
+      {/* ── PROPOSAL OUTCOME DASHBOARD ── */}
       <Card className="border-0 shadow-sm bg-gradient-to-r from-slate-900 to-slate-800 text-white">
         <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-700 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 border-b border-slate-700 pb-4">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-blue-400">ANALYTICS & METRICS</span>
-              <h3 className="text-lg font-bold">Proposal Financials & Reach Overview</h3>
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-400">PROPOSAL OUTCOME TRACKER</span>
+              <h3 className="text-lg font-bold mt-0.5">Status Breakdown & Value Analytics</h3>
             </div>
 
             <div className="flex items-center gap-2">
@@ -239,51 +292,77 @@ export default function AdminMediaPlans() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {/* Top Summary Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5 pb-5 border-b border-slate-700">
             <div>
               <span className="text-xs text-slate-400 block font-medium">Total Proposals</span>
-              <span className="text-2xl font-extrabold text-white mt-1 block">{metrics.totalPlans}</span>
+              <span className="text-3xl font-extrabold text-white mt-1 block">{metrics.totalPlans}</span>
               <span className="text-[11px] text-slate-400 mt-1 block">
-                {metrics.adminPlansCount} Admin • {metrics.agencyPlansCount} Agencies
+                {metrics.adminPlansCount} Admin · {metrics.agencyPlansCount} Agencies
               </span>
             </div>
-
             <div>
-              <span className="text-xs text-slate-400 block font-medium">Total Proposals Value</span>
-              <span className="text-2xl font-extrabold text-blue-400 mt-1 block">{fmtCurrency(metrics.totalValue)}</span>
-              <span className="text-[11px] text-slate-400 mt-1 block">
-                {fmtCurrency(metrics.executedValue)} executed campaigns
-              </span>
+              <span className="text-xs text-slate-400 block font-medium">Total Pipeline Value</span>
+              <span className="text-3xl font-extrabold text-blue-400 mt-1 block">{fmtCurrency(metrics.totalValue)}</span>
+              <span className="text-[11px] text-slate-400 mt-1 block">across all proposals</span>
             </div>
-
             <div>
-              <span className="text-xs text-slate-400 block font-medium">Target Clients Reach</span>
-              <span className="text-2xl font-extrabold text-emerald-400 mt-1 block">
-                {metrics.registeredClientsCount + metrics.leadClientsCount}
-              </span>
-              <span className="text-[11px] text-slate-400 mt-1 block">
-                {metrics.registeredClientsCount} Registered • {metrics.leadClientsCount} Leads
-              </span>
+              <span className="text-xs text-slate-400 block font-medium">Converted Value</span>
+              <span className="text-3xl font-extrabold text-emerald-400 mt-1 block">{fmtCurrency(metrics.convertedValue)}</span>
+              <span className="text-[11px] text-slate-400 mt-1 block">{metrics.convertedCount} proposals converted</span>
             </div>
-
             <div>
-              <span className="text-xs text-slate-400 block font-medium">Executed Conversion Rate</span>
-              <span className="text-2xl font-extrabold text-amber-400 mt-1 block">
-                {metrics.totalPlans > 0
-                  ? `${Math.round((plans.filter((p) => p.status === "executed").length / metrics.totalPlans) * 100)}%`
-                  : "0%"}
-              </span>
-              <span className="text-[11px] text-slate-400 mt-1 block">
-                {plans.filter((p) => p.status === "executed").length} campaigns created
-              </span>
+              <span className="text-xs text-slate-400 block font-medium">Conversion Rate</span>
+              <span className="text-3xl font-extrabold text-amber-400 mt-1 block">{metrics.conversionRate}%</span>
+              <span className="text-[11px] text-slate-400 mt-1 block">of all active proposals</span>
             </div>
           </div>
+
+          {/* Per-Status Clickable Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[
+              { key: "sent",       label: "Sent",       count: metrics.sentCount,       value: metrics.sentValue,       dot: "bg-blue-500",    text: "text-blue-400",    ring: "border-blue-400 bg-blue-900/40 ring-blue-400" },
+              { key: "in_process", label: "In Process", count: metrics.inProcessCount,  value: metrics.inProcessValue,  dot: "bg-amber-500",   text: "text-amber-400",   ring: "border-amber-400 bg-amber-900/40 ring-amber-400" },
+              { key: "converted",  label: "Converted",  count: metrics.convertedCount,  value: metrics.convertedValue,  dot: "bg-emerald-500", text: "text-emerald-400", ring: "border-emerald-400 bg-emerald-900/40 ring-emerald-400" },
+              { key: "rejected",   label: "Rejected",   count: metrics.rejectedCount,   value: metrics.rejectedValue,   dot: "bg-red-500",     text: "text-red-400",     ring: "border-red-400 bg-red-900/40 ring-red-400" },
+              { key: "on_hold",    label: "On Hold",    count: metrics.onHoldCount,     value: metrics.onHoldValue,     dot: "bg-purple-400",  text: "text-purple-400",  ring: "border-purple-400 bg-purple-900/40 ring-purple-400" },
+            ].map(({ key, label, count, value, dot, text, ring }) => (
+              <button
+                key={key}
+                onClick={() => { setStatusFilter(statusFilter === key ? "all" : key); setPage(1); }}
+                className={`text-left p-4 rounded-xl border transition-all ${
+                  statusFilter === key
+                    ? `${ring} ring-1`
+                    : "border-slate-700 bg-slate-800/60 hover:bg-slate-700/60"
+                }`}
+              >
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className={`w-2 h-2 rounded-full ${dot} shrink-0`} />
+                  <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">{label}</span>
+                </div>
+                <div className={`text-2xl font-extrabold ${text}`}>{count}</div>
+                <div className="text-[11px] text-slate-400 mt-0.5 font-medium">{fmtCurrency(value)}</div>
+              </button>
+            ))}
+          </div>
+
+          {statusFilter !== "all" && STATUS_CONFIG[statusFilter] && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-slate-400">Filtered:</span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-white border border-slate-600">
+                {STATUS_CONFIG[statusFilter].label}
+              </span>
+              <button className="text-xs text-slate-400 hover:text-white underline" onClick={() => { setStatusFilter("all"); setPage(1); }}>
+                Clear
+              </button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Navigation Tabs: All Plans | Admin Plans | Agency Tracker */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-100/70 p-1.5 rounded-lg">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <Button
             variant={tabFilter === "all" ? "default" : "ghost"}
             size="sm"
@@ -293,7 +372,6 @@ export default function AdminMediaPlans() {
             All Media Plans
             <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{plans.length}</Badge>
           </Button>
-
           <Button
             variant={tabFilter === "admin" ? "default" : "ghost"}
             size="sm"
@@ -301,10 +379,9 @@ export default function AdminMediaPlans() {
             className={`text-xs gap-1.5 ${tabFilter === "admin" ? "bg-white text-blue-700 font-semibold shadow-sm hover:bg-white" : "text-slate-600"}`}
           >
             <UserCheck2 className="h-3.5 w-3.5 text-blue-600" />
-            Admin Created Plans
+            Admin Created
             <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{metrics.adminPlansCount}</Badge>
           </Button>
-
           <Button
             variant={tabFilter === "agency" ? "default" : "ghost"}
             size="sm"
@@ -312,19 +389,18 @@ export default function AdminMediaPlans() {
             className={`text-xs gap-1.5 ${tabFilter === "agency" ? "bg-white text-purple-700 font-semibold shadow-sm hover:bg-white" : "text-slate-600"}`}
           >
             <Building2 className="h-3.5 w-3.5 text-purple-600" />
-            Agency Media Plans (Tracker)
+            Agency Tracker
             <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{metrics.agencyPlansCount}</Badge>
           </Button>
         </div>
-
         {tabFilter === "agency" && (
           <span className="text-xs text-purple-700 font-medium px-2 py-0.5 bg-purple-50 rounded border border-purple-200">
-            Tracking what registered agencies are preparing & sending
+            Tracking plans prepared by registered agencies
           </span>
         )}
       </div>
 
-      {/* Filters Bar */}
+      {/* Search + Status Filter */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -343,8 +419,12 @@ export default function AdminMediaPlans() {
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="sent">Sent to Client</SelectItem>
-            <SelectItem value="executed">Executed</SelectItem>
+            <SelectItem value="sent">Sent</SelectItem>
+            <SelectItem value="in_process">In Process</SelectItem>
+            <SelectItem value="converted">Converted</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+            <SelectItem value="on_hold">On Hold</SelectItem>
+            <SelectItem value="executed">Executed (Legacy)</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -464,20 +544,37 @@ export default function AdminMediaPlans() {
                         </div>
                       </TableCell>
 
-                      {/* Status Badge */}
+                      {/* Status — Inline Dropdown */}
                       <TableCell>
-                        <Badge
-                          variant={STATUS_CONFIG[plan.status]?.variant ?? "secondary"}
-                          className={
-                            plan.status === "executed"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-0 font-medium"
-                              : plan.status === "sent"
-                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 border-0 font-medium"
-                              : ""
-                          }
-                        >
-                          {STATUS_CONFIG[plan.status]?.label ?? plan.status}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          {updatingStatusId === plan.id ? (
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating…
+                            </span>
+                          ) : (
+                            <Select
+                              value={plan.status}
+                              onValueChange={(val) => updateStatusMutation(plan.id, val)}
+                            >
+                              <SelectTrigger
+                                className={`h-7 text-[11px] font-semibold px-2 border rounded-full w-auto gap-1 ${STATUS_CONFIG[plan.status]?.badgeClass ?? "bg-slate-100 text-slate-600 border-slate-200"}`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[plan.status]?.dotClass ?? "bg-slate-400"} shrink-0`} />
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {["draft", "sent", "in_process", "converted", "rejected", "on_hold"].map((s) => (
+                                  <SelectItem key={s} value={s} className="text-xs">
+                                    <span className="flex items-center gap-1.5">
+                                      <span className={`w-2 h-2 rounded-full ${STATUS_CONFIG[s]?.dotClass}`} />
+                                      {STATUS_CONFIG[s]?.label ?? s}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
                       </TableCell>
 
                       {/* Actions — Edit & Download PDF */}
@@ -503,6 +600,7 @@ export default function AdminMediaPlans() {
                             ) : (
                               <Download className="h-3.5 w-3.5" />
                             )}
+
                             PDF
                           </Button>
                         </div>

@@ -10,6 +10,7 @@ declare global {
 
 interface RazorpayCheckoutOptions {
   campaignId: string;
+  bookingId?: string;
   amount: number; // in paise
   campaignName: string;
   onSuccess?: (paymentId: string) => void;
@@ -54,6 +55,7 @@ export function useRazorpayCheckout() {
       // 3. Create order on backend
       const orderRes = await apiRequest("POST", "/api/payments/create-order", {
         campaignId: options.campaignId,
+        bookingId: options.bookingId,
         amount: options.amount,
       });
       const { orderId, amount, currency } = await orderRes.json();
@@ -74,6 +76,8 @@ export function useRazorpayCheckout() {
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
+                campaignId: options.campaignId,
+                bookingId: options.bookingId,
               });
               const result = await verifyRes.json();
               

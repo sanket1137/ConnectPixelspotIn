@@ -98,41 +98,15 @@ export function registerAgencyRoutes(
       const enrichedItems = await Promise.all(
         items.map(async (item) => {
           const screen = await storage.getScreen(item.screenId);
+          const zoneInfo = screen ? await storage.getZoneForScreen(screen.id) : null;
           return {
             ...item,
+            zoneName: zoneInfo?.zoneName || null,
             screen: screen
               ? {
-                  id: screen.id,
-                  name: screen.name,
-                  city: screen.city,
-                  state: screen.state,
-                  venueName: screen.venueName,
-                  venueCategory: screen.venueCategory,
-                  location: screen.location,
-                  environmentType: screen.environmentType,
-                  lifestyleTags: screen.lifestyleTags,
-                  ownerId: screen.ownerId,
-                  pricePerDay: screen.pricePerDay,
-                  // Owner tags visible in plan
-                  category: screen.category,
-                  trafficType: screen.trafficType,
-                  incomeLevel: screen.incomeLevel,
-                  avgDailyFootfall: screen.avgDailyFootfall,
-                  // Fields required for PDF generation
-                  latitude: screen.latitude,
-                  longitude: screen.longitude,
-                  screenImages: screen.screenImages,
-                  images: screen.images,
-                  durationPerSlot: screen.durationPerSlot,
-                  loopDuration: screen.loopDuration,
-                  visibility: screen.visibility,
-                  displayFormat: screen.displayFormat,
-                  resolution: screen.resolution,
-                  customAudienceTags: screen.customAudienceTags,
-                  locationTags: screen.locationTags,
-                  type: screen.type,
-                  isMultiScreen: screen.isMultiScreen,
-                  numberOfScreens: screen.numberOfScreens,
+                  ...screen,
+                  zoneId: screen.zoneId,
+                  zoneName: zoneInfo?.zoneName || null,
                 }
               : null,
           };
@@ -246,6 +220,26 @@ export function registerAgencyRoutes(
       const screen = await storage.getScreen(screenId);
       if (!screen) return res.status(404).json({ error: "Screen not found" });
 
+      const zoneInfo = await storage.getZoneForScreen(screen.id);
+
+      // Check if item already exists in this plan to prevent duplicates
+      const [existingItem] = await db
+        .select()
+        .from(mediaPlanItems)
+        .where(and(eq(mediaPlanItems.planId, plan.id), eq(mediaPlanItems.screenId, screenId)));
+
+      if (existingItem) {
+        return res.status(200).json({ 
+          ...existingItem, 
+          alreadyExists: true,
+          screen: { 
+            ...screen,
+            zoneId: screen.zoneId,
+            zoneName: zoneInfo?.zoneName || null,
+          } 
+        });
+      }
+
       // Use provided days, or auto-calculate from the plan's date range (inclusive count)
       const diffMs = Math.abs(new Date(plan.endDate).getTime() - new Date(plan.startDate).getTime());
       const planDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
@@ -253,14 +247,13 @@ export function registerAgencyRoutes(
       let pricePerDay = screen.pricePerDay;
 
       // Handle zone bundle pricing
-      const zoneInfo = await storage.getZoneForScreen(screen.id);
       if (zoneInfo) {
         const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
         const count = zoneScreensRes.screens.length || 1;
-        pricePerDay = zoneInfo.pricePerDay / count;
+        pricePerDay = Math.round(zoneInfo.pricePerDay / count);
       }
 
-      const totalPrice = pricePerDay * numDays;
+      const totalPrice = Math.round(pricePerDay * numDays);
 
       const [item] = await db
         .insert(mediaPlanItems)
@@ -279,15 +272,94 @@ export function registerAgencyRoutes(
       res.status(201).json({ 
         ...item, 
         screen: { 
-          name: screen.name, 
-          city: screen.city, 
-          venueName: screen.venueName,
-          isMultiScreen: screen.isMultiScreen,
-          numberOfScreens: screen.numberOfScreens
+          ...screen,
+          zoneId: screen.zoneId,
+          zoneName: zoneInfo?.zoneName || null,
         } 
       });
     } catch (error) {
       console.error("Add plan item error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/agency/media-plans/:id/items/bulk — add multiple screens (e.g. whole zone) to a plan
+  app.post("/api/agency/media-plans/:id/items/bulk", authenticate, requireRole("agency"), async (req, res) => {
+    try {
+      const [plan] = await db
+        .select()
+        .from(mediaPlans)
+        .where(and(eq(mediaPlans.id, req.params.id), eq(mediaPlans.agencyId, req.user!.id)));
+
+      if (!plan) return res.status(404).json({ error: "Plan not found" });
+      if (plan.status === "executed") {
+        return res.status(400).json({ error: "Cannot modify an executed plan" });
+      }
+
+      const { screenIds, days } = req.body;
+      if (!Array.isArray(screenIds) || screenIds.length === 0) {
+        return res.status(400).json({ error: "screenIds array is required" });
+      }
+
+      const diffMs = Math.abs(new Date(plan.endDate).getTime() - new Date(plan.startDate).getTime());
+      const planDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
+      const numDays = days || planDays;
+
+      // Find already added screens in this plan
+      const existingPlanItems = await db
+        .select({ screenId: mediaPlanItems.screenId })
+        .from(mediaPlanItems)
+        .where(eq(mediaPlanItems.planId, plan.id));
+      const existingScreenIdSet = new Set(existingPlanItems.map((i) => i.screenId));
+
+      const uniqueNewScreenIds = Array.from(new Set(screenIds.filter((sid: string) => !existingScreenIdSet.has(sid))));
+
+      if (uniqueNewScreenIds.length === 0) {
+        return res.status(200).json({ items: [], message: "All screens are already included in the plan" });
+      }
+
+      const createdItems = [];
+
+      for (const sid of uniqueNewScreenIds) {
+        const screen = await storage.getScreen(sid);
+        if (!screen) continue;
+
+        let pricePerDay = screen.pricePerDay;
+        const zoneInfo = await storage.getZoneForScreen(screen.id);
+        if (zoneInfo) {
+          const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
+          const count = zoneScreensRes.screens.length || 1;
+          pricePerDay = Math.round(zoneInfo.pricePerDay / count);
+        }
+
+        const totalPrice = Math.round(pricePerDay * numDays);
+
+        const [item] = await db
+          .insert(mediaPlanItems)
+          .values({
+            planId: plan.id,
+            screenId: sid,
+            screenOwnerId: screen.ownerId || null,
+            days: numDays,
+            pricePerDay,
+            totalPrice,
+            status: "included",
+          })
+          .returning();
+
+        createdItems.push({
+          ...item,
+          screen: {
+            ...screen,
+            zoneId: screen.zoneId,
+            zoneName: zoneInfo?.zoneName || null,
+          },
+        });
+      }
+
+      res.status(201).json({ items: createdItems });
+    } catch (error) {
+      console.error("Bulk add plan items error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -813,13 +885,22 @@ export function registerAgencyRoutes(
 
       let totalNet = 0;
       const preparedItems = [];
+      const seenScreenIds = new Set<string>();
 
       for (const it of (items || [])) {
+        if (!it.screenId || seenScreenIds.has(it.screenId)) continue;
+        seenScreenIds.add(it.screenId);
         const screen = await storage.getScreen(it.screenId);
         if (!screen) continue;
         const itemDays = Number(it.days) || planDays;
-        const pricePerDay = Number(screen.pricePerDay) || 0;
-        const totalPrice = pricePerDay * itemDays;
+        let pricePerDay = Number(screen.pricePerDay) || 0;
+        const zoneInfo = await storage.getZoneForScreen(screen.id);
+        if (zoneInfo) {
+          const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
+          const count = zoneScreensRes.screens.length || 1;
+          pricePerDay = Math.round(zoneInfo.pricePerDay / count);
+        }
+        const totalPrice = Math.round(pricePerDay * itemDays);
         totalNet += totalPrice;
 
         preparedItems.push({
@@ -915,12 +996,21 @@ export function registerAgencyRoutes(
 
         let totalNet = 0;
         const preparedItems = [];
+        const seenScreenIds = new Set<string>();
         for (const it of items) {
+          if (!it.screenId || seenScreenIds.has(it.screenId)) continue;
+          seenScreenIds.add(it.screenId);
           const screen = await storage.getScreen(it.screenId);
           if (!screen) continue;
           const itemDays = Number(it.days) || planDays;
-          const pricePerDay = Number(screen.pricePerDay) || 0;
-          const totalPrice = pricePerDay * itemDays;
+          let pricePerDay = Number(screen.pricePerDay) || 0;
+          const zoneInfo = await storage.getZoneForScreen(screen.id);
+          if (zoneInfo) {
+            const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
+            const count = zoneScreensRes.screens.length || 1;
+            pricePerDay = Math.round(zoneInfo.pricePerDay / count);
+          }
+          const totalPrice = Math.round(pricePerDay * itemDays);
           totalNet += totalPrice;
 
           preparedItems.push({
@@ -986,6 +1076,7 @@ export function registerAgencyRoutes(
       const pdfItems = [];
       for (const it of itemsRows) {
         const screen = await storage.getScreen(it.screenId);
+        const zoneInfo = screen ? await storage.getZoneForScreen(screen.id) : null;
         pdfItems.push({
           screenId: it.screenId,
           screenName: screen?.name || it.screenId,
@@ -1000,9 +1091,23 @@ export function registerAgencyRoutes(
           pricePerDay: Number(it.pricePerDay) || 0,
           totalPrice: Number(it.totalPrice) || 0,
           notes: it.notes,
-          screen: screen || undefined,
+          size: screen?.size || null,
+          zoneName: zoneInfo?.zoneName || null,
+          zoneId: screen?.zoneId || null,
+          screen: screen
+            ? {
+                ...screen,
+                zoneId: screen.zoneId,
+                zoneName: zoneInfo?.zoneName || null,
+              }
+            : undefined,
         });
       }
+
+      const isCreatedByAdmin = Boolean(plan.createdByAdmin);
+      const agencyName = isCreatedByAdmin
+        ? "Pixelspot Media Network"
+        : (creator?.companyName || creator?.agencyName || creator?.name || "Agency");
 
       res.json({
         plan: {
@@ -1016,7 +1121,12 @@ export function registerAgencyRoutes(
           clientUserId: plan.clientUserId,
           clientName: plan.clientName,
           clientMobile: plan.clientMobile,
-          agencyName: creator?.companyName || creator?.name || (plan.createdByAdmin ? "Pixelspot Admin" : "Agency"),
+          agencyName,
+          createdByAdmin: isCreatedByAdmin,
+          contactExecutive: isCreatedByAdmin ? "Jagpreet Singh" : (creator?.name || agencyName),
+          contactPhone: isCreatedByAdmin ? "+91 77608 07137" : (creator?.mobileNumber || creator?.phone || ""),
+          contactEmail: isCreatedByAdmin ? "jagpreet@pixelspot.in" : (creator?.email || ""),
+          contactWebsite: isCreatedByAdmin ? "www.pixelspot.in" : (creator?.companyName || creator?.agencyName || ""),
         },
         items: pdfItems,
       });
@@ -1091,12 +1201,37 @@ export function registerAgencyRoutes(
         };
       });
 
-      // Aggregate metrics
+      // ── Per-status value & count breakdown ──
+      const sumByStatus = (status: string) =>
+        rows.filter((r: any) => r.status === status).reduce((s: number, r: any) => s + (Number(r.budget) || 0), 0);
+      const countByStatus = (status: string) =>
+        rows.filter((r: any) => r.status === status).length;
+
       const totalPlans = rows.length;
       const adminPlansCount = rows.filter((r: any) => r.createdByAdmin).length;
       const agencyPlansCount = totalPlans - adminPlansCount;
       const totalValue = rows.reduce((sum: number, r: any) => sum + (Number(r.budget) || 0), 0);
-      const executedValue = rows.filter((r: any) => r.status === "executed").reduce((sum: number, r: any) => sum + (Number(r.budget) || 0), 0);
+
+      const sentCount      = countByStatus("sent");
+      const inProcessCount = countByStatus("in_process");
+      const convertedCount = countByStatus("converted");
+      const rejectedCount  = countByStatus("rejected");
+      const onHoldCount    = countByStatus("on_hold");
+      const executedCount  = countByStatus("executed");
+
+      const sentValue      = sumByStatus("sent");
+      const inProcessValue = sumByStatus("in_process");
+      const convertedValue = sumByStatus("converted");
+      const rejectedValue  = sumByStatus("rejected");
+      const onHoldValue    = sumByStatus("on_hold");
+      const executedValue  = sumByStatus("executed");
+
+      // Conversion rate = converted / (all non-draft proposals)
+      const activeProposals = totalPlans - countByStatus("draft");
+      const conversionRate = activeProposals > 0
+        ? Math.round((convertedCount / activeProposals) * 100)
+        : 0;
+
       const registeredClientsCount = rows.filter((r: any) => r.isClientRegistered === true).length;
       const leadClientsCount = rows.filter((r: any) => r.isClientRegistered === false).length;
 
@@ -1107,13 +1242,49 @@ export function registerAgencyRoutes(
           adminPlansCount,
           agencyPlansCount,
           totalValue,
+          sentCount,
+          inProcessCount,
+          convertedCount,
+          rejectedCount,
+          onHoldCount,
+          executedCount,
+          sentValue,
+          inProcessValue,
+          convertedValue,
+          rejectedValue,
+          onHoldValue,
           executedValue,
+          conversionRate,
           registeredClientsCount,
           leadClientsCount,
         },
       });
     } catch (error) {
       console.error("Admin get media plans error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // PATCH /api/admin/media-plans/:id/status — quick inline status update
+  app.patch("/api/admin/media-plans/:id/status", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const { status } = req.body;
+      const allowed = ["draft", "sent", "in_process", "converted", "rejected", "on_hold", "executed"];
+      if (!status || !allowed.includes(status)) {
+        return res.status(400).json({ error: "Invalid status value" });
+      }
+      const [existing] = await db.select().from(mediaPlans).where(eq(mediaPlans.id, req.params.id));
+      if (!existing) return res.status(404).json({ error: "Plan not found" });
+
+      const [updated] = await db
+        .update(mediaPlans)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(mediaPlans.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (err) {
+      console.error("Admin update media plan status error:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });

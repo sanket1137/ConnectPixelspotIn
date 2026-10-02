@@ -59,6 +59,11 @@ export default function ScreenCard({
             {screen.venueCategory}
           </Badge>
         )}
+        {(screen.zoneId || screen.zoneName) && (
+          <Badge className={`absolute ${screen.venueCategory ? 'top-8' : 'top-2'} left-2 text-[10px] bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow-sm`}>
+            Zone Inventory
+          </Badge>
+        )}
         {showDistance && screen.distanceKm !== undefined && screen.distanceKm > 0 && (
           <Badge className="absolute bottom-2 right-2 text-xs bg-black/70 backdrop-blur-sm text-white border-none">
             <Navigation className="w-3 h-3 mr-1" />

@@ -5,7 +5,7 @@ import { Map, AdvancedMarker, useMap, useMapsLibrary } from "@vis.gl/react-googl
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, ShoppingCart, List, Map as MapIcon, SlidersHorizontal, Check, Loader2, Star, Menu, Users, Search, X, Coffee, Utensils, Bus, ShoppingBag, Building2, Plane, Monitor, Train, Briefcase, Activity, Store, Hotel, Ticket, MonitorPlay, Dumbbell, GraduationCap, Scissors, Car } from "lucide-react";
+import { MapPin, ShoppingCart, List, Map as MapIcon, SlidersHorizontal, Check, Loader2, Star, Menu, Users, Search, X, Coffee, Utensils, Bus, ShoppingBag, Building2, Plane, Monitor, Train, Briefcase, Activity, Store, Hotel, Ticket, MonitorPlay, Dumbbell, GraduationCap, Scissors, Car, Layers } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { Screen, ZoneInfo } from "@shared/schema";
@@ -606,10 +606,9 @@ export default function DiscoverScreens() {
     // Use zone price override if we have one for this screen, else regular price
     const basePrice = calculateScreenPricePerDay(screen);
     const price = zonePriceOverrides.get(screen.id) ?? basePrice ?? 0;
-    let priceDisplay = `₹${price}`;
-    if (price >= 1000) {
-      priceDisplay = `₹${(price / 1000).toFixed(1).replace('.0', '')}k`;
-    }
+    let priceDisplay = price >= 1000
+      ? `₹${(price / 1000).toFixed(1).replace('.0', '')}k`
+      : `₹${Number(price).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
     return (
       <div 
@@ -676,17 +675,41 @@ export default function DiscoverScreens() {
               <Check className="w-3 h-3 mr-1" /> Added
             </div>
           )}
+          {(screen.zoneId || screen.zoneName) && (
+            <div className={`absolute ${isAdded ? 'top-11' : 'top-3'} left-3 bg-amber-500 text-white px-2 py-1 rounded-full shadow-sm text-[10px] font-semibold flex items-center`}>
+              Zone Inventory
+            </div>
+          )}
           <div className="absolute top-3 right-3">
             <Button 
               size="icon" 
               variant="secondary" 
-              className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-sm"
+              className={`h-8 w-8 rounded-full shadow-sm ${
+                (screen.zoneId || screen.zoneName) && !isAdded
+                  ? 'bg-amber-500 text-white hover:bg-amber-600'
+                  : 'bg-white/90 hover:bg-white text-slate-700'
+              }`}
               onClick={(e) => {
                 e.stopPropagation();
-                toggleScreenSelection(screen);
+                if (screen.zoneId || screen.zoneName) {
+                  setDetailModalScreen(screen);
+                } else {
+                  toggleScreenSelection(screen);
+                }
               }}
+              title={
+                (screen.zoneId || screen.zoneName)
+                  ? (isAdded ? "Zone Screen (Click to view/manage zone)" : "Zone Inventory (Click to view & book complete zone)")
+                  : (isAdded ? "Remove from cart" : "Add to cart")
+              }
             >
-              {isAdded ? <Check className="w-4 h-4 text-green-600" /> : <ShoppingCart className="w-4 h-4" />}
+              {(screen.zoneId || screen.zoneName) && !isAdded ? (
+                <Layers className="w-4 h-4" />
+              ) : isAdded ? (
+                <Check className="w-4 h-4 text-green-600" />
+              ) : (
+                <ShoppingCart className="w-4 h-4" />
+              )}
             </Button>
           </div>
         </div>
