@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -6,151 +6,209 @@ import { useLocation } from "wouter";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { calculateScreenPricePerDay, getScreenCountDisplay, calculateTotalPhysicalScreens } from "@shared/utils";
-import { ArrowLeft, ArrowRight, Target, Calendar, Check, Monitor } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
-import type { Screen } from "@shared/schema";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  calculateScreenPricePerDay,
+  getScreenCountDisplay,
+  calculateTotalPhysicalScreens,
+} from "@shared/utils";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Target,
+  Calendar,
+  Check,
+  Monitor,
+  ShoppingCart,
+  Trash2,
+  RefreshCw,
+  AlertCircle,
+  IndianRupee,
+  Link2,
+  Eye,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import type { Screen } from "@shared/schema";
 
+// ─── constants ────────────────────────────────────────────────────────────────
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
 
-const quickCampaignSchema = z.object({
+// ─── schema ───────────────────────────────────────────────────────────────────
+const schema = z.object({
   name: z.string().min(3, "Campaign name must be at least 3 characters"),
   objective: z.string().min(1, "Objective is required"),
-  startDate: z.string().min(1, "Start date is required").refine((date) => {
-    const selectedDate = new Date(date);
-    const tomorrow = new Date();
-    tomorrow.setHours(0, 0, 0, 0);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return selectedDate >= tomorrow;
-  }, "Start date must be at least tomorrow"),
-  durationMode: z.enum(["auto", "custom"]),
-  customDays: z.number().min(1).optional(),
-  creativeUrl: z.string().url("Please enter a valid URL").min(1, "Creative link is required"),
+  startDate: z
+    .string()
+    .min(1, "Start date is required")
+    .refine((date) => {
+      const selected = new Date(date);
+      const tomorrow = new Date();
+      tomorrow.setHours(0, 0, 0, 0);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return selected >= tomorrow;
+    }, "Start date must be at least tomorrow"),
+  customDays: z.number().min(1, "Must be at least 1 day").max(365, "Max 365 days"),
+  creativeUrl: z
+    .string()
+    .min(1, "Creative link is required")
+    .url("Please enter a valid URL"),
 });
 
-type QuickCampaignForm = z.infer<typeof quickCampaignSchema>;
+type CampaignForm = z.infer<typeof schema>;
 
-const objectives = [
-  { value: "brand_awareness", label: "Brand Awareness" },
-  { value: "product_launch", label: "Product Launch" },
-  { value: "event_promotion", label: "Event Promotion" },
+// ─── step definitions ─────────────────────────────────────────────────────────
+const STEPS = [
+  { id: 0, name: "Review Screens",     icon: ShoppingCart },
+  { id: 1, name: "Campaign Details",   icon: Target       },
+  { id: 2, name: "Dates & Duration",   icon: Calendar     },
+  { id: 3, name: "Creative & Confirm", icon: Check        },
+];
+
+const OBJECTIVES = [
+  { value: "brand_awareness", label: "Brand Awareness"  },
+  { value: "product_launch",  label: "Product Launch"   },
+  { value: "event_promotion", label: "Event Promotion"  },
   { value: "seasonal_campaign", label: "Seasonal Campaign" },
-  { value: "local_promotion", label: "Local Promotion" },
+  { value: "local_promotion", label: "Local Promotion"  },
 ];
 
-const steps = [
-  { id: 1, name: "Campaign Details", icon: Target },
-  { id: 2, name: "Duration", icon: Calendar },
-  { id: 3, name: "Review & Creative", icon: Check },
-];
+// ─── helpers ──────────────────────────────────────────────────────────────────
+function fmtINR(n: number) {
+  return "₹" + n.toLocaleString("en-IN");
+}
 
+// ─── component ────────────────────────────────────────────────────────────────
 export default function QuickCampaignFromCart() {
-  const [currentStep, setCurrentStep] = useState(1);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
-  const [selectedScreens, setSelectedScreens] = useState<Screen[]>([]);
-  const [campaignCreated, setCampaignCreated] = useState(false);
 
-  const form = useForm<QuickCampaignForm>({
-    resolver: zodResolver(quickCampaignSchema),
+  // ── state
+  const [step, setStep] = useState(0);
+  const [screens, setScreens] = useState<Screen[]>([]);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "error" | "empty" | "done">("idle");
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [campaignDone, setCampaignDone] = useState(false);
+
+  // ── form
+  const form = useForm<CampaignForm>({
+    resolver: zodResolver(schema),
     defaultValues: {
       name: "",
       objective: "",
       startDate: (() => {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        return tomorrow.toISOString().split('T')[0];
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().split("T")[0];
       })(),
-      durationMode: "custom",
-      customDays: 7,
+      customDays: 14,
       creativeUrl: "",
     },
   });
 
-  const watchDurationMode = form.watch("durationMode");
-  const watchCustomDays = form.watch("customDays");
+  const days = form.watch("customDays") || 14;
+  const totalBudget = screens.reduce(
+    (sum, s) => sum + calculateScreenPricePerDay(s) * days,
+    0
+  );
 
-  // Load screens from localStorage and fetch details
-  useEffect(() => {
-    const loadScreens = async () => {
-      const saved = localStorage.getItem(SELECTED_SCREENS_KEY);
-      if (!saved) {
-        toast({
-          title: "No Screens Selected",
-          description: "Please select screens from Find Screens page first.",
-          variant: "destructive",
-        });
-        setLocation("/advertiser/discover");
+  // ── load screens from API using IDs saved in localStorage
+  const loadScreens = useCallback(async () => {
+    setLoadState("loading");
+    setErrorMessage("");
+    const raw = localStorage.getItem(SELECTED_SCREENS_KEY);
+    let ids: string[] = [];
+
+    try {
+      const parsed = JSON.parse(raw || "[]");
+      if (Array.isArray(parsed)) ids = parsed.filter(Boolean);
+    } catch {
+      ids = [];
+    }
+
+    if (ids.length === 0) {
+      setLoadState("empty");
+      return;
+    }
+
+    try {
+      const res = await apiRequest("GET", `/api/screens/by-ids?ids=${encodeURIComponent(ids.join(","))}`);
+      const data: Screen[] = await res.json();
+
+      if (!Array.isArray(data) || data.length === 0) {
+        localStorage.removeItem(SELECTED_SCREENS_KEY);
+        setLoadState("empty");
         return;
       }
 
-      try {
-        const screenIds = JSON.parse(saved);
-        if (!Array.isArray(screenIds) || screenIds.length === 0) {
-          toast({
-            title: "No Screens Selected",
-            description: "Please select screens from Find Screens page first.",
-            variant: "destructive",
-          });
-          setLocation("/advertiser/discover");
-          return;
-        }
+      // Sync active screens in case some old IDs were not found
+      localStorage.setItem(
+        SELECTED_SCREENS_KEY,
+        JSON.stringify(data.map((s) => s.id))
+      );
+      setScreens(data);
+      setLoadState("done");
+    } catch (err: any) {
+      console.error("Failed to load screens:", err);
+      setErrorMessage(err?.message || "Could not load selected screens.");
+      setLoadState("error");
+    }
+  }, []);
 
-        // Fetch screen details
-        const idsParam = screenIds.join(',');
-        const response = await apiRequest("GET", `/api/screens/by-ids?ids=${idsParam}`);
-        const screens = await response.json();
-        
-        setSelectedScreens(screens);
-        console.log("✅ Loaded", screens.length, "screens from cart");
-      } catch (error) {
-        console.error("❌ Error loading screens:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load selected screens.",
-          variant: "destructive",
-        });
-        setLocation("/advertiser/discover");
-      }
-    };
-
+  useEffect(() => {
     loadScreens();
-  }, [setLocation, toast]);
+  }, [loadScreens]);
 
-  // Calculate total budget based on duration
-  const duration = watchDurationMode === "auto" ? 7 : (watchCustomDays || 7);
-  const totalBudget = selectedScreens.reduce((sum, screen) => {
-    return sum + (calculateScreenPricePerDay(screen) * duration);
-  }, 0);
+  // ── remove one screen from the selection
+  const removeScreen = (id: string) => {
+    const next = screens.filter((s) => s.id !== id);
+    setScreens(next);
+    localStorage.setItem(
+      SELECTED_SCREENS_KEY,
+      JSON.stringify(next.map((s) => s.id))
+    );
+    if (next.length === 0) {
+      toast({ title: "No screens left", description: "Add screens from Discovery.", variant: "destructive" });
+      setLocation("/advertiser/discover");
+    }
+  };
 
-  const createCampaignMutation = useMutation({
-    mutationFn: async (data: QuickCampaignForm) => {
-      const finalDuration = data.durationMode === "auto" ? 7 : data.customDays!;
-      
-      // Calculate end date
+  // ── campaign create mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: CampaignForm) => {
       const startDate = new Date(data.startDate);
       const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + finalDuration);
+      endDate.setDate(endDate.getDate() + data.customDays);
 
-      // Create campaign
-      const campaignResponse = await apiRequest("POST", "/api/advertiser/campaigns", {
+      const campRes = await apiRequest("POST", "/api/advertiser/campaigns", {
         name: data.name,
         objective: data.objective,
-        targetArea: {
-          type: "india" as const,
-        },
+        targetArea: { type: "india" as const },
         targetLocationType: "india",
         targetCities: [],
         targetState: null,
@@ -168,428 +226,538 @@ export default function QuickCampaignFromCart() {
         estimatedBudget: totalBudget,
         creativeUrl: data.creativeUrl,
       });
-      
-      const campaign = await campaignResponse.json();
+      const campaign = await campRes.json();
 
-      // Create bookings for each screen
-      const bookingPromises = selectedScreens.map(screen => {
-        const price = calculateScreenPricePerDay(screen) * finalDuration;
+      await Promise.all(
+        screens.map((screen) => {
+          const price = calculateScreenPricePerDay(screen) * data.customDays;
+          return apiRequest("POST", "/api/advertiser/bookings", {
+            screenId: screen.id,
+            campaignId: campaign.id,
+            price,
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
+          });
+        })
+      );
 
-        return apiRequest("POST", "/api/advertiser/bookings", {
-          screenId: screen.id,
-          campaignId: campaign.id,
-          price,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        });
-      });
-
-      await Promise.all(bookingPromises);
       return campaign;
     },
     onSuccess: () => {
-      toast({
-        title: "Campaign Created Successfully!",
-        description: `Campaign created with ${calculateTotalPhysicalScreens(selectedScreens)} booking requests.`,
-      });
-      setCampaignCreated(true);
-      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
-      
-      // Clear localStorage
       localStorage.removeItem(SELECTED_SCREENS_KEY);
-      
-      // Redirect after delay
-      setTimeout(() => {
-        setLocation("/advertiser/campaigns");
-      }, 2000);
+      queryClient.invalidateQueries({ queryKey: ["/api/advertiser/campaigns"] });
+      setCampaignDone(true);
+      toast({
+        title: "🎉 Campaign Created!",
+        description: `Booking requests sent for ${calculateTotalPhysicalScreens(screens)} screens.`,
+      });
+      setTimeout(() => setLocation("/advertiser/campaigns"), 2200);
     },
-    onError: (error: Error) => {
-      // apiRequest throws "<status>: <raw response body>" — the body is usually
-      // `{"error":"..."}` from our API, so pull that message out when present
-      // instead of showing the raw status/JSON blob (e.g. a min-booking-days rejection).
-      let description = error.message || "Failed to create campaign.";
-      const bodyStart = description.indexOf(": ");
+    onError: (err: Error) => {
+      let msg = err.message || "Failed to create campaign.";
+      const bodyStart = msg.indexOf(": ");
       if (bodyStart !== -1) {
         try {
-          const parsed = JSON.parse(description.slice(bodyStart + 2));
-          if (parsed?.error) description = parsed.error;
-        } catch {
-          // not JSON — fall back to the raw message
-        }
+          const parsed = JSON.parse(msg.slice(bodyStart + 2));
+          if (parsed?.error) msg = parsed.error;
+        } catch { /* not JSON */ }
       }
-      toast({
-        title: "Error",
-        description,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: msg, variant: "destructive" });
     },
   });
 
-  const onSubmit = (data: QuickCampaignForm) => {
-    if (currentStep !== 3) return;
-    createCampaignMutation.mutate(data);
-  };
-
-  const nextStep = () => {
-    if (currentStep < 3) {
-      setCurrentStep(currentStep + 1);
+  // ── step validation before advancing
+  const canAdvance = async () => {
+    if (step === 0) return screens.length > 0;
+    if (step === 1) {
+      const ok = await form.trigger(["name", "objective"]);
+      return ok;
     }
-  };
-
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
+    if (step === 2) {
+      const ok = await form.trigger(["startDate", "customDays"]);
+      return ok;
     }
+    return true;
   };
 
-  const progress = (currentStep / 3) * 100;
+  const goNext = async () => {
+    const ok = await canAdvance();
+    if (ok) setStep((s) => Math.min(s + 1, 3));
+  };
 
-  if (selectedScreens.length === 0) {
+  const goPrev = () => setStep((s) => Math.max(s - 1, 0));
+
+  // ── loading / error / empty states
+  if (loadState === "loading" || loadState === "idle") {
     return (
-      <div className="p-4 sm:p-8 max-w-3xl mx-auto">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">Loading screens...</p>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-muted-foreground text-sm">Loading your selected screens…</p>
       </div>
     );
   }
 
-  return (
-    <div className="p-4 sm:p-8 max-w-4xl mx-auto space-y-6">
-      <div>
-        <Button variant="ghost" onClick={() => setLocation("/advertiser/discover")} data-testid="button-back">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Find Screens
+  if (loadState === "empty") {
+    return (
+      <div className="p-6 max-w-md mx-auto text-center space-y-4 mt-16">
+        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+          <ShoppingCart className="h-8 w-8" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">Your Cart is Empty</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            You haven't selected any screens yet or your previous selection expired. Explore screens on the map to add them to your campaign.
+          </p>
+        </div>
+        <Button onClick={() => setLocation("/advertiser/discover")} className="gap-2">
+          <ArrowLeft className="h-4 w-4" /> Explore & Select Screens
         </Button>
-        <h1 className="text-3xl font-bold text-foreground font-serif mt-4">Quick Campaign</h1>
-        <p className="text-muted-foreground mt-1">Create a campaign for your selected screens in 3 simple steps</p>
+      </div>
+    );
+  }
+
+  if (loadState === "error") {
+    return (
+      <div className="p-6 max-w-lg mx-auto space-y-4 mt-12">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {errorMessage || "Could not load your selected screens. Please try again."}
+          </AlertDescription>
+        </Alert>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => setLocation("/advertiser/discover")}>
+            <ArrowLeft className="h-4 w-4 mr-1" /> Back to Discovery
+          </Button>
+          <Button onClick={loadScreens}>
+            <RefreshCw className="h-4 w-4 mr-1" /> Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── success state
+  if (campaignDone) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center p-6">
+        <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+          <Check className="h-8 w-8 text-emerald-600" />
+        </div>
+        <h2 className="text-2xl font-bold">Campaign Created!</h2>
+        <p className="text-muted-foreground">Redirecting to your campaigns…</p>
+      </div>
+    );
+  }
+
+  const progress = ((step + 1) / STEPS.length) * 100;
+
+  return (
+    <div className="p-4 sm:p-8 max-w-3xl mx-auto space-y-6">
+      {/* Header */}
+      <div>
+        <Button
+          variant="ghost"
+          className="mb-2 -ml-2 text-muted-foreground hover:text-foreground"
+          onClick={() => setLocation("/advertiser/discover")}
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Discovery
+        </Button>
+        <h1 className="text-2xl font-bold">Create Campaign from Cart</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Review your screens, set dates, add your creative and launch.
+        </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <Progress value={progress} className="mb-4" data-testid="progress-campaign" />
-          <div className="flex justify-between">
-            {steps.map((step) => {
-              const Icon = step.icon;
-              return (
+      {/* Step indicator */}
+      <div className="relative">
+        {/* progress bar track */}
+        <div className="h-1 bg-muted rounded-full mb-5">
+          <div
+            className="h-1 bg-primary rounded-full transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        <div className="flex justify-between">
+          {STEPS.map((s) => {
+            const Icon = s.icon;
+            const isActive = s.id === step;
+            const isDone = s.id < step;
+            return (
+              <div key={s.id} className="flex flex-col items-center gap-1 flex-1">
                 <div
-                  key={step.id}
-                  className={`flex flex-col items-center flex-1 ${
-                    currentStep >= step.id ? "text-primary" : "text-muted-foreground"
+                  className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${
+                    isDone
+                      ? "bg-primary border-primary text-primary-foreground"
+                      : isActive
+                      ? "bg-primary/10 border-primary text-primary"
+                      : "bg-muted border-transparent text-muted-foreground"
                   }`}
                 >
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      currentStep >= step.id ? "bg-primary text-primary-foreground" : "bg-muted"
-                    }`}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <span className="text-xs mt-2 text-center">{step.name}</span>
+                  {isDone ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                 </div>
-              );
-            })}
-          </div>
-        </CardHeader>
+                <span
+                  className={`text-[10px] text-center leading-tight hidden sm:block ${
+                    isActive ? "text-primary font-semibold" : "text-muted-foreground"
+                  }`}
+                >
+                  {s.name}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              
-              {/* Step 1: Campaign Details */}
-              {currentStep === 1 && (
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-1">Campaign Details</h2>
-                    <p className="text-sm text-muted-foreground">Set up your campaign basics</p>
+      {/* ── STEP 0: SCREEN REVIEW ──────────────────────────────────────────── */}
+      {step === 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <ShoppingCart className="h-5 w-5 text-primary" />
+              Your Cart — {screens.length} screen{screens.length !== 1 ? "s" : ""} selected
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2 max-h-[52vh] overflow-y-auto pr-1">
+              {screens.map((screen) => {
+                const pricePerDay = calculateScreenPricePerDay(screen);
+                return (
+                  <div
+                    key={screen.id}
+                    className="flex items-center justify-between p-3 rounded-xl border bg-slate-50 gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <Monitor className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-semibold truncate">{screen.name}</p>
+                          {screen.isMultiScreen && screen.numberOfScreens && (
+                            <Badge variant="secondary" className="text-[10px] shrink-0">
+                              {getScreenCountDisplay(screen)}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {[screen.city, screen.venueCategory].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-primary">{fmtINR(pricePerDay)}/day</p>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-red-50"
+                        onClick={() => removeScreen(screen.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
+                );
+              })}
+            </div>
 
-                  <Alert>
-                    <Monitor className="h-4 w-4" />
-                    <AlertDescription>
-                      <strong>{(() => {
-                        const total = calculateTotalPhysicalScreens(selectedScreens);
-                        return `${total} screen${total > 1 ? 's' : ''}`;
-                      })()} selected</strong> from your cart
-                    </AlertDescription>
-                  </Alert>
+            <Separator />
 
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Campaign Name</FormLabel>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                {calculateTotalPhysicalScreens(screens)} physical screen{calculateTotalPhysicalScreens(screens) !== 1 ? "s" : ""}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground h-7"
+                onClick={() => setLocation("/advertiser/discover")}
+              >
+                + Add more screens
+              </Button>
+            </div>
+
+            <Alert className="bg-blue-50 border-blue-200 text-blue-800">
+              <IndianRupee className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                Pricing shown is per day. Total will be calculated once you set campaign duration.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── STEP 1: CAMPAIGN DETAILS ──────────────────────────────────────── */}
+      {step === 1 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Target className="h-5 w-5 text-primary" />
+              Campaign Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <div className="space-y-5">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Campaign Name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Summer Sale 2024" autoFocus {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="objective"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Campaign Objective *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <Input placeholder="Summer Sale 2024" {...field} data-testid="input-campaign-name" />
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select objective" />
+                          </SelectTrigger>
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                        <SelectContent>
+                          {OBJECTIVES.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </Form>
+          </CardContent>
+        </Card>
+      )}
 
-                  <FormField
-                    control={form.control}
-                    name="objective"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Campaign Objective</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger data-testid="select-objective">
-                              <SelectValue placeholder="Select objective" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {objectives.map((obj) => (
-                              <SelectItem key={obj.value} value={obj.value}>
-                                {obj.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
+      {/* ── STEP 2: DATES & DURATION ──────────────────────────────────────── */}
+      {step === 2 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Calendar className="h-5 w-5 text-primary" />
+              Campaign Dates
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="startDate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Start Date</FormLabel>
+                        <FormLabel>Start Date *</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} data-testid="input-start-date" />
+                          <Input type="date" {...field} />
                         </FormControl>
-                        <FormDescription>Campaign must start at least tomorrow</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
-
-              {/* Step 2: Duration */}
-              {currentStep === 2 && (
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-1">Campaign Duration</h2>
-                    <p className="text-sm text-muted-foreground">How long should your campaign run?</p>
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="durationMode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Duration Mode</FormLabel>
-                        <FormControl>
-                          <RadioGroup value={field.value} onValueChange={field.onChange} className="space-y-3">
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="auto" id="auto" />
-                              <Label htmlFor="auto" className="font-normal">
-                                Auto (7 days recommended)
-                              </Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="custom" id="custom" />
-                              <Label htmlFor="custom" className="font-normal">
-                                Custom duration
-                              </Label>
-                            </div>
-                          </RadioGroup>
-                        </FormControl>
+                        <FormDescription>Must be at least tomorrow</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
-                  {watchDurationMode === "custom" && (
-                    <FormField
-                      control={form.control}
-                      name="customDays"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Number of Days</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="1"
-                              {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
-                              data-testid="input-custom-days"
-                            />
-                          </FormControl>
-                          <FormDescription>Enter campaign duration in days</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
-
-                  <Card className="bg-muted/50">
-                    <CardContent className="pt-6">
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-sm text-muted-foreground">Duration:</span>
-                          <span className="font-semibold">{duration} days</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-muted-foreground">Selected Screens:</span>
-                          <span className="font-semibold">{calculateTotalPhysicalScreens(selectedScreens)}</span>
-                        </div>
-                        <Separator />
-                        <div className="flex justify-between text-lg">
-                          <span className="font-semibold">Total Budget:</span>
-                          <span className="font-bold text-primary">₹{totalBudget.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Step 3: Review & Creative */}
-              {currentStep === 3 && (
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-2xl font-semibold mb-1">Review & Upload Creative</h2>
-                    <p className="text-sm text-muted-foreground">Final step - upload your creative and confirm</p>
-                  </div>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Campaign Summary</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Name:</span>
-                        <span className="font-semibold">{form.watch("name")}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Objective:</span>
-                        <span className="font-semibold">{objectives.find(o => o.value === form.watch("objective"))?.label}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Start Date:</span>
-                        <span className="font-semibold">{new Date(form.watch("startDate")).toLocaleDateString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Duration:</span>
-                        <span className="font-semibold">{duration} days</span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between text-lg">
-                        <span className="font-semibold">Total Budget:</span>
-                        <span className="font-bold text-primary">₹{totalBudget.toLocaleString()}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Selected Screens ({calculateTotalPhysicalScreens(selectedScreens)})</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {selectedScreens.map((screen) => (
-                          <div key={screen.id} className="flex items-center justify-between p-3 rounded-md bg-muted/50">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium truncate">{screen.name}</p>
-                                {screen.isMultiScreen && screen.numberOfScreens && (
-                                  <Badge variant="default" className="text-xs bg-purple-600">
-                                    {getScreenCountDisplay(screen)}
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-xs text-muted-foreground">{screen.city}</p>
-                              <p className="text-xs font-semibold text-primary mt-1">
-                                ₹{(calculateScreenPricePerDay(screen) * duration).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
                   <FormField
                     control={form.control}
-                    name="creativeUrl"
+                    name="customDays"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Creative URL</FormLabel>
+                        <FormLabel>Duration (days) *</FormLabel>
                         <FormControl>
-                          <Input 
-                            placeholder="https://example.com/creative.jpg" 
-                            {...field} 
-                            data-testid="input-creative-url" 
+                          <Input
+                            type="number"
+                            min="1"
+                            max="365"
+                            placeholder="14"
+                            {...field}
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
                           />
                         </FormControl>
-                        <FormDescription>Upload your creative to a hosting service and paste the URL here</FormDescription>
+                        <FormDescription>How many days to run?</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                </div>
 
-                  {form.watch("creativeUrl") && (
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Creative Preview</p>
-                      <div className="border rounded-lg overflow-hidden">
-                        <img 
-                          src={form.watch("creativeUrl")} 
-                          alt="Campaign creative" 
-                          className="w-full h-auto max-h-96 object-contain"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      </div>
+                {/* Live budget preview */}
+                <div className="rounded-xl border bg-slate-50 p-4 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Budget Preview</p>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{screens.length} screen{screens.length !== 1 ? "s" : ""} × {days} days</span>
+                    <span className="text-xl font-bold text-primary">{fmtINR(totalBudget)}</span>
+                  </div>
+                  {form.watch("startDate") && (
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Start</span>
+                      <span>{new Date(form.watch("startDate")).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                    </div>
+                  )}
+                  {form.watch("startDate") && days > 0 && (
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>End</span>
+                      <span>{(() => {
+                        const d = new Date(form.watch("startDate"));
+                        d.setDate(d.getDate() + days);
+                        return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+                      })()}</span>
                     </div>
                   )}
                 </div>
-              )}
-
-              {/* Navigation */}
-              <div className="flex justify-between pt-6">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={prevStep}
-                  disabled={currentStep === 1}
-                  data-testid="button-previous"
-                >
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Previous
-                </Button>
-
-                {currentStep < 3 ? (
-                  <Button
-                    type="button"
-                    onClick={nextStep}
-                    data-testid="button-next"
-                  >
-                    Next
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button
-                    type="submit"
-                    disabled={createCampaignMutation.isPending || campaignCreated}
-                    data-testid="button-create-campaign"
-                  >
-                    {createCampaignMutation.isPending ? "Creating..." : campaignCreated ? "Created!" : "Create Campaign"}
-                  </Button>
-                )}
               </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+            </Form>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── STEP 3: CREATIVE & CONFIRM ────────────────────────────────────── */}
+      {step === 3 && (
+        <div className="space-y-4">
+          {/* Campaign summary */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Campaign Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Name</span>
+                <span className="font-semibold">{form.watch("name")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Objective</span>
+                <span className="font-semibold">
+                  {OBJECTIVES.find((o) => o.value === form.watch("objective"))?.label}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Start Date</span>
+                <span className="font-semibold">
+                  {new Date(form.watch("startDate")).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Duration</span>
+                <span className="font-semibold">{days} days</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Screens</span>
+                <span className="font-semibold">{calculateTotalPhysicalScreens(screens)}</span>
+              </div>
+              <Separator />
+              <div className="flex justify-between text-base">
+                <span className="font-semibold">Total Budget</span>
+                <span className="font-bold text-primary text-lg">{fmtINR(totalBudget)}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Creative URL */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Link2 className="h-4 w-4 text-primary" />
+                Creative Link
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <FormField
+                  control={form.control}
+                  name="creativeUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Creative URL *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="https://drive.google.com/… or https://dropbox.com/…"
+                          autoFocus
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Upload your creative (image/video) to Google Drive, Dropbox, or any hosting and paste the link here.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </Form>
+
+              {/* Preview if URL looks like image */}
+              {form.watch("creativeUrl") && /\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(form.watch("creativeUrl")) && (
+                <div className="mt-4">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+                    <Eye className="h-3.5 w-3.5" /> Preview
+                  </div>
+                  <div className="rounded-lg overflow-hidden border">
+                    <img
+                      src={form.watch("creativeUrl")}
+                      alt="Creative preview"
+                      className="w-full max-h-56 object-contain bg-slate-50"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── NAVIGATION FOOTER ─────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between pt-2">
+        <Button
+          variant="outline"
+          onClick={step === 0 ? () => setLocation("/advertiser/discover") : goPrev}
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          {step === 0 ? "Back to Discovery" : "Back"}
+        </Button>
+
+        {step < 3 ? (
+          <Button onClick={goNext} className="gap-1">
+            {step === 0 ? "Looks Good, Continue" : "Next"}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button
+            onClick={form.handleSubmit((data) => createMutation.mutate(data))}
+            disabled={createMutation.isPending || campaignDone}
+            className="gap-1.5 min-w-[160px]"
+          >
+            {createMutation.isPending ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" /> Creating…
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4" /> Launch Campaign
+              </>
+            )}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

@@ -2811,16 +2811,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Screen IDs are required" });
       }
 
-      const screenIds = ids.split(',').filter(id => id.trim());
+      const screenIds = ids.split(',').map(id => id.trim()).filter(Boolean);
       
       if (screenIds.length === 0) {
         return res.json([]);
       }
 
-      console.log(`🔍 [/api/screens/by-ids] Fetching ${screenIds.length} screens by IDs`);
+      console.log(`🔍 [/api/screens/by-ids] Fetching ${screenIds.length} screens by IDs:`, screenIds);
       
-      const allScreens = await storage.getApprovedScreens();
-      const selectedScreens = allScreens.filter(screen => screenIds.includes(screen.id));
+      const selectedScreens = await storage.getScreensByIds(screenIds);
       
       console.log(`   ✅ Found ${selectedScreens.length} screens`);
       res.json(selectedScreens);

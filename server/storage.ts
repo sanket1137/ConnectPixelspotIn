@@ -125,6 +125,7 @@ export interface IStorage {
   
   // Screen methods
   getScreen(id: string): Promise<Screen | undefined>;
+  getScreensByIds(ids: string[]): Promise<Screen[]>;
   getScreenByShortId(shortId: string): Promise<Screen | undefined>;
   getScreensByOwner(ownerId: string): Promise<Screen[]>;
   getScreensByCity(city: string): Promise<Screen[]>;
@@ -497,6 +498,47 @@ export class DatabaseStorage implements IStorage {
       zonePricePerDay,
       zoneScreenCount,
     } as any;
+  }
+
+  async getScreensByIds(ids: string[]): Promise<Screen[]> {
+    if (!ids || ids.length === 0) return [];
+    const rows = await db
+      .select({
+        screen: screens,
+        activeZoneId: zones.id,
+      })
+      .from(screens)
+      .leftJoin(zones, and(eq(screens.zoneId, zones.id), eq(zones.status, "active")))
+      .where(inArray(screens.id, ids));
+
+    if (!rows.length) return [];
+    const zoneMap = await this.getActiveZonesMap();
+
+    return rows.map(({ screen, activeZoneId }) => {
+      let zoneName: string | null = null;
+      let zonePricePerDay: number | null = null;
+      let zoneScreenCount: number | null = null;
+      let pricePerDay = screen.pricePerDay;
+
+      if (activeZoneId) {
+        const z = zoneMap.get(activeZoneId);
+        if (z) {
+          zoneName = z.name;
+          zonePricePerDay = z.pricePerDay;
+          zoneScreenCount = z.screenCount;
+          pricePerDay = z.perScreenPrice;
+        }
+      }
+
+      return {
+        ...screen,
+        pricePerDay,
+        zoneId: activeZoneId || null,
+        zoneName,
+        zonePricePerDay,
+        zoneScreenCount,
+      } as any;
+    });
   }
 
   async getScreenByShortId(shortId: string): Promise<Screen | undefined> {
