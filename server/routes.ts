@@ -6,12 +6,13 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { User, Screen, Campaign, Booking } from "@shared/schema";
 import { db } from "./db";
 import { bookings, passwordResetTokens, campaigns, screens } from "@shared/schema";
-import { eq, and, gt, sql, inArray, or } from "drizzle-orm";
+import { eq, and, gt, gte, lte, desc, sql, inArray, or } from "drizzle-orm";
 import { calculateScreenPricePerDay } from "@shared/utils";
 import { getCampaignAdvice } from "./ai-advisor";
 import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
 import { notificationService } from "./notifications";
 import multer from "multer";
+import ExcelJS from "exceljs";
 import { broadcastCampaignUpdate, broadcastBookingUpdate, broadcastScreenUpdate } from "./websocket";
 import { getAuthorizationUrl, getTokensFromCode, revokeToken } from "./googleOAuth";
 import { randomBytes } from "crypto";
@@ -19,13 +20,15 @@ import { emailService } from "./email";
 import { generateTagsForScreen, generateTagsForAllScreens } from "./services/screen-tagging";
 import { registerFlowRoutes } from "./routes-flow";
 import { registerAgencyRoutes } from "./routes-agency";
+import { registerScreenImportRoutes } from "./routes-screen-import";
 import { registerSupportRoutes } from "./routes-support";
 import { geolocationService } from "./services/geolocation";
 // import { serveSitemap, serveRobotsTxt } from "./sitemap";
 import { fromCitySlug, fromVenueSlug, toSlug, normalizeCityName, USER_ROLES } from "@shared/constants";
-import { getVenueType } from "@shared/venueTaxonomy";
+import { getVenueType, resolveVenueType } from "@shared/venueTaxonomy";
 import { cleanVenueDetails } from "./venueDetails";
 import type { ScreenSort } from "./storage";
+import { sanitizePublicScreen, sanitizePublicScreens } from "./utils/screenSanitizer";
 
 // Extend Express Request to include user
 declare global {
@@ -189,7 +192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "No screens in this city" });
       }
       res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
-      res.json({ ...data, slug: toSlug(cityName) });
+      res.json({ ...data, screens: sanitizePublicScreens(data.screens), slug: toSlug(cityName) });
     } catch (error) {
       console.error("City page data error:", error);
       res.status(500).json({ error: "Failed to fetch city data" });
@@ -209,7 +212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "No screens for this combination" });
       }
       res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
-      res.json({ ...data, citySlug: toSlug(cityName), venueSlug: toSlug(venueName) });
+      res.json({ ...data, screens: sanitizePublicScreens(data.screens), citySlug: toSlug(cityName), venueSlug: toSlug(venueName) });
     } catch (error) {
       console.error("City venue page data error:", error);
       res.status(500).json({ error: "Failed to fetch city venue data" });
@@ -233,7 +236,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/zones/:zoneName/screens", async (req, res) => {
     try {
       const result = await storage.getScreensInZone(decodeURIComponent(req.params.zoneName));
-      res.json(result);
+      res.json({
+        zone: result.zone,
+        screens: sanitizePublicScreens(result.screens),
+      });
     } catch (error) {
       console.error("Get screens in zone error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -242,18 +248,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─────────────────────────────────────────────────────────────────────────────
 
-  // Get public screens (approved only, no contact info)
+  // Get public screens (approved only, safe public view)
   app.get("/api/public/screens", async (req, res) => {
     try {
       const screens = await storage.getPublicScreens();
-      
-      // Remove owner contact information for public viewing
-      const publicScreens = screens.map(screen => ({
-        ...screen,
-        // Remove sensitive owner info - they'll only see it after booking
-        ownerId: undefined,
-      }));
-      
+      const publicScreens = sanitizePublicScreens(screens);
       res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
       res.json(publicScreens);
     } catch (error) {
@@ -347,15 +346,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const allScreens = await storage.getPublicScreens();
         const top10 = allScreens
           .sort((a, b) => (b.avgDailyFootfall || 0) - (a.avgDailyFootfall || 0))
-          .slice(0, 10)
-          .map(s => ({ ...s, ownerId: undefined }));
+          .slice(0, 10);
 
         return res.json({
           detectedCity: null,
           detectedState: null,
           lat: null,
           lng: null,
-          screens: top10,
+          screens: sanitizePublicScreens(top10),
           totalNearby: top10.length,
           radiusKm: 0,
           fallback: true,
@@ -399,7 +397,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Strip sensitive fields
-      const publicScreens = nearbyScreens.map((s: any) => ({ ...s, ownerId: undefined }));
+      const publicScreens = sanitizePublicScreens(nearbyScreens);
 
       res.json({
         detectedCity: geo.city,
@@ -1704,6 +1702,669 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get screens for Excel Proposal builder (admin only) — returns all DB columns
+  app.get("/api/admin/proposal-screens", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const {
+        scope,
+        state,
+        city,
+        venueCategory,
+        venueType,
+        host,
+        environmentType,
+        search,
+        minPrice,
+        maxPrice,
+        minFootfall,
+        limit,
+      } = req.query;
+
+      const conditions: any[] = [];
+
+      // Status: default to active or approved
+      conditions.push(inArray(screens.status, ["active", "approved"]));
+
+      const parseList = (val: any): string[] => {
+        if (!val) return [];
+        if (Array.isArray(val)) return val.flatMap(v => String(v).split(',')).map(s => s.trim()).filter(Boolean);
+        return String(val).split(',').map(s => s.trim()).filter(Boolean);
+      };
+
+      const requestedStates = parseList(req.query.states || req.query.state);
+      const requestedCities = parseList(req.query.cities || req.query.city);
+      const requestedVenueCats = parseList(req.query.venueCategories || req.query.venueCategory);
+      const requestedEnvironments = parseList(req.query.environmentTypes || req.query.environmentType);
+      const requestedHosts = parseList(req.query.hosts || req.query.host);
+
+      // States filter (multi-select)
+      if (requestedStates.length > 0 && !requestedStates.includes('all')) {
+        conditions.push(inArray(screens.state, requestedStates));
+      }
+
+      // Cities filter (multi-select with canonical normalization)
+      if (requestedCities.length > 0 && !requestedCities.includes('all')) {
+        const cityConditions = requestedCities.map(c => {
+          const normCity = normalizeCityName(c);
+          return or(
+            sql`LOWER(${screens.city}) = LOWER(${normCity})`,
+            sql`LOWER(${screens.city}) LIKE LOWER(${`%${normCity}%`})`
+          );
+        });
+        conditions.push(or(...cityConditions));
+      }
+
+      // Venue Category (multi-select)
+      if (requestedVenueCats.length > 0 && !requestedVenueCats.includes('all')) {
+        conditions.push(inArray(screens.venueCategory, requestedVenueCats));
+      }
+
+      // Environment Type (multi-select)
+      if (requestedEnvironments.length > 0 && !requestedEnvironments.includes('all')) {
+        conditions.push(inArray(screens.environmentType, requestedEnvironments));
+      }
+
+      // Host Network Code
+      if (requestedHosts.length > 0) {
+        if (requestedHosts.length === 1) {
+          const q = `%${requestedHosts[0]}%`;
+          conditions.push(sql`LOWER(COALESCE(${screens.host}, '')) LIKE LOWER(${q})`);
+        } else {
+          conditions.push(inArray(screens.host, requestedHosts));
+        }
+      }
+
+      if (venueType) {
+        conditions.push(eq(screens.venueType, String(venueType)));
+      }
+      if (minPrice) {
+        conditions.push(gte(screens.pricePerDay, parseInt(String(minPrice), 10)));
+      }
+      if (maxPrice) {
+        conditions.push(lte(screens.pricePerDay, parseInt(String(maxPrice), 10)));
+      }
+      if (minFootfall) {
+        conditions.push(gte(screens.avgDailyFootfall, parseInt(String(minFootfall), 10)));
+      }
+      if (req.query.maxFootfall) {
+        conditions.push(lte(screens.avgDailyFootfall, parseInt(String(req.query.maxFootfall), 10)));
+      }
+      if (req.query.minDwellTime) {
+        conditions.push(gte(screens.avgDwellTime, parseInt(String(req.query.minDwellTime), 10)));
+      }
+      if (search) {
+        const q = `%${String(search).trim()}%`;
+        conditions.push(
+          or(
+            sql`LOWER(${screens.name}) LIKE LOWER(${q})`,
+            sql`LOWER(${screens.venueName}) LIKE LOWER(${q})`,
+            sql`LOWER(${screens.location}) LIKE LOWER(${q})`,
+            sql`LOWER(COALESCE(${screens.host}, '')) LIKE LOWER(${q})`,
+            sql`LOWER(${screens.city}) LIKE LOWER(${q})`
+          )
+        );
+      }
+
+      const maxLimit = Math.min(3000, Math.max(1, parseInt(String(limit || 2000), 10)));
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      const [screenRows, activeZones] = await Promise.all([
+        db.select().from(screens).where(whereClause).orderBy(desc(screens.createdAt)).limit(maxLimit),
+        storage.getActiveZonesMap(),
+      ]);
+
+      const result = screenRows.map(screen => {
+        const z = screen.zoneId ? activeZones.get(screen.zoneId) : undefined;
+        return {
+          ...screen,
+          zoneName: z ? z.name : null,
+          zonePricePerDay: z ? z.pricePerDay : null,
+          zoneScreenCount: z ? z.screenCount : null,
+          pricePerDay: z ? z.perScreenPrice : screen.pricePerDay,
+        };
+      });
+
+      res.json({
+        screens: result,
+        total: result.length,
+      });
+    } catch (error) {
+      console.error("Admin proposal screens search error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Export proposal screens as professional Excel spreadsheet (single-sheet or multi-sheet city-wise)
+  app.post("/api/admin/proposal-screens/export-excel", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const {
+        clientBrand = "Client Proposal",
+        campaignName = "Media Plan Proposal",
+        preparedBy = "PixelSpot Media Team",
+        durationDays = 30,
+        columns = [],
+        screens: proposalScreens = [],
+        exportMode = "single_sheet", // "single_sheet" | "city_worksheets"
+      } = req.body;
+
+      if (!Array.isArray(proposalScreens) || proposalScreens.length === 0) {
+        return res.status(400).json({ error: "No screens provided for export" });
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "PixelSpot DOOH Network";
+      workbook.lastModifiedBy = preparedBy;
+      workbook.created = new Date();
+      workbook.modified = new Date();
+
+      // Default column mapping if none specified
+      const activeColumns: { key: string; label: string; numFmt?: string }[] =
+        Array.isArray(columns) && columns.length > 0
+          ? columns
+          : [
+              { key: "name", label: "Screen Name" },
+              { key: "venueName", label: "Venue Name" },
+              { key: "city", label: "City" },
+              { key: "state", label: "State" },
+              { key: "category", label: "Format" },
+              { key: "displayFormat", label: "Orientation" },
+              { key: "resolution", label: "Resolution" },
+              { key: "avgDailyFootfall", label: "Daily Footfall", numFmt: "#,##0" },
+              { key: "environmentType", label: "Environment" },
+              { key: "pricePerDay", label: "Base Rate / Day (₹)", numFmt: "₹#,##0" },
+              { key: "clientPricePerDay", label: "Proposed Rate / Day (₹)", numFmt: "₹#,##0" },
+              { key: "screenTotalCost", label: "Total Cost (₹)", numFmt: "₹#,##0" },
+            ];
+
+      // Helper to populate inventory sheet (headers, zebra rows, total row, auto widths)
+      const populateInventorySheet = (sheet: any, sheetTitle: string, screensList: any[]) => {
+        sheet.pageSetup = { orientation: "landscape", fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
+        sheet.views = [{ state: "frozen", ySplit: 5 }];
+
+        const colCount = activeColumns.length;
+
+        // Banner Row (Row 1)
+        sheet.mergeCells(1, 1, 1, colCount);
+        const titleCell = sheet.getCell(1, 1);
+        titleCell.value = `${sheetTitle.toUpperCase()}`;
+        titleCell.font = { name: "Segoe UI", size: 13, bold: true, color: { argb: "FFFFFFFF" } };
+        titleCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF0F172A" }, // Slate 900
+        };
+        titleCell.alignment = { vertical: "middle", horizontal: "center" };
+        sheet.getRow(1).height = 36;
+
+        // Metadata info rows (Rows 2 & 3)
+        const metaRow2 = sheet.getRow(2);
+        metaRow2.height = 20;
+        sheet.getCell(2, 1).value = `Client / Brand: ${clientBrand}`;
+        sheet.getCell(2, 1).font = { name: "Segoe UI", size: 10, bold: true, color: { argb: "FF334155" } };
+
+        const halfCol = Math.max(3, Math.floor(colCount / 2));
+        sheet.getCell(2, halfCol).value = `Duration: ${durationDays} Days | Generated: ${new Date().toLocaleDateString("en-IN")}`;
+        sheet.getCell(2, halfCol).font = { name: "Segoe UI", size: 10, color: { argb: "FF475569" } };
+
+        const metaRow3 = sheet.getRow(3);
+        metaRow3.height = 20;
+        sheet.getCell(3, 1).value = `Prepared By: ${preparedBy}`;
+        sheet.getCell(3, 1).font = { name: "Segoe UI", size: 10, color: { argb: "FF64748B" } };
+        sheet.getCell(3, halfCol).value = `Screens In This Sheet: ${screensList.length}`;
+        sheet.getCell(3, halfCol).font = { name: "Segoe UI", size: 10, bold: true, color: { argb: "FF2563EB" } };
+
+        // Row 4 is spacing
+        sheet.getRow(4).height = 10;
+
+        // Column Headers (Row 5)
+        const headerRow = sheet.getRow(5);
+        headerRow.height = 28;
+        activeColumns.forEach((col, idx) => {
+          const cell = headerRow.getCell(idx + 1);
+          cell.value = col.label;
+          cell.font = { name: "Segoe UI", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FF1E293B" }, // Slate 800
+          };
+          cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FF475569" } },
+            left: { style: "thin", color: { argb: "FF475569" } },
+            bottom: { style: "medium", color: { argb: "FF0F172A" } },
+            right: { style: "thin", color: { argb: "FF475569" } },
+          };
+        });
+
+        // Data Rows (Starting at Row 6)
+        let currentRowIdx = 6;
+        screensList.forEach((scr: any, sIdx: number) => {
+          const row = sheet.getRow(currentRowIdx);
+          row.height = 22;
+          const isZebra = sIdx % 2 === 1;
+
+          activeColumns.forEach((col, cIdx) => {
+            const cell = row.getCell(cIdx + 1);
+            let rawVal = scr[col.key];
+
+            // Compute derived values if requested
+            if (col.key === "clientPricePerDay" && (rawVal === undefined || rawVal === null)) {
+              rawVal = scr.pricePerDay || 0;
+            } else if (col.key === "screenTotalCost") {
+              const unitRate = scr.clientPricePerDay ?? scr.pricePerDay ?? 0;
+              rawVal = Number(unitRate) * Number(durationDays || 30);
+            } else if (col.key === "campaignDurationDays") {
+              rawVal = Number(durationDays || 30);
+            }
+
+            // Format values
+            if (Array.isArray(rawVal)) {
+              cell.value = rawVal.join(", ");
+            } else if (typeof rawVal === "boolean") {
+              cell.value = rawVal ? "Yes" : "No";
+            } else if (typeof rawVal === "number") {
+              cell.value = rawVal;
+              if (col.numFmt) {
+                cell.numFmt = col.numFmt;
+              } else if (col.key.toLowerCase().includes("price") || col.key.toLowerCase().includes("cost")) {
+                cell.numFmt = "₹#,##0";
+              }
+            } else if (rawVal instanceof Date || (typeof rawVal === "string" && rawVal.match(/^\d{4}-\d{2}-\d{2}T/))) {
+              cell.value = new Date(rawVal).toISOString().split("T")[0];
+            } else {
+              cell.value = rawVal !== undefined && rawVal !== null ? String(rawVal) : "-";
+            }
+
+            cell.font = { name: "Segoe UI", size: 9.5, color: { argb: "FF0F172A" } };
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: isZebra ? "FFF8FAFC" : "FFFFFFFF" },
+            };
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFE2E8F0" } },
+              left: { style: "thin", color: { argb: "FFE2E8F0" } },
+              bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+              right: { style: "thin", color: { argb: "FFE2E8F0" } },
+            };
+
+            if (typeof rawVal === "number" || col.numFmt) {
+              cell.alignment = { vertical: "middle", horizontal: "right" };
+            } else {
+              cell.alignment = { vertical: "middle", horizontal: "left" };
+            }
+          });
+
+          currentRowIdx++;
+        });
+
+        // Summary / Total Row
+        const totalRow = sheet.getRow(currentRowIdx);
+        totalRow.height = 26;
+        activeColumns.forEach((col, cIdx) => {
+          const cell = totalRow.getCell(cIdx + 1);
+          cell.font = { name: "Segoe UI", size: 10, bold: true, color: { argb: "FF0F172A" } };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF1F5F9" }, // Slate 100
+          };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FF94A3B8" } },
+            bottom: { style: "double", color: { argb: "FF0F172A" } },
+            left: { style: "thin", color: { argb: "FFE2E8F0" } },
+            right: { style: "thin", color: { argb: "FFE2E8F0" } },
+          };
+
+          const colLetter = sheet.getColumn(cIdx + 1).letter;
+          const startRow = 6;
+          const endRow = currentRowIdx - 1;
+
+          if (cIdx === 0) {
+            cell.value = `TOTAL (${screensList.length} SCREENS)`;
+            cell.alignment = { vertical: "middle", horizontal: "left" };
+          } else if (
+            col.key === "screenTotalCost" ||
+            col.key === "clientPricePerDay" ||
+            col.key === "pricePerDay" ||
+            col.key === "avgDailyFootfall"
+          ) {
+            cell.value = {
+              formula: `SUM(${colLetter}${startRow}:${colLetter}${endRow})`,
+            };
+            if (col.key === "avgDailyFootfall") {
+              cell.numFmt = "#,##0";
+            } else {
+              cell.numFmt = "₹#,##0";
+            }
+            cell.alignment = { vertical: "middle", horizontal: "right" };
+          } else {
+            cell.value = "";
+          }
+        });
+
+        // Auto-fit column widths
+        activeColumns.forEach((col, cIdx) => {
+          const column = sheet.getColumn(cIdx + 1);
+          let maxLen = col.label.length;
+          screensList.forEach((scr: any) => {
+            const val = scr[col.key];
+            if (val) {
+              const str = Array.isArray(val) ? val.join(", ") : String(val);
+              if (str.length > maxLen) maxLen = str.length;
+            }
+          });
+          column.width = Math.min(42, Math.max(12, maxLen + 4));
+        });
+      };
+
+      if (exportMode === "city_worksheets") {
+        // ── 1. Create Summary Sheet ──
+        const summarySheet = workbook.addWorksheet("Summary", {
+          views: [{ state: "frozen", ySplit: 5 }],
+        });
+        summarySheet.properties.tabColor = { argb: "FF0F172A" };
+
+        // Group screens by city
+        const cityMap = new Map<string, any[]>();
+        proposalScreens.forEach((scr: any) => {
+          const c = (scr.city || "Unassigned").trim();
+          if (!cityMap.has(c)) cityMap.set(c, []);
+          cityMap.get(c)!.push(scr);
+        });
+
+        const citiesSorted = Array.from(cityMap.keys()).sort((a, b) => a.localeCompare(b));
+
+        // Group screens by city and venue category
+        const venueCatMap = new Map<string, { city: string; venueCategory: string; screens: any[] }>();
+        proposalScreens.forEach((scr: any) => {
+          const c = (scr.city || "Unassigned").trim();
+          const cat = (scr.venueCategory || scr.category || "General").trim();
+          const key = `${c}:::${cat}`;
+          if (!venueCatMap.has(key)) {
+            venueCatMap.set(key, { city: c, venueCategory: cat, screens: [] });
+          }
+          venueCatMap.get(key)!.screens.push(scr);
+        });
+
+        const sortedVenueCategories = Array.from(venueCatMap.values()).sort((a, b) => {
+          const cityCmp = a.city.localeCompare(b.city);
+          if (cityCmp !== 0) return cityCmp;
+          return a.venueCategory.localeCompare(b.venueCategory);
+        });
+
+        // Banner (A1:I1)
+        summarySheet.mergeCells(1, 1, 1, 9);
+        const sumBanner = summarySheet.getCell(1, 1);
+        sumBanner.value = `PIXELSPOT MEDIA PROPOSAL — EXECUTIVE SUMMARY`;
+        sumBanner.font = { name: "Segoe UI", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
+        sumBanner.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F172A" } };
+        sumBanner.alignment = { vertical: "middle", horizontal: "center" };
+        summarySheet.getRow(1).height = 36;
+
+        // Metadata
+        summarySheet.getCell(2, 1).value = `Client / Brand: ${clientBrand}`;
+        summarySheet.getCell(2, 1).font = { name: "Segoe UI", size: 10, bold: true, color: { argb: "FF334155" } };
+        summarySheet.getCell(2, 5).value = `Campaign: ${campaignName} | Duration: ${durationDays} Days`;
+        summarySheet.getCell(2, 5).font = { name: "Segoe UI", size: 10, color: { argb: "FF475569" } };
+
+        summarySheet.getCell(3, 1).value = `Prepared By: ${preparedBy}`;
+        summarySheet.getCell(3, 1).font = { name: "Segoe UI", size: 10, color: { argb: "FF64748B" } };
+        summarySheet.getCell(3, 5).value = `Generated: ${new Date().toLocaleDateString("en-IN")} | Total Screens: ${proposalScreens.length}`;
+        summarySheet.getCell(3, 5).font = { name: "Segoe UI", size: 10, bold: true, color: { argb: "FF2563EB" } };
+
+        // ── City-wise Overview Table ──
+        summarySheet.mergeCells(5, 1, 5, 9);
+        const citySecHeader = summarySheet.getCell(5, 1);
+        citySecHeader.value = "1. CITY-WISE SUMMARY BREAKDOWN";
+        citySecHeader.font = { name: "Segoe UI", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+        citySecHeader.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+        summarySheet.getRow(5).height = 24;
+
+        const cityHeaders = [
+          "#",
+          "City",
+          "State",
+          "Venues",
+          "Screens",
+          "Total Daily Footfall",
+          "Avg Rate / Day (₹)",
+          "Total Rate / Day (₹)",
+          `Total Campaign Cost (${durationDays}d) (₹)`,
+        ];
+        const cityHeaderRow = summarySheet.getRow(6);
+        cityHeaderRow.height = 26;
+        cityHeaders.forEach((h, idx) => {
+          const c = cityHeaderRow.getCell(idx + 1);
+          c.value = h;
+          c.font = { name: "Segoe UI", size: 9.5, bold: true, color: { argb: "FFFFFFFF" } };
+          c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF334155" } };
+          c.alignment = { vertical: "middle", horizontal: idx >= 3 ? "right" : "left" };
+        });
+
+        let sRowIdx = 7;
+        const cityStartRow = sRowIdx;
+        citiesSorted.forEach((cityName, idx) => {
+          const scrs = cityMap.get(cityName) || [];
+          const row = summarySheet.getRow(sRowIdx);
+          row.height = 20;
+
+          const uniqueVenuesInCity = new Set(scrs.map((s) => s.venueName || s.location)).size;
+          const stateName = scrs[0]?.state || "-";
+          const totalDailyFootfall = scrs.reduce((sum, s) => sum + Number(s.avgDailyFootfall || 0), 0);
+          const totalRatePerDay = scrs.reduce((sum, s) => sum + Number(s.clientPricePerDay ?? s.pricePerDay ?? 0), 0);
+          const avgRatePerDay = scrs.length > 0 ? Math.round(totalRatePerDay / scrs.length) : 0;
+          const totalCampaignCost = totalRatePerDay * (durationDays || 30);
+
+          row.getCell(1).value = idx + 1;
+          row.getCell(2).value = cityName;
+          row.getCell(3).value = stateName;
+          row.getCell(4).value = uniqueVenuesInCity;
+          row.getCell(4).numFmt = "#,##0";
+          row.getCell(5).value = scrs.length;
+          row.getCell(5).numFmt = "#,##0";
+          row.getCell(6).value = totalDailyFootfall;
+          row.getCell(6).numFmt = "#,##0";
+          row.getCell(7).value = avgRatePerDay;
+          row.getCell(7).numFmt = "₹#,##0";
+          row.getCell(8).value = totalRatePerDay;
+          row.getCell(8).numFmt = "₹#,##0";
+          row.getCell(9).value = totalCampaignCost;
+          row.getCell(9).numFmt = "₹#,##0";
+
+          for (let col = 1; col <= 9; col++) {
+            const cell = row.getCell(col);
+            cell.font = { name: "Segoe UI", size: 9 };
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFE2E8F0" } },
+              bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+              left: { style: "thin", color: { argb: "FFE2E8F0" } },
+              right: { style: "thin", color: { argb: "FFE2E8F0" } },
+            };
+            if (col >= 4) {
+              cell.alignment = { vertical: "middle", horizontal: "right" };
+            }
+          }
+
+          sRowIdx++;
+        });
+
+        const cityEndRow = sRowIdx - 1;
+        // City Total Row
+        const cityTotalRow = summarySheet.getRow(sRowIdx);
+        cityTotalRow.height = 24;
+        cityTotalRow.getCell(1).value = `TOTAL (${citiesSorted.length} CITIES)`;
+        cityTotalRow.getCell(4).value = { formula: `SUM(D${cityStartRow}:D${cityEndRow})` };
+        cityTotalRow.getCell(4).numFmt = "#,##0";
+        cityTotalRow.getCell(5).value = { formula: `SUM(E${cityStartRow}:E${cityEndRow})` };
+        cityTotalRow.getCell(5).numFmt = "#,##0";
+        cityTotalRow.getCell(6).value = { formula: `SUM(F${cityStartRow}:F${cityEndRow})` };
+        cityTotalRow.getCell(6).numFmt = "#,##0";
+        cityTotalRow.getCell(8).value = { formula: `SUM(H${cityStartRow}:H${cityEndRow})` };
+        cityTotalRow.getCell(8).numFmt = "₹#,##0";
+        cityTotalRow.getCell(9).value = { formula: `SUM(I${cityStartRow}:I${cityEndRow})` };
+        cityTotalRow.getCell(9).numFmt = "₹#,##0";
+
+        for (let col = 1; col <= 9; col++) {
+          const cell = cityTotalRow.getCell(col);
+          cell.font = { name: "Segoe UI", size: 9.5, bold: true };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FF94A3B8" } },
+            bottom: { style: "double", color: { argb: "FF0F172A" } },
+          };
+          if (col >= 4) cell.alignment = { vertical: "middle", horizontal: "right" };
+        }
+        sRowIdx += 3;
+
+        // ── Venue-wise Overview Table (Grouped by Venue Category) ──
+        summarySheet.mergeCells(sRowIdx, 1, sRowIdx, 7);
+        const venueSecHeader = summarySheet.getCell(sRowIdx, 1);
+        venueSecHeader.value = "2. VENUE-WISE INVENTORY SUMMARY";
+        venueSecHeader.font = { name: "Segoe UI", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+        venueSecHeader.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } };
+        summarySheet.getRow(sRowIdx).height = 24;
+        sRowIdx++;
+
+        const venueHeaders = [
+          "#",
+          "City",
+          "Venue Category",
+          "Screen Count",
+          "Daily Footfall",
+          "Total Rate / Day (₹)",
+          `Campaign Cost (${durationDays}d) (₹)`,
+        ];
+        const vHeaderRow = summarySheet.getRow(sRowIdx);
+        vHeaderRow.height = 26;
+        venueHeaders.forEach((h, idx) => {
+          const c = vHeaderRow.getCell(idx + 1);
+          c.value = h;
+          c.font = { name: "Segoe UI", size: 9.5, bold: true, color: { argb: "FFFFFFFF" } };
+          c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF475569" } };
+          c.alignment = { vertical: "middle", horizontal: idx >= 3 ? "right" : idx === 0 ? "center" : "left" };
+        });
+        sRowIdx++;
+
+        const vStartRow = sRowIdx;
+        let vIdx = 1;
+        sortedVenueCategories.forEach((vItem) => {
+          const row = summarySheet.getRow(sRowIdx);
+          row.height = 20;
+
+          const screenCount = vItem.screens.reduce(
+            (sum, s) => sum + (s.isMultiScreen && s.numberOfScreens && Number(s.numberOfScreens) > 1 ? Number(s.numberOfScreens) : 1),
+            0
+          );
+          const dailyFootfall = vItem.screens.reduce((sum, s) => sum + Number(s.avgDailyFootfall || 0), 0);
+          const dailyRate = vItem.screens.reduce((sum, s) => sum + Number(s.clientPricePerDay ?? s.pricePerDay ?? 0), 0);
+          const totalCost = dailyRate * (durationDays || 30);
+
+          row.getCell(1).value = vIdx++;
+          row.getCell(2).value = vItem.city;
+          row.getCell(3).value = vItem.venueCategory;
+          row.getCell(4).value = screenCount;
+          row.getCell(4).numFmt = "#,##0";
+          row.getCell(5).value = dailyFootfall;
+          row.getCell(5).numFmt = "#,##0";
+          row.getCell(6).value = dailyRate;
+          row.getCell(6).numFmt = "₹#,##0";
+          row.getCell(7).value = totalCost;
+          row.getCell(7).numFmt = "₹#,##0";
+
+          for (let col = 1; col <= 7; col++) {
+            const cell = row.getCell(col);
+            cell.font = { name: "Segoe UI", size: 9 };
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFE2E8F0" } },
+              bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+              left: { style: "thin", color: { argb: "FFE2E8F0" } },
+              right: { style: "thin", color: { argb: "FFE2E8F0" } },
+            };
+            if (col === 1) cell.alignment = { vertical: "middle", horizontal: "center" };
+            else if (col >= 4) cell.alignment = { vertical: "middle", horizontal: "right" };
+            else cell.alignment = { vertical: "middle", horizontal: "left" };
+          }
+
+          sRowIdx++;
+        });
+
+        const vEndRow = sRowIdx - 1;
+        const vTotalRow = summarySheet.getRow(sRowIdx);
+        vTotalRow.height = 24;
+        vTotalRow.getCell(1).value = `TOTAL (${sortedVenueCategories.length} CATEGORIES)`;
+        vTotalRow.getCell(4).value = { formula: `SUM(D${vStartRow}:D${vEndRow})` };
+        vTotalRow.getCell(4).numFmt = "#,##0";
+        vTotalRow.getCell(5).value = { formula: `SUM(E${vStartRow}:E${vEndRow})` };
+        vTotalRow.getCell(5).numFmt = "#,##0";
+        vTotalRow.getCell(6).value = { formula: `SUM(F${vStartRow}:F${vEndRow})` };
+        vTotalRow.getCell(6).numFmt = "₹#,##0";
+        vTotalRow.getCell(7).value = { formula: `SUM(G${vStartRow}:G${vEndRow})` };
+        vTotalRow.getCell(7).numFmt = "₹#,##0";
+
+        for (let col = 1; col <= 7; col++) {
+          const cell = vTotalRow.getCell(col);
+          cell.font = { name: "Segoe UI", size: 9.5, bold: true };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FF94A3B8" } },
+            bottom: { style: "double", color: { argb: "FF0F172A" } },
+          };
+          if (col >= 4) cell.alignment = { vertical: "middle", horizontal: "right" };
+        }
+
+        // Set column widths for summary sheet
+        summarySheet.getColumn(1).width = 6;
+        summarySheet.getColumn(2).width = 18;
+        summarySheet.getColumn(3).width = 24;
+        summarySheet.getColumn(4).width = 16;
+        summarySheet.getColumn(5).width = 18;
+        summarySheet.getColumn(6).width = 20;
+        summarySheet.getColumn(7).width = 24;
+        summarySheet.getColumn(8).width = 22;
+        summarySheet.getColumn(9).width = 26;
+
+        // ── 2. Create City-Specific Inventory Sheets ──
+        const usedSheetNames = new Set<string>(["summary"]);
+        citiesSorted.forEach((city) => {
+          const cityScreens = cityMap.get(city) || [];
+          const cleanCity = city.replace(/[\\/?*\[\]:]/g, "").trim();
+          let baseName = `Property List - ${cleanCity}`.substring(0, 31);
+          let sheetName = baseName;
+          let idx = 2;
+          while (usedSheetNames.has(sheetName.toLowerCase())) {
+            const suffix = ` (${idx})`;
+            sheetName = baseName.substring(0, 31 - suffix.length) + suffix;
+            idx++;
+          }
+          usedSheetNames.add(sheetName.toLowerCase());
+
+          const citySheet = workbook.addWorksheet(sheetName);
+          citySheet.properties.tabColor = { argb: "FF2563EB" };
+          populateInventorySheet(citySheet, `Property List — ${city}`, cityScreens);
+        });
+      } else {
+        // ── Single Master Spreadsheet Mode ──
+        const safeTitle = (campaignName || "Media Plan").substring(0, 31).replace(/[\\/?*\[\]]/g, "_");
+        const singleSheet = workbook.addWorksheet(safeTitle);
+        populateInventorySheet(singleSheet, `PixelSpot Media Proposal — ${String(campaignName).toUpperCase()}`, proposalScreens);
+      }
+
+      // Stream output
+      const sanitizedName = (campaignName || "Proposal").replace(/[^a-zA-Z0-9_-]/g, "_");
+      const modeSuffix = exportMode === "city_worksheets" ? "CityWise" : "Master";
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="Pixelspot_Proposal_${sanitizedName}_${modeSuffix}_${Date.now()}.xlsx"`);
+
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      console.error("Export proposal Excel error:", error);
+      res.status(500).json({ error: "Failed to generate Excel proposal file" });
+    }
+  });
+
   // Bulk assign images to screens (admin only)
   app.patch("/api/admin/screens/bulk-images", authenticate, requireRole("admin"), async (req, res) => {
     try {
@@ -1755,7 +2416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/screens/create", authenticate, requireRole("admin"), async (req, res) => {
     try {
       const { ownerId, ...screenData } = req.body;
-      const venueError = cleanVenueDetails(screenData);
+      const venueError = await cleanVenueDetails(screenData);
       if (venueError) return res.status(400).json({ error: venueError });
 
       // Auto-calculate maxBrandsPerLoop
@@ -1974,7 +2635,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Auto-calculate maxBrandsPerLoop from loopDuration and durationPerSlot
       const body = { ...req.body };
-      const venueError = cleanVenueDetails(body);
+      const venueError = await cleanVenueDetails(body);
       if (venueError) return res.status(400).json({ error: venueError });
       if (body.loopDuration && body.durationPerSlot) {
         const loopDur = parseInt(String(body.loopDuration));
@@ -2021,7 +2682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Auto-calculate maxBrandsPerLoop
       const body = { ...req.body };
-      const venueError = cleanVenueDetails(body, existingScreen);
+      const venueError = await cleanVenueDetails(body, existingScreen);
       if (venueError) return res.status(400).json({ error: venueError });
 
       // Sanitize: convert empty strings to null for integer/numeric fields
@@ -2563,7 +3224,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fields: 'pins', sortBy: 'recommended', page: undefined, pageSize: undefined, limit: undefined, offset: undefined,
       });
       res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
-      res.json(Array.isArray(result) ? result : result.screens);
+      const rows = Array.isArray(result) ? result : result.screens;
+      res.json(sanitizePublicScreens(rows));
     } catch (error) {
       console.error("Get screen pins error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -2575,7 +3237,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = await storage.getFilteredScreens(parseScreenFilters(req.query));
       res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
-      res.json(result);
+      if (Array.isArray(result)) {
+        res.json(sanitizePublicScreens(result));
+      } else {
+        res.json({
+          screens: sanitizePublicScreens(result.screens),
+          total: result.total,
+        });
+      }
     } catch (error) {
       console.error("Get screens error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -2599,7 +3268,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const s of rows) {
         const n = s.isMultiScreen && s.numberOfScreens && s.numberOfScreens > 1 ? s.numberOfScreens : 1;
         total += n;
-        const t = s.venueType ? getVenueType(s.venueType) : undefined;
+        const t = s.venueType
+          ? getVenueType(s.venueType)
+          : (s.venueCategory ? resolveVenueType(s.venueCategory)?.type : undefined);
         if (!t) continue;
         types[t.slug] = (types[t.slug] || 0) + n;
         families[t.family] = (families[t.family] || 0) + n;
@@ -2795,7 +3466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         screens = selectedScreens;
       }
 
-      res.json(screens);
+      res.json(sanitizePublicScreens(screens));
     } catch (error) {
       console.error("Get screens in area error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -2822,7 +3493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const selectedScreens = await storage.getScreensByIds(screenIds);
       
       console.log(`   ✅ Found ${selectedScreens.length} screens`);
-      res.json(selectedScreens);
+      res.json(sanitizePublicScreens(selectedScreens));
     } catch (error) {
       console.error("Get screens by IDs error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -3668,7 +4339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Set payment deadline
       const screen = await storage.getScreen(booking.screenId);
-      const owner = screen ? await storage.getUser(screen.ownerId) : null;
+      const owner = (screen && screen.ownerId) ? await storage.getUser(screen.ownerId) : null;
       const deadlineHours = (owner as any)?.paymentDeadlineHours || 24;
       const paymentDeadline = new Date(Date.now() + deadlineHours * 60 * 60 * 1000);
       await storage.updateBooking(id, { paymentDeadline } as any);
@@ -3691,7 +4362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: owner.id,
           type: "counter_offer_accepted",
           title: "Counter-Offer Accepted",
-          message: `The advertiser accepted your counter-offer for "${screen.name}" (${updatedBooking.screensAccepted} screens at ₹${updatedBooking.price.toLocaleString()}).`,
+          message: `The advertiser accepted your counter-offer for "${screen.name}" (${(updatedBooking as any).screensAccepted || 1} screens at ₹${(updatedBooking.price || 0).toLocaleString()}).`,
           data: { bookingId: updatedBooking.id, campaignId: campaign.id },
           actionUrl: `/owner/bookings`,
         });
@@ -3701,7 +4372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: advertiser.id,
           type: "payment_required",
           title: "Payment Required",
-          message: `You accepted the counter-offer for "${screen.name}". Please complete payment of ₹${updatedBooking.price.toLocaleString()} within ${deadlineHours} hours.`,
+          message: `You accepted the counter-offer for "${screen.name}". Please complete payment of ₹${(updatedBooking.price || 0).toLocaleString()} within ${deadlineHours} hours.`,
           data: { bookingId: updatedBooking.id, campaignId: campaign.id, paymentDeadline: paymentDeadline.toISOString() },
           actionUrl: `/advertiser/campaigns/${campaign.id}`,
         });
@@ -3709,11 +4380,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const admin = admins.length > 0 ? admins[0] : null;
         await notificationService.sendCounterOfferAcceptedEmail(
           advertiser, owner, admin, updatedBooking, campaign, screen
-        ).catch(err => console.error("Failed to send counter-offer accepted email:", err));
+        ).catch((err: any) => console.error("Failed to send counter-offer accepted email:", err));
 
         await notificationService.sendPaymentRequiredEmail(
           advertiser, updatedBooking, campaign, screen, paymentDeadline
-        ).catch(err => console.error("Failed to send payment required email:", err));
+        ).catch((err: any) => console.error("Failed to send payment required email:", err));
       }
 
       res.json(updatedBooking);
@@ -3757,7 +4428,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Notify owner that counter-offer was rejected
       const screen = await storage.getScreen(booking.screenId);
-      if (screen) {
+      if (screen && screen.ownerId) {
         const owner = await storage.getUser(screen.ownerId);
         if (owner) {
           const advertiser = req.user!;
@@ -3775,7 +4446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const admin = admins.length > 0 ? admins[0] : null;
           await notificationService.sendCounterOfferRejectedEmail(
             advertiser, owner, admin, updatedBooking, campaign, screen
-          ).catch(err => console.error("Failed to send counter-offer rejected email:", err));
+          ).catch((err: any) => console.error("Failed to send counter-offer rejected email:", err));
         }
       }
 
@@ -4163,7 +4834,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         city: "Bangalore",
         state: "Karnataka",
         createdAt: new Date()
-      };
+      } as any as User;
 
       const mockOwner: User = {
         ...mockUser,
@@ -4261,8 +4932,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========== AGENCY ROUTES (Media Planning) ==========
   registerAgencyRoutes(app, authenticate, requireRole);
 
+  // ========== VENUE METRICS + ADMIN EXCEL SCREEN IMPORT ==========
+  registerScreenImportRoutes(app, authenticate, requireRole);
+
   // ========== SUPPORT ROUTES ==========
   registerSupportRoutes(app, authenticate, requireRole, requireVerified);
+
 
   const httpServer = createServer(app);
   return httpServer;

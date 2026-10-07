@@ -1,15 +1,17 @@
 import type { Screen } from "@shared/schema";
-import { attributeFacts, attributesFor, cardFacts, type AttributeFact, type VenueAttributes } from "@shared/venueAttributes";
+import { cardMetricFacts, hasAudienceMetric, metricFacts, type MetricFact, type VenueMetrics } from "@shared/venueMetrics";
 import { buildVenueFacts, formatCompact, getOperatingHoursLabel, getVenueTypeFacts, type VenueFamily } from "@shared/venueTypes";
+import { metricRegistry } from "@/lib/metricRegistry";
 
-// What an advertiser sees about a venue, built from the structured venue_attributes (phase 5).
+// What an advertiser sees about a venue, built from screens.venue_metrics.
 // Rules agreed with the business:
-//  - venue-type facts (flats, seats, employees…) come first; derived ones are marked Est.
+//  - only filled metrics show; hidden metrics and empty values never do
+//  - venue-type facts (flats, seats, employees…) come first, then derived ones
 //  - footfall shows without any label; placeholder footfall (footfall_note = 'hidden') is hidden
 //    only when the venue has its own facts — otherwise it still shows.
-//  - venues without stored attributes fall back to numbers parsed from their descriptions.
+//  - venues without stored metrics fall back to numbers parsed from their descriptions.
 
-export type DisplayFact = AttributeFact; // { key, label, value, estimate?, formula? }
+export type DisplayFact = MetricFact; // { key, label, value, estimate?, formula? }
 
 function mostCommon<T>(values: T[]): T | undefined {
   const counts = new Map<T, number>();
@@ -25,29 +27,30 @@ function mostCommon<T>(values: T[]): T | undefined {
   return best;
 }
 
-// One venue's attributes from all its listings: largest number / first text per key
-export function mergedAttributes(listings: Screen[]): { venueType: string | null; attrs: VenueAttributes } {
+// One venue's metrics from all its listings: largest number / first value per key
+export function mergedMetrics(listings: Screen[]): { venueType: string | null; metrics: VenueMetrics } {
   const venueType = mostCommon(listings.map((l) => l.venueType).filter((t): t is string => !!t)) ?? null;
-  const attrs: VenueAttributes = {};
+  const metrics: VenueMetrics = {};
   for (const l of listings) {
     if (venueType && l.venueType !== venueType) continue;
-    for (const [k, v] of Object.entries((l.venueAttributes as VenueAttributes) || {})) {
-      const cur = attrs[k];
-      if (cur === undefined) attrs[k] = v;
-      else if (typeof v === "number" && typeof cur === "number" && v > cur) attrs[k] = v;
+    for (const [k, v] of Object.entries((l.venueMetrics as VenueMetrics) || {})) {
+      const cur = metrics[k];
+      if (cur === undefined) metrics[k] = v;
+      else if (typeof v === "number" && typeof cur === "number" && v > cur) metrics[k] = v;
     }
   }
-  return { venueType, attrs };
+  return { venueType, metrics };
 }
 
-function hasStructured(attrs: VenueAttributes): boolean {
-  return Object.keys(attrs).length > 0;
-}
+const hasStructured = (m: VenueMetrics) => Object.keys(m).length > 0;
 
 // Two facts for the result card
 export function cardFactsFor(listings: Screen[], family: VenueFamily): DisplayFact[] {
-  const { venueType, attrs } = mergedAttributes(listings);
-  if (hasStructured(attrs)) return cardFacts(venueType, attrs);
+  const { venueType, metrics } = mergedMetrics(listings);
+  if (hasStructured(metrics)) {
+    const facts = cardMetricFacts(metricRegistry(), venueType, metrics);
+    if (facts.length) return facts;
+  }
   return getVenueTypeFacts(listings, family).slice(0, 2);
 }
 
@@ -76,23 +79,24 @@ const footfallLabels: Record<VenueFamily, string> = {
 
 // Every fact for the venue panel / screen detail, most important first
 export function detailFactsFor(listings: Screen[], family: VenueFamily, totalScreens: number): DisplayFact[] {
-  const { venueType, attrs } = mergedAttributes(listings);
-  if (!hasStructured(attrs)) {
-    // no stored attributes yet — description-parsed facts, with the same footfall rule
-    const facts = buildVenueFacts(listings, family, totalScreens);
-    const ownFacts = facts.some((f) => !["footfall", "dwell", "screens", "hours", "size"].includes(f.key));
+  const { venueType, metrics } = mergedMetrics(listings);
+  const registry = metricRegistry();
+  const facts: DisplayFact[] = hasStructured(metrics) ? metricFacts(registry, venueType, metrics) : [];
+  if (!facts.length) {
+    // no stored metrics yet — description-parsed facts, with the same footfall rule
+    const parsed = buildVenueFacts(listings, family, totalScreens);
+    const ownFacts = parsed.some((f) => !["footfall", "dwell", "screens", "hours", "size"].includes(f.key));
     const footfall = footfallToShow(listings, ownFacts);
-    const rest = facts.filter((f) => f.key !== "footfall");
+    const rest = parsed.filter((f) => f.key !== "footfall");
     return footfall ? [{ key: "footfall", label: footfallLabels[family], value: formatCompact(footfall) }, ...rest] : rest;
   }
 
-  const facts: DisplayFact[] = attributeFacts(venueType, attrs);
-  const footfall = footfallToShow(listings, facts.length > 0);
+  const footfall = footfallToShow(listings, true);
   const extra: DisplayFact[] = [];
   if (footfall && !facts.some((f) => f.value === formatCompact(footfall))) {
     // When the venue already states its own audience (e.g. 78,525 passengers/day), the screen's
     // footfall is the smaller number of people passing this screen — say so, so they don't clash
-    const venueAudience = attributesFor(venueType).some((d) => d.role === "audience_size" && attrs[d.key] !== undefined);
+    const venueAudience = hasAudienceMetric(registry, venueType, metrics);
     extra.push({ key: "footfall", label: venueAudience ? "Daily footfall at the screen" : footfallLabels[family], value: formatCompact(footfall) });
   }
   const dwell = Math.max(0, ...listings.map((l) => l.avgDwellTime || 0));
@@ -101,16 +105,8 @@ export function detailFactsFor(listings: Screen[], family: VenueFamily, totalScr
   if (hours) extra.push({ key: "hours", label: "Screen hours", value: hours });
   if (totalScreens > 0) extra.push({ key: "screens", label: totalScreens === 1 ? "Screen" : "Screens", value: formatCompact(totalScreens) });
 
-  // venue facts, then footfall/dwell, then derived Est. metrics, then hours/screens
+  // venue facts, then footfall/dwell, then derived metrics, then hours/screens
   const own = facts.filter((f) => !f.estimate);
   const derived = facts.filter((f) => f.estimate);
   return [...own, ...extra.filter((f) => f.key === "footfall" || f.key === "dwell"), ...derived, ...extra.filter((f) => f.key === "hours" || f.key === "screens")];
-}
-
-// Owner-defined extra details, shown on the screen detail
-export function customDetailsFor(screen: Screen): Array<{ label: string; value: string }> {
-  const rows = Array.isArray(screen.customAttributes) ? screen.customAttributes : [];
-  return rows
-    .filter((r) => r && r.label && r.value)
-    .map((r) => ({ label: r.label, value: r.unit ? `${r.value} ${r.unit}` : r.value }));
 }

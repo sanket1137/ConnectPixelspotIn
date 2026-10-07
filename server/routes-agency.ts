@@ -9,6 +9,7 @@ import { db } from "./db";
 import { mediaPlans, mediaPlanItems, users } from "@shared/schema";
 import { calculateScreenPricePerDay } from "@shared/utils";
 import { eq, and, sql } from "drizzle-orm";
+import { sanitizePublicScreen, sanitizePublicScreens } from "./utils/screenSanitizer";
 
 export function registerAgencyRoutes(
   app: Express,
@@ -591,7 +592,7 @@ export function registerAgencyRoutes(
   app.get("/api/agency/screens", authenticate, requireRole("agency"), async (req, res) => {
     try {
       const screens = await storage.getPublicScreens();
-      res.json(screens);
+      res.json(sanitizePublicScreens(screens));
     } catch (error) {
       console.error("Get agency screens error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -605,7 +606,7 @@ export function registerAgencyRoutes(
       if (!screen || screen.status !== "active") {
         return res.status(404).json({ error: "Screen not found" });
       }
-      res.json(screen);
+      res.json(sanitizePublicScreen(screen));
     } catch (error) {
       console.error("Get agency screen error:", error);
       res.status(500).json({ error: "Internal server error" });

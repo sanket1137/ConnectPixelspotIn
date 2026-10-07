@@ -538,6 +538,104 @@ class NotificationService {
     await emailService.sendEmail({ to: advertiser.email, subject, html, text });
   }
 
+  // 10. Counter-Offer Email
+  async sendCounterOfferEmail(
+    advertiser: User,
+    owner: User,
+    admin: User | null,
+    booking: Booking,
+    campaign: Campaign,
+    screen: Screen,
+    screensRequested: number,
+    screensAccepted: number,
+    newPrice: number,
+    originalPrice: number
+  ): Promise<void> {
+    // Send email to advertiser
+    const subject = `📬 Counter-Offer Received for ${screen.name} - Pixelspot`;
+    const html = this.generateHTML({
+      title: 'Counter-Offer Received',
+      greeting: `Hi ${advertiser.name},`,
+      mainMessage: `The screen owner for <strong>${screen.name}</strong> proposed a counter-offer: ${screensAccepted} of ${screensRequested} screens at ₹${newPrice.toLocaleString('en-IN')}.`,
+      details: [
+        { label: 'Screen', value: screen.name },
+        { label: 'Screens Offered', value: `${screensAccepted} of ${screensRequested}` },
+        { label: 'Updated Price', value: `₹${newPrice.toLocaleString('en-IN')}` },
+      ],
+      actionText: 'Please review and accept or decline this offer from your dashboard.',
+      ctaText: 'View Campaign',
+      ctaLink: `https://connect.pixelspot.in/advertiser/campaigns/${campaign.id}`,
+    });
+    const text = this.generateText({
+      title: 'Counter-Offer Received',
+      greeting: `Hi ${advertiser.name},`,
+      mainMessage: `Counter-offer received for ${screen.name}: ${screensAccepted} screens at ₹${newPrice.toLocaleString('en-IN')}.`,
+      details: `Screen: ${screen.name}\nScreens: ${screensAccepted}/${screensRequested}\nPrice: ₹${newPrice.toLocaleString('en-IN')}`,
+    });
+    await emailService.sendEmail({ to: advertiser.email, subject, html, text }).catch(e => console.error("Email send error:", e));
+  }
+
+  // 11. Counter-Offer Accepted Email
+  async sendCounterOfferAcceptedEmail(
+    advertiser: User,
+    owner: User,
+    admin: User | null,
+    booking: Booking,
+    campaign: Campaign,
+    screen: Screen
+  ): Promise<void> {
+    const subject = `✅ Counter-Offer Accepted for ${screen.name} - Pixelspot`;
+    const html = this.generateHTML({
+      title: 'Counter-Offer Accepted',
+      greeting: `Hi ${owner.name},`,
+      mainMessage: `The advertiser has accepted your counter-offer for <strong>${screen.name}</strong>.`,
+      details: [
+        { label: 'Screen', value: screen.name },
+        { label: 'Price', value: `₹${booking.price.toLocaleString('en-IN')}` },
+      ],
+      actionText: 'The advertiser will now proceed to payment.',
+      ctaText: 'View Bookings',
+      ctaLink: 'https://connect.pixelspot.in/owner/bookings',
+    });
+    const text = this.generateText({
+      title: 'Counter-Offer Accepted',
+      greeting: `Hi ${owner.name},`,
+      mainMessage: `Advertiser accepted counter-offer for ${screen.name}.`,
+      details: `Screen: ${screen.name}\nPrice: ₹${booking.price.toLocaleString('en-IN')}`,
+    });
+    await emailService.sendEmail({ to: owner.email, subject, html, text }).catch(e => console.error("Email send error:", e));
+  }
+
+  // 12. Counter-Offer Rejected Email
+  async sendCounterOfferRejectedEmail(
+    advertiser: User,
+    owner: User,
+    admin: User | null,
+    booking: Booking,
+    campaign: Campaign,
+    screen: Screen
+  ): Promise<void> {
+    const subject = `❌ Counter-Offer Declined for ${screen.name} - Pixelspot`;
+    const html = this.generateHTML({
+      title: 'Counter-Offer Declined',
+      greeting: `Hi ${owner.name},`,
+      mainMessage: `The advertiser declined your counter-offer for <strong>${screen.name}</strong>. The booking has been cancelled.`,
+      details: [
+        { label: 'Screen', value: screen.name },
+      ],
+      actionText: 'This slot is now available for other bookings.',
+      ctaText: 'View Bookings',
+      ctaLink: 'https://connect.pixelspot.in/owner/bookings',
+    });
+    const text = this.generateText({
+      title: 'Counter-Offer Declined',
+      greeting: `Hi ${owner.name},`,
+      mainMessage: `Advertiser declined counter-offer for ${screen.name}.`,
+      details: `Screen: ${screen.name}`,
+    });
+    await emailService.sendEmail({ to: owner.email, subject, html, text }).catch(e => console.error("Email send error:", e));
+  }
+
   // HTML Email Template Generator
   private generateHTML(options: {
     title: string;

@@ -39,6 +39,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  FileSpreadsheet,
   Download,
   UserCheck,
   UserPlus,
@@ -261,10 +262,20 @@ export default function AdminMediaPlans() {
           </p>
         </div>
 
-        <Button onClick={() => setLocation("/admin/media-plans/new")} className="gap-2 bg-primary hover:bg-primary/90 shadow-sm">
-          <Plus className="h-4 w-4" />
-          Create Media Plan
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setLocation("/admin/media-plans/excel-proposal")}
+            variant="outline"
+            className="gap-2 border-emerald-600 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-medium shadow-sm"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+            Excel Proposal
+          </Button>
+          <Button onClick={() => setLocation("/admin/media-plans/new")} className="gap-2 bg-primary hover:bg-primary/90 shadow-sm">
+            <Plus className="h-4 w-4" />
+            Create Media Plan
+          </Button>
+        </div>
       </div>
 
       {/* ── PROPOSAL OUTCOME DASHBOARD ── */}

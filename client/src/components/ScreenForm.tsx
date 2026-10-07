@@ -21,8 +21,10 @@ import {
   GENDER_ORIENTATIONS,
   INCOME_LEVELS,
 } from "@shared/constants";
-import { attributesFor, validateCustomAttributes, validateVenueAttributes, type CustomAttribute, type VenueAttributes } from "@shared/venueAttributes";
-import { VenueAttributeFields, VenueTypeSelect, attributesToFormValues, venueTypeSlugFor } from "@/components/screens/VenueAttributeFields";
+import { metricsFor, validateVenueMetrics, type VenueMetrics } from "@shared/venueMetrics";
+import { CONTENT_TYPES, DISPLAY_FORMATS, ENVIRONMENT_TYPES, OCCUPATIONS, SCREEN_CATEGORIES, TIME_OF_DAY_SLOTS, TRAFFIC_TYPES, USER_INTENTS, USER_MOODS } from "@shared/screenFieldOptions";
+import { useMetricRegistry } from "@/lib/metricRegistry";
+import { VenueMetricFields, VenueTypeSelect, metricsToFormValues, venueTypeSlugFor, type MetricFormValues } from "@/components/screens/VenueMetricFields";
 
 const screenFormSchema = z.object({
   // Section 1 - Screen Identity
@@ -93,8 +95,7 @@ interface ScreenFormProps {
   onSubmit: (data: ScreenFormData & {
     screenImages: string[];
     surroundingImages: string[];
-    venueAttributes: VenueAttributes;
-    customAttributes: CustomAttribute[];
+    venueMetrics: VenueMetrics;
   }) => void;
   initialData?: Partial<ScreenFormData>;
   submitButtonText?: string;
@@ -116,8 +117,8 @@ export function ScreenForm({
   );
   const [selectedState, setSelectedState] = useState<string>("");
   // Venue-specific details ("About this venue") — kept as strings while editing, validated on submit
-  const [attrValues, setAttrValues] = useState<Record<string, string>>(() => attributesToFormValues((initialData as any)?.venueAttributes));
-  const [customAttributes, setCustomAttributes] = useState<CustomAttribute[]>(() => (initialData as any)?.customAttributes || []);
+  const metricRegistry = useMetricRegistry();
+  const [attrValues, setAttrValues] = useState<MetricFormValues>(() => metricsToFormValues((initialData as any)?.venueMetrics));
   const [attrErrors, setAttrErrors] = useState<Record<string, string>>({});
   const [uploadingScreen, setUploadingScreen] = useState(false);
   const [uploadingSurrounding, setUploadingSurrounding] = useState(false);
@@ -318,16 +319,16 @@ export function ScreenForm({
     // Venue-specific details: checked against the chosen venue type's definitions (numbers, ranges,
     // options). Blank fields are fine — they're simply not shown to advertisers.
     const typeSlug = venueTypeSlugFor(data.venueCategory);
-    const attrs = validateVenueAttributes(typeSlug, attrValues);
-    const custom = validateCustomAttributes(customAttributes);
-    if (attrs.errors.length || custom.errors.length) {
+    // existing values of keys this type doesn't ask for are kept by the server
+    const attrs = validateVenueMetrics(metricRegistry, typeSlug, attrValues);
+    if (attrs.errors.length) {
       const byKey: Record<string, string> = {};
-      for (const def of attributesFor(typeSlug)) {
+      for (const def of metricsFor(metricRegistry, typeSlug)) {
         const msg = attrs.errors.find((e) => e.startsWith(def.label));
         if (msg) byKey[def.key] = msg;
       }
       setAttrErrors(byKey);
-      toast({ title: "Check the venue details", description: [...attrs.errors, ...custom.errors].join(" · "), variant: "destructive" });
+      toast({ title: "Check the venue details", description: attrs.errors.join(" · "), variant: "destructive" });
       return;
     }
     setAttrErrors({});
@@ -335,16 +336,16 @@ export function ScreenForm({
       ...data,
       screenImages,
       surroundingImages,
-      venueAttributes: attrs.value,
-      customAttributes: custom.value,
+      venueMetrics: attrs.value,
     });
   };
 
-  const timeSlots = ["Morning Rush", "Lunch Hours", "Evening Leisure", "Late Night"];
-  const occupations = ["Students", "Working Professionals", "Business Owners", "Homemakers"];
-  const intents = ["Shopping", "Commuting", "Dining", "Fitness", "Entertainment", "Work", "Education"];
-  const moods = ["Relaxed", "Rushed", "Social", "Focused", "Leisure"];
-  const contentTypes = ["Static Image", "Video", "Interactive", "HTML5"];
+  // Fixed lists shared with the admin Excel template and import checks (shared/screenFieldOptions.ts)
+  const timeSlots = TIME_OF_DAY_SLOTS;
+  const occupations = OCCUPATIONS;
+  const intents = USER_INTENTS;
+  const moods = USER_MOODS;
+  const contentTypes = CONTENT_TYPES;
 
   return (
     <Form {...form}>
@@ -387,12 +388,9 @@ export function ScreenForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Digital Display">Digital Display</SelectItem>
-                        <SelectItem value="LED Video Wall">LED Video Wall</SelectItem>
-                        <SelectItem value="Kiosk">Kiosk</SelectItem>
-                        <SelectItem value="Mall LED">Mall LED</SelectItem>
-                        <SelectItem value="Lift Display">Lift Display</SelectItem>
-                        <SelectItem value="Transit Display">Transit Display</SelectItem>
+                        {SCREEN_CATEGORIES.map((v) => (
+                          <SelectItem key={v} value={v}>{v}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -413,9 +411,9 @@ export function ScreenForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Portrait">Portrait</SelectItem>
-                        <SelectItem value="Landscape">Landscape</SelectItem>
-                        <SelectItem value="Square">Square</SelectItem>
+                        {DISPLAY_FORMATS.map((v) => (
+                          <SelectItem key={v} value={v}>{v}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -642,10 +640,9 @@ export function ScreenForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Pedestrian">Pedestrian</SelectItem>
-                        <SelectItem value="Seated Audience">Seated Audience</SelectItem>
-                        <SelectItem value="Transit">Transit</SelectItem>
-                        <SelectItem value="Mixed">Mixed</SelectItem>
+                        {TRAFFIC_TYPES.map((v) => (
+                          <SelectItem key={v} value={v}>{v}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -705,9 +702,9 @@ export function ScreenForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="Indoor">Indoor</SelectItem>
-                      <SelectItem value="Semi-Outdoor">Semi-Outdoor</SelectItem>
-                      <SelectItem value="Outdoor Digital">Outdoor Digital</SelectItem>
+                      {ENVIRONMENT_TYPES.map((v) => (
+                        <SelectItem key={v} value={v}>{v}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -849,15 +846,14 @@ export function ScreenForm({
             <CardDescription>The numbers advertisers use to judge audience size and value</CardDescription>
           </CardHeader>
           <CardContent>
-            <VenueAttributeFields
+            <VenueMetricFields
+              registry={metricRegistry}
               venueCategory={watchedVenueCategory}
               values={attrValues}
               onChange={(key, value) => {
                 setAttrValues((prev) => ({ ...prev, [key]: value }));
                 if (attrErrors[key]) setAttrErrors(({ [key]: _, ...rest }) => rest);
               }}
-              custom={customAttributes}
-              onCustomChange={setCustomAttributes}
               errors={attrErrors}
             />
           </CardContent>

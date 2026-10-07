@@ -70,6 +70,15 @@ export const VENUE_CATEGORY_ALIASES: Record<string, string> = {
   'residential society': 'Apartment',
   'residential building': 'Apartment',
   'apartment': 'Apartment',
+  'apartments': 'Apartment',
+  'residential': 'Apartment',
+  'residential complex': 'Apartment',
+  'housing society': 'Apartment',
+  'gated society': 'Apartment',
+  'gated community': 'Apartment',
+  'residence': 'Apartment',
+  'residences': 'Apartment',
+  'society': 'Apartment',
   'coworking space': 'Co-working',
   'co-working space': 'Co-working',
   'co working': 'Co-working',
@@ -135,14 +144,14 @@ export function normalizeVenueCategory(raw: string): string {
  * Used by getFilteredScreens to do a broad match.
  */
 export function getVenueCategoryVariants(canonical: string): string[] {
+  const normalized = normalizeVenueCategory(canonical);
   const variants = new Set<string>();
   // Always include the canonical itself
-  variants.add(canonical);
+  variants.add(normalized);
+  variants.add(canonical.trim());
   // Add all aliases that resolve to this canonical
   for (const [alias, target] of Object.entries(VENUE_CATEGORY_ALIASES)) {
-    if (target.toLowerCase() === canonical.toLowerCase()) {
-      // Add the alias in its original casing (as stored in DB)
-      // We store aliases lowercase, DB may have any case — match is done case-insensitively in SQL
+    if (target.toLowerCase() === normalized.toLowerCase()) {
       variants.add(alias);
     }
   }
@@ -151,29 +160,151 @@ export function getVenueCategoryVariants(canonical: string): string[] {
 
 // ========== CITY NAME NORMALIZATION ==========
 /**
- * Maps common alternate city spellings to preferred canonical form.
+ * Maps common alternate city spellings, regional names, and common typos to preferred canonical form.
  * Key = lowercase alternate, Value = canonical spelling.
  */
 export const CITY_ALIASES: Record<string, string> = {
+  // Bengaluru
+  'bengaluru': 'Bengaluru',
   'bangalore': 'Bengaluru',
+  'bengaluru urban': 'Bengaluru',
+  'bengaluru rural': 'Bengaluru',
+  'bangalore urban': 'Bengaluru',
+  'bangalore rural': 'Bengaluru',
+  'bangalore south': 'Bengaluru',
+  'bangalore north': 'Bengaluru',
+  'bangalore central': 'Bengaluru',
+  'bengaluru city': 'Bengaluru',
   'banglore': 'Bengaluru',
+  'benglore': 'Bengaluru',
+  'benaglore': 'Bengaluru',
+  'benagaluru': 'Bengaluru',
+  'bangaluru': 'Bengaluru',
   'bengalooru': 'Bengaluru',
+  'banglore city': 'Bengaluru',
+  'blr': 'Bengaluru',
+
+  // Mumbai
+  'mumbai': 'Mumbai',
   'bombay': 'Mumbai',
-  'madras': 'Chennai',
+  'bombai': 'Mumbai',
+  'mumbai city': 'Mumbai',
+  'mumbai suburban': 'Mumbai',
+  'bom': 'Mumbai',
+
+  // Delhi / NCR
+  'delhi': 'Delhi',
+  'new delhi': 'Delhi',
+  'delhi ncr': 'Delhi',
+  'ncr': 'Delhi',
+
+  // Gurugram
+  'gurugram': 'Gurugram',
+  'gurgaon': 'Gurugram',
+  'gurgoan': 'Gurugram',
+
+  // Kolkata
+  'kolkata': 'Kolkata',
   'calcutta': 'Kolkata',
+  'calcata': 'Kolkata',
+
+  // Chennai
+  'chennai': 'Chennai',
+  'madras': 'Chennai',
+
+  // Hyderabad
+  'hyderabad': 'Hyderabad',
+  'secunderabad': 'Hyderabad',
+  'hyd': 'Hyderabad',
+
+  // Pune
+  'pune': 'Pune',
   'poona': 'Pune',
-  'trivandrum': 'Thiruvananthapuram',
+
+  // Kochi
+  'kochi': 'Kochi',
   'cochin': 'Kochi',
-  'mysore': 'Mysuru',
+  'ernakulam': 'Kochi',
+
+  // Thiruvananthapuram
+  'thiruvananthapuram': 'Thiruvananthapuram',
+  'trivandrum': 'Thiruvananthapuram',
+
+  // Vadodara
+  'vadodara': 'Vadodara',
   'baroda': 'Vadodara',
-  'pondicherry': 'Puducherry',
-  'mangalore': 'Mangaluru',
+
+  // Visakhapatnam
+  'visakhapatnam': 'Visakhapatnam',
   'vizag': 'Visakhapatnam',
   'visakapatnam': 'Visakhapatnam',
-  'ahmedbad': 'Ahmedabad',
-  'ahmadabad': 'Ahmedabad',
-  'gurgaon': 'Gurugram',
+
+  // Mysuru
+  'mysuru': 'Mysuru',
+  'mysore': 'Mysuru',
+
+  // Mangaluru
+  'mangaluru': 'Mangaluru',
+  'mangalore': 'Mangaluru',
+
+  // Belagavi
+  'belagavi': 'Belagavi',
+  'belgaum': 'Belagavi',
+
+  // Hubballi
+  'hubballi': 'Hubballi',
+  'hubli': 'Hubballi',
+
+  // Kalaburagi
+  'kalaburagi': 'Kalaburagi',
+  'kalburgi': 'Kalaburagi',
+  'gulbarga': 'Kalaburagi',
+
+  // Ballari
+  'ballari': 'Ballari',
+  'bellary': 'Ballari',
+  'bellari': 'Ballari',
+
+  // Puducherry
+  'puducherry': 'Puducherry',
+  'pondicherry': 'Puducherry',
+
+  // Prayagraj
+  'prayagraj': 'Prayagraj',
+  'allahabad': 'Prayagraj',
+
+  // Varanasi
+  'varanasi': 'Varanasi',
+  'banaras': 'Varanasi',
+  'benares': 'Varanasi',
+  'kashi': 'Varanasi',
+
+  // Vijayawada
+  'vijayawada': 'Vijayawada',
   'vijaywada': 'Vijayawada',
+  'bezawada': 'Vijayawada',
+
+  // Ahmedabad
+  'ahmedabad': 'Ahmedabad',
+  'ahmadabad': 'Ahmedabad',
+  'ahmedbad': 'Ahmedabad',
+  'amdavad': 'Ahmedabad',
+
+  // Bhubaneswar
+  'bhubaneswar': 'Bhubaneswar',
+  'bhubaneshwar': 'Bhubaneswar',
+
+  // Shimla
+  'shimla': 'Shimla',
+  'simla': 'Shimla',
+
+  // Jalandhar
+  'jalandhar': 'Jalandhar',
+  'jullundur': 'Jalandhar',
+
+  // Panaji
+  'panaji': 'Panaji',
+  'panjim': 'Panaji',
 };
 
 /**
@@ -184,7 +315,32 @@ export function normalizeCityName(raw: string): string {
   if (!raw) return raw;
   const trimmed = raw.trim();
   const alias = CITY_ALIASES[trimmed.toLowerCase()];
-  return alias || trimmed;
+  if (alias) return alias;
+  return trimmed.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+/**
+ * Given any city string (e.g. "Benglore", "Bangalore", or "Bengaluru"),
+ * return all known spelling variants and aliases for SQL/filter matching.
+ */
+export function getCityVariants(raw: string): string[] {
+  if (!raw) return [];
+  const trimmed = raw.trim();
+  const canonical = normalizeCityName(trimmed);
+  const variants = new Set<string>();
+
+  // Include canonical and the raw input (lowercased)
+  variants.add(canonical.toLowerCase());
+  variants.add(trimmed.toLowerCase());
+
+  // Add all aliases that map to this canonical name
+  for (const [alias, target] of Object.entries(CITY_ALIASES)) {
+    if (target.toLowerCase() === canonical.toLowerCase()) {
+      variants.add(alias);
+    }
+  }
+
+  return Array.from(variants);
 }
 
 // ========== TIER 1 & TIER 2 CITIES ==========
@@ -363,17 +519,17 @@ export type IndianState = typeof INDIAN_STATES[number];
 // State to Cities mapping - major cities by state
 export const STATE_CITIES: Record<string, string[]> = {
   "Andhra Pradesh": ["Visakhapatnam", "Vijayawada", "Guntur", "Nellore", "Tirupati"],
-  "Karnataka": ["Bangalore", "Bengaluru", "Mysore", "Mangalore", "Hubli"],
-  "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Nashik", "Aurangabad"],
+  "Karnataka": ["Bengaluru", "Mysuru", "Mangaluru", "Hubballi", "Belagavi", "Kalaburagi", "Dharwad", "Vijayapur", "Tumakuru", "Udupi", "Shivamogga", "Ballari", "Hassan", "Bidar", "Raichur"],
+  "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Nashik", "Chhatrapati Sambhajinagar", "Thane", "Navi Mumbai"],
   "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Tiruchirappalli", "Salem"],
   "Telangana": ["Hyderabad", "Warangal", "Nizamabad", "Khammam"],
   "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot", "Bhavnagar"],
   "Rajasthan": ["Jaipur", "Jodhpur", "Udaipur", "Kota", "Ajmer"],
-  "Uttar Pradesh": ["Lucknow", "Kanpur", "Ghaziabad", "Agra", "Varanasi", "Noida"],
+  "Uttar Pradesh": ["Lucknow", "Kanpur", "Ghaziabad", "Agra", "Varanasi", "Noida", "Greater Noida"],
   "West Bengal": ["Kolkata", "Howrah", "Durgapur", "Asansol", "Siliguri"],
   "Madhya Pradesh": ["Indore", "Bhopal", "Jabalpur", "Gwalior", "Ujjain"],
-  "Haryana": ["Faridabad", "Gurgaon", "Gurugram", "Rohtak", "Panipat"],
-  "Delhi": ["New Delhi", "Delhi", "Dwarka", "Rohini"],
+  "Haryana": ["Gurugram", "Faridabad", "Panipat", "Rohtak", "Ambala", "Panchkula"],
+  "Delhi": ["Delhi", "Dwarka", "Rohini"],
   "Punjab": ["Ludhiana", "Amritsar", "Jalandhar", "Patiala"],
   "Kerala": ["Thiruvananthapuram", "Kochi", "Kozhikode", "Thrissur"],
   "Bihar": ["Patna", "Gaya", "Bhagalpur", "Muzaffarpur"],

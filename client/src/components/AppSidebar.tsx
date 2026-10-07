@@ -20,6 +20,7 @@ import {
   Shield,
   Briefcase,
   ClipboardList,
+  Presentation,
   Menu,
   LifeBuoy,
   ImagePlus,

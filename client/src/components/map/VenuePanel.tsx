@@ -5,6 +5,7 @@ import type { Screen } from "@shared/schema";
 import { calculateScreenPricePerDay } from "@shared/utils";
 import { VENUE_FAMILY_LABELS, getPlaysPerHour } from "@shared/venueTypes";
 import { detailFactsFor } from "@/lib/venueFacts";
+import { useMetricRegistry } from "@/lib/metricRegistry";
 import {
   type ListedScreen,
   type VenueGroup,
@@ -95,10 +96,11 @@ export function VenuePanel({
   const [tab, setTab] = useState<Tab>("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  // Stored venue attributes (+ footfall/dwell, Est. metrics); description-parsed facts as fallback
+  // Stored venue metrics (+ footfall/dwell, derived metrics); description-parsed facts as fallback
+  const metricReg = useMetricRegistry();
   const facts = useMemo(
     () => detailFactsFor(venue.listings, venue.family, venue.totalScreens).slice(0, 6),
-    [venue]
+    [venue, metricReg]
   );
 
   const selectedHere = venue.listings.filter((l) => selectedIds.has(l.id));

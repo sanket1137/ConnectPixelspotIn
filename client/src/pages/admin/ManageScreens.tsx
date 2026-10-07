@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Monitor, Plus, Check, X, Eye, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { MapPin, Monitor, Plus, Check, X, Eye, Search, ChevronLeft, ChevronRight, FileSpreadsheet, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -157,10 +157,20 @@ export default function ManageScreens() {
             {totalScreens > 0 ? `${totalScreens} screen${totalScreens !== 1 ? 's' : ''} total` : 'View and manage all screens on the platform'}
           </p>
         </div>
-        <Button onClick={() => setLocation("/admin/screens/new")} data-testid="button-add-screen">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Screen for Owner
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setLocation("/admin/screens/template")} data-testid="button-get-template">
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Get template
+          </Button>
+          <Button variant="outline" onClick={() => setLocation("/admin/screens/import")} data-testid="button-import-screens">
+            <Upload className="h-4 w-4 mr-2" />
+            Import screens
+          </Button>
+          <Button onClick={() => setLocation("/admin/screens/new")} data-testid="button-add-screen">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Screen for Owner
+          </Button>
+        </div>
       </div>
 
       {/* Filters & Search Bar */}

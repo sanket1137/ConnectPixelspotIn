@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, boolean, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, decimal, timestamp, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -141,10 +141,14 @@ export const screens = pgTable("screens", {
   environmentClass: text("environment_class"), // 'indoor' | 'outdoor'
   searchText: text("search_text"), // lowercased, accent-free: names, address, city, type labels, host
 
-  // Venue-specific audience inputs (keys defined per venue type in shared/venueAttributes.ts)
-  venueAttributes: jsonb("venue_attributes").$type<Record<string, number | string | boolean>>().notNull().default({}),
-  customAttributes: jsonb("custom_attributes").$type<Array<{ label: string; value: string; unit?: string }>>().notNull().default([]),
+  // Venue metrics: filled keys only; keys per venue type live in venue_metric_definitions (see shared/venueMetrics.ts)
+  venueMetrics: jsonb("venue_metrics").$type<Record<string, number | string | boolean | string[]>>().notNull().default({}),
   footfallNote: text("footfall_note"), // null | 'estimate' | 'hidden' (placeholder footfall — venue metrics shown instead)
+  // Duplicate fingerprint (generated; same formula as dedupeKey() in shared/screenImport.ts)
+  dedupeKey: text("dedupe_key").generatedAlwaysAs(
+    sql`lower(regexp_replace(coalesce(venue_name, ''), '[^A-Za-z0-9]', '', 'g')) || '|' || lower(regexp_replace(coalesce(name, ''), '[^A-Za-z0-9]', '', 'g')) || '|' || coalesce(trunc(latitude, 4)::text, '') || '|' || coalesce(trunc(longitude, 4)::text, '')`
+  ),
+  importId: varchar("import_id"), // screen_imports.id when created by an Excel import
   createdAt: timestamp("created_at").defaultNow().notNull(),
 
   // Auto-tagging metadata
@@ -268,6 +272,8 @@ export const bookings = pgTable("bookings", {
   screenId: varchar("screen_id").notNull(),
   campaignId: varchar("campaign_id").notNull(),
   price: integer("price").notNull(),
+  screensRequested: integer("screens_requested"),
+  screensAccepted: integer("screens_accepted"),
   status: text("status").notNull().default("pending_owner"), // pending_owner, owner_approved, owner_rejected, pending_admin, admin_approved, admin_rejected, active, completed
   approvedByAdmin: boolean("approved_by_admin").notNull().default(false),
   ownerApproved: boolean("owner_approved").notNull().default(false),
@@ -830,6 +836,20 @@ export type Screen = typeof screens.$inferSelect & {
   zonePricePerDay?: number | null;
   zoneScreenCount?: number | null;
 };
+export type PublicScreen = Omit<
+  Screen,
+  | 'ownerId'
+  | 'host'
+  | 'bundlePricePerDay'
+  | 'rejectionReason'
+  | 'ownedByAdmin'
+  | 'searchText'
+  | 'dedupeKey'
+  | 'importId'
+  | 'lastTaggedAt'
+  | 'lastTaggedLatitude'
+  | 'lastTaggedLongitude'
+> & { distanceKm?: number };
 export type InsertScreen = z.infer<typeof insertScreenSchema>;
 
 export type Campaign = typeof campaigns.$inferSelect;
@@ -954,6 +974,60 @@ export const insertZoneSchema = createInsertSchema(zones).omit({
 export type Zone = typeof zones.$inferSelect;
 export type InsertZone = z.infer<typeof insertZoneSchema>;
 
+// ========== VENUE METRICS / ADMIN SCREEN IMPORT ==========
+// Metric definitions per venue type (Admin → Get template → Settings)
+export const venueMetricDefinitions = pgTable("venue_metric_definitions", {
+  id: serial("id").primaryKey(),
+  venueType: text("venue_type").notNull(),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  inputKind: text("input_kind").notNull(), // number | currency | enum | multi | boolean | text
+  unit: text("unit"),
+  help: text("help"),
+  options: jsonb("options").$type<string[]>().notNull().default([]),
+  minValue: decimal("min_value"),
+  maxValue: decimal("max_value"),
+  required: boolean("required").notNull().default(false),
+  showOnCard: boolean("show_on_card").notNull().default(false),
+  role: text("role"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export type VenueMetricDefinitionRow = typeof venueMetricDefinitions.$inferSelect;
+
+// Excel imports — drafts until every row is valid
+export const screenImports = pgTable("screen_imports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fileName: text("file_name").notNull(),
+  fileHash: text("file_hash").notNull(),
+  venueType: text("venue_type").notNull(),
+  ownerId: varchar("owner_id").notNull(),
+  host: text("host"),
+  screenStatus: text("screen_status").notNull().default("pending"),
+  rows: jsonb("rows").$type<unknown[]>().notNull().default([]),
+  state: text("state").notNull().default("draft"), // draft | imported | discarded
+  errorCount: integer("error_count").notNull().default(0),
+  screenCount: integer("screen_count").notNull().default(0),
+  createdBy: varchar("created_by").notNull(),
+  updatedBy: varchar("updated_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  importedAt: timestamp("imported_at"),
+});
+export type ScreenImport = typeof screenImports.$inferSelect;
+
+// State → City master for the template dropdown and import checks
+export const cityMaster = pgTable("city_master", {
+  id: serial("id").primaryKey(),
+  state: text("state").notNull(),
+  city: text("city").notNull(),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Derived type used throughout the app to describe a zone's info
 export type ZoneInfo = {
   zoneName: string;
@@ -962,3 +1036,69 @@ export type ZoneInfo = {
   status: string;
   screenIds: string[];
 };
+
+// ========== PROPOSALS (ADMIN-ONLY) ==========
+export const proposals = pgTable("proposals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminId: varchar("admin_id").default("admin"),
+  title: text("title").notNull(),
+  clientName: text("client_name").notNull(),
+  preparedBy: text("prepared_by").notNull(),
+  contactInfo: text("contact_info"),
+  campaignStart: text("campaign_start"),
+  campaignEnd: text("campaign_end"),
+  objective: text("objective"),
+  coverLetter: text("cover_letter"),
+  notes: text("notes"),
+  markupPct: decimal("markup_pct", { precision: 5, scale: 2 }).default("0"),
+  pricingMode: text("pricing_mode").notNull().default("db"), // db | custom | markup
+  groupByZone: boolean("group_by_zone").notNull().default(true),
+  showBulkBreakdown: boolean("show_bulk_breakdown").notNull().default(true),
+  filters: jsonb("filters").$type<Record<string, any>>().notNull().default({}),
+  screenIds: text("screen_ids").array().notNull().default([]),
+  template: text("template").notNull().default("agency_pitch"),
+  columns: text("columns").array().notNull().default([]),
+  customPrices: jsonb("custom_prices").$type<Record<string, number>>().default({}),
+  screenQuantities: jsonb("screen_quantities").$type<Record<string, number>>().default({}),
+  status: text("status").notNull().default("draft"), // draft | sent | archived
+  pdfUrl: text("pdf_url"),
+  xlsxUrl: text("xlsx_url"),
+  pptxUrl: text("pptx_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_proposals_admin_id").on(table.adminId),
+  index("idx_proposals_status").on(table.status),
+]);
+
+export const insertProposalSchema = z.object({
+  adminId: z.string().optional(),
+  title: z.string().min(1, "Title is required"),
+  clientName: z.string().min(1, "Client name is required"),
+  preparedBy: z.string().min(1, "Prepared by is required"),
+  contactInfo: z.string().optional().nullable(),
+  campaignStart: z.string().optional().nullable(),
+  campaignEnd: z.string().optional().nullable(),
+  objective: z.string().optional().nullable(),
+  coverLetter: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  markupPct: z.union([z.string(), z.number()]).optional().nullable(),
+  pricingMode: z.string().default("db"),
+  groupByZone: z.boolean().default(true),
+  showBulkBreakdown: z.boolean().default(true),
+  filters: z.record(z.any()).default({}),
+  screenIds: z.array(z.string()).default([]),
+  template: z.string().default("agency_pitch"),
+  columns: z.array(z.string()).default([]),
+  customPrices: z.record(z.number()).optional().nullable(),
+  screenQuantities: z.record(z.number()).optional().nullable(),
+  status: z.string().default("draft"),
+  pdfUrl: z.string().optional().nullable(),
+  xlsxUrl: z.string().optional().nullable(),
+  pptxUrl: z.string().optional().nullable(),
+});
+
+export type Proposal = typeof proposals.$inferSelect;
+export type InsertProposal = z.infer<typeof insertProposalSchema>;
+
+

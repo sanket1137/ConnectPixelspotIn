@@ -36,7 +36,11 @@ const AIConversations = lazy(() => import("@/pages/admin/AIConversations"));
 const AISecurityDashboard = lazy(() => import("@/pages/admin/AISecurityDashboard"));
 const Settings = lazy(() => import("@/pages/admin/Settings"));
 const AdminMediaPlans = lazy(() => import("@/pages/admin/AdminMediaPlans"));
+const ExcelProposalBuilder = lazy(() => import("@/pages/admin/ExcelProposalBuilder"));
 const BulkImageManager = lazy(() => import("@/pages/admin/BulkImageManager"));
+const ScreenTemplate = lazy(() => import("@/pages/admin/ScreenTemplate"));
+const ScreenImports = lazy(() => import("@/pages/admin/ScreenImports"));
+const ScreenImportDraft = lazy(() => import("@/pages/admin/ScreenImportDraft"));
 const OwnerDashboard = lazy(() => import("@/pages/owner/OwnerDashboard"));
 const ScreensList = lazy(() => import("@/pages/owner/ScreensList"));
 const AddScreen = lazy(() => import("@/pages/owner/AddScreen"));
@@ -164,6 +168,21 @@ function Router() {
           <AddScreenForOwner />
         </AuthGuard>
       </Route>
+      <Route path="/admin/screens/template">
+        <AuthGuard allowedRoles={["admin"]}>
+          <ScreenTemplate />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/screens/import">
+        <AuthGuard allowedRoles={["admin"]}>
+          <ScreenImports />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/screens/import/:id">
+        <AuthGuard allowedRoles={["admin"]}>
+          <ScreenImportDraft />
+        </AuthGuard>
+      </Route>
       <Route path="/admin/screen-images">
         <AuthGuard allowedRoles={["admin"]}>
           <BulkImageManager />
@@ -197,6 +216,11 @@ function Router() {
       <Route path="/admin/settings">
         <AuthGuard allowedRoles={["admin"]}>
           <Settings />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/media-plans/excel-proposal">
+        <AuthGuard allowedRoles={["admin"]}>
+          <ExcelProposalBuilder />
         </AuthGuard>
       </Route>
       <Route path="/admin/media-plans">

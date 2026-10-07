@@ -3,7 +3,8 @@ import { ArrowLeft, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight
 import { Button } from "@/components/ui/button";
 import type { Screen, ZoneInfo } from "@shared/schema";
 import { VENUE_FAMILY_LABELS, getOperatingHoursLabel } from "@shared/venueTypes";
-import { customDetailsFor, detailFactsFor, footfallToShow } from "@/lib/venueFacts";
+import { detailFactsFor, footfallToShow } from "@/lib/venueFacts";
+import { useMetricRegistry } from "@/lib/metricRegistry";
 import { formatRupees, shortListingName, type VenueGroup } from "@/lib/venueGroups";
 import { directionsUrl, playsPerHour, priceInfo, screenFamily, screenPhotos, screenTypeLabel, primaryPhoto } from "@/lib/screenInfo";
 import { ScreenPhoto } from "@/components/discover/VenueTypeIcon";
@@ -235,11 +236,14 @@ export function ScreenDetailPanel({
     () => (venue ? [screen, ...venue.listings.filter((l) => l.id !== screen.id)] : [screen]),
     [venue, screen]
   );
-  const facts = useMemo(
-    () => detailFactsFor(factListings, family, venue ? venue.totalScreens : price.screens).slice(0, 8),
-    [factListings, family, venue, price.screens]
+  const metricReg = useMetricRegistry();
+  const allFacts = useMemo(
+    () => detailFactsFor(factListings, family, venue ? venue.totalScreens : price.screens),
+    [factListings, family, venue, price.screens, metricReg]
   );
-  const customDetails = customDetailsFor(screen);
+  const facts = allFacts.slice(0, 8);
+  // Any further filled venue metrics (only filled ones ever show)
+  const moreFacts = allFacts.slice(8).filter((f) => !["footfall", "dwell", "hours", "screens"].includes(f.key));
   // Same rule as the facts: placeholder footfall only shows when the venue has no facts of its own
   const shownFootfall = footfallToShow([screen], facts.some((f) => !["footfall", "dwell", "hours", "screens"].includes(f.key)));
 
@@ -362,9 +366,9 @@ export function ScreenDetailPanel({
             />
           </Section>
 
-          {customDetails.length > 0 && (
+          {moreFacts.length > 0 && (
             <Section title="More about this venue">
-              <Rows rows={customDetails.map((d) => [d.label, d.value] as [string, string])} />
+              <Rows rows={moreFacts.map((d) => [d.label, d.value] as [string, string])} />
             </Section>
           )}
 

@@ -24,6 +24,7 @@ import { VenuePanel } from "@/components/map/VenuePanel";
 import { VenueMarker } from "@/components/map/VenueMarker";
 import { groupScreensByVenue, venueKeyFor, screenCount, type VenueGroup } from "@/lib/venueGroups";
 import { cardFactsFor, type DisplayFact } from "@/lib/venueFacts";
+import { useMetricRegistry } from "@/lib/metricRegistry";
 import { ScreenResultCard } from "@/components/discover/ScreenResultCard";
 import { ScreenDetailPanel } from "@/components/discover/ScreenDetailPanel";
 import { useDiscoverPanel, parentPanel, type DiscoverPanel } from "@/lib/discoverPanel";
@@ -123,6 +124,7 @@ function saveStoredLocation(lat: number, lng: number, locationName: string) {
 }
 
 export default function DiscoverScreens() {
+  const metricReg = useMetricRegistry(); // venue metric labels as admins set them
   const map = useMap("discover-screens-map");
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -481,7 +483,7 @@ export default function DiscoverScreens() {
   const selectedVenueKey = panel.kind === "venue" ? panel.key : detailScreen ? venueKeyFor(detailScreen) : null;
 
   // Card facts per venue ("660 flats · ₹1.2 Cr avg flat value"), parsed once per venue
-  const typeFactsCache = useMemo(() => new globalThis.Map<string, DisplayFact[]>(), [venueGroups]);
+  const typeFactsCache = useMemo(() => new globalThis.Map<string, DisplayFact[]>(), [venueGroups, metricReg]);
   const typeFactsFor = (screen: Screen): DisplayFact[] => {
     const key = venueKeyFor(screen) || screen.id;
     let facts = typeFactsCache.get(key);

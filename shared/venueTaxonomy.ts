@@ -2,6 +2,8 @@
 // cards and (phase 6) the registration dropdown. `screens.venue_category` stays as the raw text
 // vendors typed; `screens.venue_type` holds the canonical type slug resolved from it.
 
+import { getCityVariants } from "./constants";
+
 export type VenueFamilySlug =
   | "residential"
   | "cinema"
@@ -214,7 +216,11 @@ export function buildSearchText(s: {
 }): string {
   const type = getVenueType(s.venueType) || resolveScreenVenueType(s)?.type;
   const family = type ? FAMILY_BY_SLUG.get(type.family) : undefined;
-  const parts = [s.venueName, s.name, s.location, s.city, s.state, s.pincode, s.host, s.venueCategory, type?.label, family?.label];
+  const cityVariants = s.city ? getCityVariants(s.city) : [];
+  const parts = [
+    s.venueName, s.name, s.location, s.city, ...cityVariants,
+    s.state, s.pincode, s.host, s.venueCategory, type?.label, family?.label
+  ];
   return Array.from(new Set(parts.map(normalizeText).filter(Boolean))).join(" | ");
 }
 

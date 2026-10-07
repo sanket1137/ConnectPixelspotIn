@@ -1,7 +1,7 @@
 // Venue-attribute backfill for the LOCAL database (.env.localcopy only — refuses anything not on localhost).
 //
 //   npx tsx scripts/venue/backfill-attributes.ts --dry-run   → report only, read-only session, writes nothing
-//   npx tsx scripts/venue/backfill-attributes.ts --apply     → fills venue_attributes + footfall_note
+//   npx tsx scripts/venue/backfill-attributes.ts --apply     → fills venue_metrics + footfall_note
 //                                                             (needs migrations/2026_09_venue_attributes.up.sql)
 //
 // Report: scripts/venue/reports/venue-attributes-dry-run.md
@@ -9,7 +9,9 @@ import fs from "fs";
 import path from "path";
 import pg from "pg";
 import { fileURLToPath } from "url";
-import { attributesFor, deriveMetrics, formatAttributeValue, type VenueAttributes } from "../../shared/venueAttributes";
+import { deriveMetrics, formatMetricValue as formatAttributeValue, metricsFor, seedRegistry, type VenueMetrics as VenueAttributes } from "../../shared/venueMetrics";
+
+const attributesFor = (type: string | null | undefined) => metricsFor(seedRegistry(), type);
 import { getVenueType } from "../../shared/venueTaxonomy";
 import { footfallIsEstimate, parseAttributes } from "./parse-attributes";
 
@@ -147,7 +149,7 @@ async function main() {
     await c.query("begin");
     for (const u of updates) {
       // merge: values already stored (typed by owners in the form) win over parsed ones — re-running is safe
-      await c.query("update screens set venue_attributes = $2::jsonb || coalesce(venue_attributes, '{}'::jsonb), footfall_note = $3 where id = $1", [u.id, JSON.stringify(u.attrs), u.note]);
+      await c.query("update screens set venue_metrics = $2::jsonb || coalesce(venue_metrics, '{}'::jsonb), footfall_note = $3 where id = $1", [u.id, JSON.stringify(u.attrs), u.note]);
     }
     await c.query("commit");
     console.log(`Applied to ${updates.length} screens.`);

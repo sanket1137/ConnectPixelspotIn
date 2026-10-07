@@ -1,7 +1,7 @@
-// Pre-fills venue_attributes from what screen descriptions (and the size column) already say.
+// Pre-fills venue_metrics from what screen descriptions (and the size column) already say.
 // Only explicit numbers are taken — nothing is estimated or invented. Used by the one-time
 // backfill (scripts/venue/backfill-attributes.ts), which is reviewed as a dry run first.
-import { attributesFor, type VenueAttributes } from "../../shared/venueAttributes";
+import { metricsFor, seedRegistry, type VenueMetrics as VenueAttributes } from "../../shared/venueMetrics";
 
 const int = (s: string) => parseInt(s.replace(/,/g, ""), 10);
 const rupees = (amount: string, unit: string) => Math.round(parseFloat(amount) * (/^c/i.test(unit) ? 10_000_000 : 100_000));
@@ -55,7 +55,7 @@ export interface ParsedAttributes {
 }
 
 export function parseAttributes(venueType: string | null, description: string | null, size: string | null): ParsedAttributes {
-  const allowed = new Set(attributesFor(venueType).map((d) => d.key));
+  const allowed = new Set(metricsFor(seedRegistry(), venueType).map((d) => d.key));
   const attrs: VenueAttributes = {};
   const sources: Record<string, string> = {};
   const text = (description || "").replace(/\s+/g, " ");

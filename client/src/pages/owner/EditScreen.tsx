@@ -138,8 +138,7 @@ export default function EditScreen() {
     existingScreenImages: screen.screenImages || [],
     existingSurroundingImages: screen.surroundingImages || [],
     // venue-specific details (phase 5/6) — edited in the "About this venue" section
-    venueAttributes: screen.venueAttributes || {},
-    customAttributes: screen.customAttributes || [],
+    venueMetrics: screen.venueMetrics || {},
   };
 
   return (

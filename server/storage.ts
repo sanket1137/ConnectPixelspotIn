@@ -45,7 +45,7 @@ const VENUE_DERIVED_INPUTS = ["venueCategory", "venueName", "name", "location", 
 
 // Canonical venue type, indoor/outdoor class and search text for a screen row — filled on every
 // create/update so filters and search never depend on how a vendor spelled the category.
-function deriveVenueFields(s: {
+export function deriveVenueFields(s: {
   venueCategory?: string | null; venueName?: string | null; name?: string | null; location?: string | null;
   city?: string | null; state?: string | null; pincode?: string | null; host?: string | null; environmentType?: string | null;
 }) {
@@ -79,18 +79,19 @@ import {
   type ScreenTag, type ScreenTagAssignment,
   type SupportTicket, type InsertSupportTicket,
   type TicketMessage, type InsertTicketMessage,
-  type ZoneInfo
+  type ZoneInfo,
 } from "@shared/schema";
 import { db } from "./db";
+export { db };
 import { eq, and, gte, lte, or, desc, asc, sql as drizzleSql, inArray, isNull, count, like } from "drizzle-orm";
-import { normalizeCityName, getVenueCategoryVariants, normalizeVenueCategory, VENUE_CATEGORY_ALIASES } from "@shared/constants";
+import { normalizeCityName, getCityVariants, getVenueCategoryVariants, normalizeVenueCategory, VENUE_CATEGORY_ALIASES } from "@shared/constants";
 import { notifyUser } from "./websocket";
 
 /** Convert a raw DB row (snake_case keys) to camelCase to match drizzle schema types.
  *  Recursively converts nested plain objects (e.g. from row_to_json). */
 // jsonb columns whose inner keys are data (snake_case attribute keys like "avg_flat_value"),
 // not column names — passed through untouched so every read path returns the same keys
-const JSON_DATA_COLUMNS = new Set(["venue_attributes", "custom_attributes"]);
+const JSON_DATA_COLUMNS = new Set(["venue_metrics"]);
 
 function mapRowToCamel<T>(row: Record<string, any>): T {
   const mapped: Record<string, any> = {};
@@ -133,6 +134,7 @@ export interface IStorage {
   getAllScreens(): Promise<Screen[]>;
   getActiveScreens(): Promise<Screen[]>;
   getApprovedScreens(): Promise<Screen[]>;
+  getScreensByIds(ids: string[]): Promise<Screen[]>;
   getPublicScreens(): Promise<Screen[]>;
   getDistinctCities(): Promise<string[]>;
   getCityStats(): Promise<{ city: string; screenCount: number }[]>;
@@ -181,6 +183,9 @@ export interface IStorage {
   rejectBookingByAdmin(id: string, notes: string): Promise<Booking | undefined>;
   acceptAlternativeDates(id: string): Promise<Booking | undefined>;
   updateBookingDates(id: string, startDate: string, endDate: string, adminNotes?: string): Promise<Booking | undefined>;
+  counterOfferBooking(id: string, screensAccepted: number, newPrice: number, reason?: string): Promise<Booking | undefined>;
+  acceptCounterOffer(id: string): Promise<Booking | undefined>;
+  rejectCounterOffer(id: string): Promise<Booking | undefined>;
   
   // Payment methods
   getPayment(id: string): Promise<Payment | undefined>;
@@ -244,7 +249,7 @@ export interface IStorage {
   getNextInvoiceNumber(): Promise<string>;
 
   // Notification methods
-  createNotification(notification: InsertNotification): Promise<Notification>;
+  createNotification(notification: InsertNotification | any): Promise<Notification>;
   getUserNotifications(userId: string, limit?: number): Promise<Notification[]>;
   getUnreadNotificationCount(userId: string): Promise<number>;
   markNotificationRead(id: string): Promise<Notification | undefined>;
@@ -348,6 +353,8 @@ export interface IStorage {
   updateSupportTicket(id: string, data: Partial<SupportTicket>): Promise<SupportTicket | undefined>;
   addTicketMessage(ticketId: string, senderId: string, message: string, attachments?: any[]): Promise<TicketMessage>;
   getTicketMessages(ticketId: string): Promise<TicketMessage[]>;
+
+  getZonesWithScreenCounts(): Promise<Array<{ id: string; name: string; pricePerDay: number; minBookingDays: number; screenCount: number }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -590,6 +597,7 @@ export class DatabaseStorage implements IStorage {
     return activeScreens as any[];
   }
 
+
   async getPublicScreens(): Promise<Screen[]> {
     const cached = publicCache.get<Screen[]>('pub:publicScreens');
     if (cached) return cached;
@@ -620,10 +628,13 @@ export class DatabaseStorage implements IStorage {
       .selectDistinct({ city: screens.city })
       .from(screens)
       .where(inArray(screens.status, ["active", "approved"]));
-    const cities = result
-      .map(r => r.city)
-      .filter((city): city is string => city !== null)
-      .sort();
+    const cities = [
+      ...new Set(
+        result
+          .map(r => r.city ? normalizeCityName(r.city) : null)
+          .filter((city): city is string => Boolean(city))
+      )
+    ].sort();
     publicCache.set('pub:cities', cities, PUBLIC_SCREENS_TTL);
     return cities;
   }
@@ -675,13 +686,14 @@ export class DatabaseStorage implements IStorage {
     const cacheKey = `pub:cityPage:${canonical.toLowerCase()}`;
     const cached = publicCache.get<{ city: string; totalScreens: number; venueCategories: { name: string; count: number }[]; screens: Screen[] }>(cacheKey);
     if (cached) return cached;
-    // Case-insensitive city match against canonical + alias spellings
+    const cityVariants = getCityVariants(cityName);
+    const cityArrStr = `{${cityVariants.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
     const rows = await db
       .select()
       .from(screens)
       .where(and(
         eq(screens.status, "active"),
-        drizzleSql`LOWER(${screens.city}) = LOWER(${canonical})`
+        drizzleSql`LOWER(${screens.city}) = ANY(${cityArrStr}::text[])`
       ))
       .orderBy(desc(screens.createdAt));
     if (rows.length === 0) return null;
@@ -705,16 +717,21 @@ export class DatabaseStorage implements IStorage {
 
   async getCityVenuePageData(cityName: string, venueCategory: string): Promise<{ city: string; venueCategory: string; totalScreens: number; screens: Screen[] } | null> {
     const canonicalCity = normalizeCityName(cityName);
-    const cacheKey = `pub:cityVenue:${canonicalCity.toLowerCase()}:${venueCategory.toLowerCase()}`;
+    const canonicalVenue = normalizeVenueCategory(venueCategory);
+    const cacheKey = `pub:cityVenue:${canonicalCity.toLowerCase()}:${canonicalVenue.toLowerCase()}`;
     const cached = publicCache.get<{ city: string; venueCategory: string; totalScreens: number; screens: Screen[] }>(cacheKey);
     if (cached) return cached;
+    const cityVariants = getCityVariants(cityName);
+    const cityArrStr = `{${cityVariants.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
+    const venueVariants = getVenueCategoryVariants(venueCategory);
+    const venueArrStr = `{${venueVariants.map(v => `"${v.replace(/"/g, '\\"')}"`).join(',')}}`;
     const rows = await db
       .select()
       .from(screens)
       .where(and(
         eq(screens.status, "active"),
-        drizzleSql`LOWER(${screens.city}) = LOWER(${canonicalCity})`,
-        drizzleSql`LOWER(${screens.venueCategory}) = LOWER(${venueCategory})`,
+        drizzleSql`LOWER(${screens.city}) = ANY(${cityArrStr}::text[])`,
+        drizzleSql`LOWER(${screens.venueCategory}) = ANY(${venueArrStr}::text[])`,
       ))
       .orderBy(desc(screens.createdAt));
     if (rows.length === 0) return null;
@@ -751,20 +768,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createScreen(insertScreen: InsertScreen): Promise<Screen> {
-    // (cast: drizzle-zod infers the optional `unit` inside custom_attributes as unknown)
-    const [screen] = await db.insert(screens).values({ ...insertScreen, ...deriveVenueFields(insertScreen) } as typeof screens.$inferInsert).returning();
+    const payload = { ...insertScreen };
+    if (payload.city) {
+      payload.city = normalizeCityName(payload.city);
+    }
+    // (cast: drizzle-zod infers jsonb venue_metrics loosely)
+    const [screen] = await db.insert(screens).values({ ...payload, ...deriveVenueFields(payload) } as typeof screens.$inferInsert).returning();
     publicCache.invalidatePublicScreens();
     return screen;
   }
 
   async updateScreen(id: string, data: Partial<InsertScreen>): Promise<Screen | undefined> {
+    const payload = { ...data };
+    if (payload.city) {
+      payload.city = normalizeCityName(payload.city);
+    }
     // Re-derive venue type / environment class / search text whenever a field they depend on changes
     let derived = {};
-    if (VENUE_DERIVED_INPUTS.some((k) => k in data)) {
+    if (VENUE_DERIVED_INPUTS.some((k) => k in payload)) {
       const [current] = await db.select().from(screens).where(eq(screens.id, id));
-      if (current) derived = deriveVenueFields({ ...current, ...data });
+      if (current) derived = deriveVenueFields({ ...current, ...payload });
     }
-    const [screen] = await db.update(screens).set({ ...data, ...derived } as Partial<typeof screens.$inferInsert>).where(eq(screens.id, id)).returning();
+    const [screen] = await db.update(screens).set({ ...payload, ...derived } as Partial<typeof screens.$inferInsert>).where(eq(screens.id, id)).returning();
     publicCache.invalidatePublicScreens();
     return screen || undefined;
   }
@@ -800,7 +825,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCampaign(insertCampaign: InsertCampaign): Promise<Campaign> {
-    const [campaign] = await db.insert(campaigns).values(insertCampaign).returning();
+    const [campaign] = await db.insert(campaigns).values(insertCampaign as any).returning();
     return campaign;
   }
 
@@ -941,6 +966,32 @@ export class DatabaseStorage implements IStorage {
     };
 
     const [booking] = await db.update(bookings).set(updateData).where(eq(bookings.id, id)).returning();
+    return booking || undefined;
+  }
+
+  async counterOfferBooking(id: string, screensAccepted: number, newPrice: number, reason?: string): Promise<Booking | undefined> {
+    const [booking] = await db.update(bookings).set({
+      screensAccepted,
+      price: newPrice,
+      status: "counter_offer",
+      ownerResponse: reason || "Counter-offer proposed",
+      ownerRespondedAt: new Date(),
+    } as any).where(eq(bookings.id, id)).returning();
+    return booking || undefined;
+  }
+
+  async acceptCounterOffer(id: string): Promise<Booking | undefined> {
+    const [booking] = await db.update(bookings).set({
+      status: "owner_approved",
+      ownerApproved: true,
+    } as any).where(eq(bookings.id, id)).returning();
+    return booking || undefined;
+  }
+
+  async rejectCounterOffer(id: string): Promise<Booking | undefined> {
+    const [booking] = await db.update(bookings).set({
+      status: "rejected",
+    } as any).where(eq(bookings.id, id)).returning();
     return booking || undefined;
   }
 
@@ -1454,8 +1505,8 @@ export class DatabaseStorage implements IStorage {
 
   // ── Notification methods ──────────────────
 
-  async createNotification(insertNotification: InsertNotification): Promise<Notification> {
-    const [notification] = await db.insert(notifications).values(insertNotification).returning();
+  async createNotification(insertNotification: InsertNotification | any): Promise<Notification> {
+    const [notification] = await db.insert(notifications).values(insertNotification as any).returning();
     // Push real-time notification via WebSocket
     if (notification.userId) {
       notifyUser(notification.userId, {
@@ -1927,8 +1978,11 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (filters.city) {
-      const normalizedCity = normalizeCityName(filters.city);
-      conditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${normalizedCity}%`})`);
+      const cityVariants = getCityVariants(filters.city);
+      const cityConditions = cityVariants.map(v => drizzleSql`LOWER(city) LIKE LOWER(${`%${v}%`})`);
+      if (cityConditions.length > 0) {
+        conditions.push(drizzleSql`(${drizzleSql.join(cityConditions, drizzleSql` OR `)})`);
+      }
     }
     if (filters.type) {
       conditions.push(drizzleSql`type = ${filters.type}`);
@@ -1973,7 +2027,7 @@ export class DatabaseStorage implements IStorage {
 
     // Venue type filter: family chips + type multi-select, plus the legacy venueCategories param
     // (?venue=Apartment links) resolved through the same taxonomy. One screen matches if its
-    // canonical type is any of the requested ones.
+    // canonical type is any of the requested ones, OR if its venue_category matches any alias.
     const wantedTypes = new Set<string>(filters.venueTypes || []);
     for (const f of filters.families || []) typesInFamily(f as VenueFamilySlug).forEach(t => wantedTypes.add(t.slug));
     const unresolvedCategories: string[] = [];
@@ -1984,14 +2038,25 @@ export class DatabaseStorage implements IStorage {
     }
     if (wantedTypes.size > 0 || unresolvedCategories.length > 0) {
       const types = Array.from(wantedTypes);
-      // raw spellings for rows the normalise script hasn't typed yet
-      const rawAliases = types.flatMap(slug => {
+      // raw spellings for rows the normalise script hasn't typed yet, plus all category aliases
+      const rawAliases = new Set<string>();
+      types.forEach(slug => {
         const t = getVenueType(slug);
-        return t ? [t.label, ...t.aliases].map(a => a.toLowerCase()) : [];
-      }).concat(unresolvedCategories.map(v => v.toLowerCase().trim()));
+        if (t) {
+          rawAliases.add(t.label.toLowerCase());
+          t.aliases.forEach(a => rawAliases.add(a.toLowerCase()));
+          getVenueCategoryVariants(t.label).forEach(a => rawAliases.add(a.toLowerCase()));
+        }
+      });
+      unresolvedCategories.forEach(v => {
+        rawAliases.add(v.toLowerCase().trim());
+        getVenueCategoryVariants(v).forEach(a => rawAliases.add(a.toLowerCase()));
+      });
+      const aliasArray = Array.from(rawAliases);
+
       conditions.push(drizzleSql`(
         venue_type = ANY(${toPgArray(types)}::text[])
-        OR (venue_type IS NULL AND LOWER(TRIM(venue_category)) = ANY(${toPgArray(rawAliases)}::text[]))
+        OR LOWER(TRIM(venue_category)) = ANY(${toPgArray(aliasArray)}::text[])
       )`);
     }
 
@@ -2054,8 +2119,11 @@ export class DatabaseStorage implements IStorage {
       const locationConditions: ReturnType<typeof drizzleSql>[] = [];
       for (const loc of filters.locations) {
         if (loc.type === 'city' && loc.city) {
-          const normalizedCity = normalizeCityName(loc.city);
-          locationConditions.push(drizzleSql`LOWER(city) LIKE LOWER(${`%${normalizedCity}%`})`);
+          const cityVariants = getCityVariants(loc.city);
+          const perLocConditions = cityVariants.map(v => drizzleSql`LOWER(city) LIKE LOWER(${`%${v}%`})`);
+          if (perLocConditions.length > 0) {
+            locationConditions.push(drizzleSql`(${drizzleSql.join(perLocConditions, drizzleSql` OR `)})`);
+          }
         } else if (loc.type === 'map' && loc.lat !== undefined && loc.lng !== undefined && loc.radiusKm !== undefined) {
           locationConditions.push(drizzleSql`(
             6371 * acos(
@@ -2138,18 +2206,30 @@ export class DatabaseStorage implements IStorage {
     const orderClause = drizzleSql`ORDER BY ${order}, id`;
     const where = drizzleSql.join(conditions, drizzleSql` AND `); // 'value' may have added a condition
 
-    // Map pins: every match, only the columns pins/clusters/venue panel/card facts need
+    // Public columns: only what discovery, card view, and campaign planning need (excludes host, bundlePricePerDay, ownerId, etc.)
+    const publicColumns = drizzleSql`id, zone_id, name, category, display_format, resolution, duration_per_slot,
+      venue_name, location, city, state, pincode, latitude, longitude, venue_category,
+      avg_daily_footfall, traffic_type, time_of_day_activity, environment_type,
+      visibility, description, operating_hours_preset, custom_operating_hours_start,
+      custom_operating_hours_end, custom_operating_days, location_tags, custom_location_tags,
+      detailed_age_groups, gender_orientation, income_level, occupation_mix, lifestyle_tags,
+      avg_dwell_time, interest_segments, custom_audience_tags, user_intent, user_mood,
+      is_multi_screen, number_of_screens, price_per_day, bulk_booking_mandatory, min_booking_days,
+      loop_duration, max_brands_per_loop, playback_slots_per_hour, content_types_supported,
+      type, size, operational_hours, screen_images, surrounding_images, status,
+      venue_type, environment_class, venue_metrics, footfall_note, created_at`;
+
+    // Map pins: every match, only the slim columns pins/clusters/venue panel/card facts need
     const columns = filters.fields === 'pins'
       ? drizzleSql`id, name, venue_name, venue_category, venue_type, environment_class, latitude, longitude, city, state, location,
           price_per_day, is_multi_screen, number_of_screens, bulk_booking_mandatory, min_booking_days,
           category, type, size, display_format, duration_per_slot, loop_duration, max_brands_per_loop, playback_slots_per_hour,
-          avg_daily_footfall, avg_dwell_time, income_level, zone_id,
-          status, venue_attributes, footfall_note,
+          avg_daily_footfall, avg_dwell_time, income_level, zone_id, status, venue_metrics, footfall_note,
           custom_operating_hours_start, custom_operating_hours_end, operating_hours_preset, operational_hours,
           LEFT(description, 400) AS description,
-          screen_images[1:1] AS screen_images, images[1:1] AS images, surrounding_images[1:1] AS surrounding_images,
+          screen_images[1:1] AS screen_images, surrounding_images[1:1] AS surrounding_images,
           location_tags, lifestyle_tags, interest_segments, user_intent`
-      : drizzleSql`*`;
+      : publicColumns;
 
     const toScreen = (r: any) => {
       const screen = mapRowToCamel<Screen & { distanceKm?: number; zoneName?: string; zonePricePerDay?: number; zoneScreenCount?: number }>(r);
@@ -2166,6 +2246,16 @@ export class DatabaseStorage implements IStorage {
       if (r.distance_km !== undefined) screen.distanceKm = parseFloat(r.distance_km) || 0;
       delete (screen as any).searchText; // internal search column — never sent to browsers
       delete (screen as any).bundlePricePerDay; // internal admin column — never sent to browsers
+      delete (screen as any).host; // internal partner/supplier code — never sent to browsers
+      delete (screen as any).ownerId; // internal owner id — never sent to browsers
+      delete (screen as any).rejectionReason; // internal moderation reason — never sent to browsers
+      delete (screen as any).ownedByAdmin; // internal admin flag — never sent to browsers
+      delete (screen as any).dedupeKey; // internal duplicate fingerprint
+      delete (screen as any).importId; // internal bulk import tracking
+      delete (screen as any).lastTaggedAt;
+      delete (screen as any).lastTaggedLatitude;
+      delete (screen as any).lastTaggedLongitude;
+      delete (screen as any).images; // redundant deprecated array
       return screen as Screen;
     };
 
@@ -2198,7 +2288,7 @@ export class DatabaseStorage implements IStorage {
 
   async getScreenLocations() {
     const result = await db.execute(drizzleSql`
-      SELECT DISTINCT state, city FROM screens WHERE status = 'active' ORDER BY state, city
+      SELECT DISTINCT state, city FROM screens WHERE status IN ('active', 'approved') AND city IS NOT NULL ORDER BY state, city
     `);
     const states = new Set<string>();
     const citiesByState: Record<string, Set<string>> = {};
@@ -2413,15 +2503,21 @@ export class DatabaseStorage implements IStorage {
   async getScreenFilters(): Promise<{ cities: string[]; venueTypes: string[]; environmentTypes: string[]; tags: { id: string; name: string; displayName: string; category: string }[]; userIntents: string[]; locationTags: string[]; types: string[]; occupationMixes: string[]; userMoods: string[]; genderOrientations: string[]; incomeLevels: string[] }> {
     // Queries to extract distinct active filter values directly from the database
     
-    // 1. Unique Cities
+    // 1. Unique Cities — normalized to canonical names (deduped)
     const cityResult = await db.execute(drizzleSql`
-      SELECT DISTINCT city FROM screens WHERE status = 'active' AND city IS NOT NULL ORDER BY city
+      SELECT DISTINCT city FROM screens WHERE status IN ('active', 'approved') AND city IS NOT NULL ORDER BY city
     `);
-    const cities = (cityResult.rows as any[]).map(r => r.city).filter(Boolean);
+    const cities = [
+      ...new Set(
+        (cityResult.rows as any[])
+          .map(r => normalizeCityName(r.city))
+          .filter(Boolean)
+      )
+    ].sort();
 
     // 2. Unique Venue Types — normalized to canonical names (deduped)
     const venueResult = await db.execute(drizzleSql`
-      SELECT DISTINCT venue_category as venue_type FROM screens WHERE status = 'active' AND venue_category IS NOT NULL ORDER BY venue_category
+      SELECT DISTINCT venue_category as venue_type FROM screens WHERE status IN ('active', 'approved') AND venue_category IS NOT NULL ORDER BY venue_category
     `);
     const venueTypes = [
       ...new Set(
@@ -2649,6 +2745,43 @@ export class DatabaseStorage implements IStorage {
       zone: { zoneName, pricePerDay, minBookingDays, status, screenIds },
       screens: decoratedScreens as Screen[],
     };
+  }
+
+
+  async getZonesWithScreenCounts(): Promise<Array<{ id: string; name: string; pricePerDay: number; minBookingDays: number; screenCount: number }>> {
+    const zoneRows = await db
+      .select({
+        id: zones.id,
+        name: zones.name,
+        pricePerDay: zones.pricePerDay,
+        minBookingDays: zones.minBookingDays,
+        status: zones.status,
+      })
+      .from(zones)
+      .where(eq(zones.status, "active"))
+      .orderBy(asc(zones.name));
+
+    const screenCounts = await db
+      .select({
+        zoneId: screens.zoneId,
+        count: count(),
+      })
+      .from(screens)
+      .where(and(eq(screens.status, "active"), drizzleSql`${screens.zoneId} IS NOT NULL`))
+      .groupBy(screens.zoneId);
+
+    const countMap = new Map<string, number>();
+    for (const sc of screenCounts) {
+      if (sc.zoneId) countMap.set(sc.zoneId, Number(sc.count));
+    }
+
+    return zoneRows.map(z => ({
+      id: z.id,
+      name: z.name,
+      pricePerDay: z.pricePerDay,
+      minBookingDays: z.minBookingDays,
+      screenCount: countMap.get(z.id) || 0,
+    }));
   }
 }
 

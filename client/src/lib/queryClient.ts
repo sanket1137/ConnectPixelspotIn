@@ -9,6 +9,14 @@ async function throwIfResNotOk(res: Response) {
 }
 
 export async function getAuthHeaders(): Promise<HeadersInit> {
+  if (!auth.currentUser && typeof (auth as any).authStateReady === "function") {
+    try {
+      await (auth as any).authStateReady();
+    } catch {
+      // ignore auth state ready failure
+    }
+  }
+
   const user = auth.currentUser;
   if (user) {
     const token = await user.getIdToken();
