@@ -30,10 +30,13 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { logActivity } from "@/lib/activityLogger";
 import {
   calculateScreenPricePerDay,
   getScreenCountDisplay,
   calculateTotalPhysicalScreens,
+  getScreenPricing,
+  calculateInclusiveDays,
 } from "@shared/utils";
 import {
   ArrowLeft,
@@ -49,6 +52,8 @@ import {
   IndianRupee,
   Link2,
   Eye,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -111,6 +116,7 @@ export default function QuickCampaignFromCart() {
   // ── state
   const [step, setStep] = useState(0);
   const [screens, setScreens] = useState<Screen[]>([]);
+  const [screenQuantities, setScreenQuantities] = useState<Record<string, number>>({});
   const [loadState, setLoadState] = useState<"idle" | "loading" | "error" | "empty" | "done">("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [campaignDone, setCampaignDone] = useState(false);
@@ -132,10 +138,11 @@ export default function QuickCampaignFromCart() {
   });
 
   const days = form.watch("customDays") || 14;
-  const totalBudget = screens.reduce(
-    (sum, s) => sum + calculateScreenPricePerDay(s) * days,
-    0
-  );
+  const totalBudget = screens.reduce((sum, s) => {
+    const q = screenQuantities[s.id];
+    const pricing = getScreenPricing(s, q);
+    return sum + pricing.dailyTotal * days;
+  }, 0);
 
   // ── load screens from API using IDs saved in localStorage
   const loadScreens = useCallback(async () => {
@@ -143,10 +150,22 @@ export default function QuickCampaignFromCart() {
     setErrorMessage("");
     const raw = localStorage.getItem(SELECTED_SCREENS_KEY);
     let ids: string[] = [];
+    const loadedQtys: Record<string, number> = {};
 
     try {
       const parsed = JSON.parse(raw || "[]");
-      if (Array.isArray(parsed)) ids = parsed.filter(Boolean);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((item: any) => {
+          if (typeof item === "string" && item) {
+            ids.push(item);
+          } else if (item && typeof item === "object" && item.id) {
+            ids.push(item.id);
+            if (item.screensRequested) {
+              loadedQtys[item.id] = Number(item.screensRequested);
+            }
+          }
+        });
+      }
     } catch {
       ids = [];
     }
@@ -166,12 +185,24 @@ export default function QuickCampaignFromCart() {
         return;
       }
 
-      // Sync active screens in case some old IDs were not found
-      localStorage.setItem(
-        SELECTED_SCREENS_KEY,
-        JSON.stringify(data.map((s) => s.id))
-      );
       setScreens(data);
+      // Initialize quantities for multi-screens
+      const initialQtys: Record<string, number> = { ...loadedQtys };
+      data.forEach((s) => {
+        if (!initialQtys[s.id]) {
+          const pricing = getScreenPricing(s);
+          initialQtys[s.id] = pricing.requestedScreens;
+        }
+      });
+      setScreenQuantities(initialQtys);
+
+      // Resave structured cart in localStorage
+      const structuredCart = data.map((s) => ({
+        id: s.id,
+        screensRequested: initialQtys[s.id] || (s.bulkBookingMandatory ? (s.numberOfScreens || 1) : 1),
+      }));
+      localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(structuredCart));
+
       setLoadState("done");
     } catch (err: any) {
       console.error("Failed to load screens:", err);
@@ -184,13 +215,30 @@ export default function QuickCampaignFromCart() {
     loadScreens();
   }, [loadScreens]);
 
+  const updateQuantity = (screenId: string, val: number, total: number) => {
+    const clamped = Math.min(Math.max(1, Math.round(val || 1)), total);
+    setScreenQuantities((prev) => {
+      const next = { ...prev, [screenId]: clamped };
+      const structuredCart = screens.map((s) => ({
+        id: s.id,
+        screensRequested: s.id === screenId ? clamped : (next[s.id] || (s.bulkBookingMandatory ? (s.numberOfScreens || 1) : 1)),
+      }));
+      localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(structuredCart));
+      return next;
+    });
+  };
+
   // ── remove one screen from the selection
   const removeScreen = (id: string) => {
     const next = screens.filter((s) => s.id !== id);
     setScreens(next);
+    const structuredCart = next.map((s) => ({
+      id: s.id,
+      screensRequested: screenQuantities[s.id] || (s.bulkBookingMandatory ? (s.numberOfScreens || 1) : 1),
+    }));
     localStorage.setItem(
       SELECTED_SCREENS_KEY,
-      JSON.stringify(next.map((s) => s.id))
+      JSON.stringify(structuredCart)
     );
     if (next.length === 0) {
       toast({ title: "No screens left", description: "Add screens from Discovery.", variant: "destructive" });
@@ -203,7 +251,8 @@ export default function QuickCampaignFromCart() {
     mutationFn: async (data: CampaignForm) => {
       const startDate = new Date(data.startDate);
       const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + data.customDays);
+      // Exact inclusive duration: e.g. 4 days starting Oct 11 ends on Oct 14
+      endDate.setDate(endDate.getDate() + data.customDays - 1);
 
       const campRes = await apiRequest("POST", "/api/advertiser/campaigns", {
         name: data.name,
@@ -230,11 +279,13 @@ export default function QuickCampaignFromCart() {
 
       await Promise.all(
         screens.map((screen) => {
-          const price = calculateScreenPricePerDay(screen) * data.customDays;
+          const pricing = getScreenPricing(screen, screenQuantities[screen.id]);
+          const price = pricing.dailyTotal * data.customDays;
           return apiRequest("POST", "/api/advertiser/bookings", {
             screenId: screen.id,
             campaignId: campaign.id,
             price,
+            screensRequested: pricing.requestedScreens,
             startDate: startDate.toISOString(),
             endDate: endDate.toISOString(),
           });
@@ -282,7 +333,21 @@ export default function QuickCampaignFromCart() {
 
   const goNext = async () => {
     const ok = await canAdvance();
-    if (ok) setStep((s) => Math.min(s + 1, 3));
+    if (ok) {
+      const nextStep = Math.min(step + 1, 3);
+      setStep(nextStep);
+      logActivity({
+        actionType: "campaign_step_advance",
+        actionDetails: `Advanced to Step ${nextStep + 1} (${STEPS[nextStep]?.title}) in Quick Campaign`,
+        metadata: {
+          step: nextStep,
+          stepName: STEPS[nextStep]?.title,
+          campaignName: form.getValues("name") || "Untitled",
+          screensCount: screens.length,
+          totalPrice: grandTotal,
+        },
+      });
+    }
   };
 
   const goPrev = () => setStep((s) => Math.max(s - 1, 0));
@@ -414,50 +479,138 @@ export default function QuickCampaignFromCart() {
       {step === 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <ShoppingCart className="h-5 w-5 text-primary" />
-              Your Cart — {screens.length} screen{screens.length !== 1 ? "s" : ""} selected
+            <CardTitle className="flex items-center justify-between text-lg">
+              <span className="flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5 text-primary" />
+                Your Cart — {screens.length} venue{screens.length !== 1 ? "s" : ""} selected
+              </span>
+              <span className="text-sm font-semibold text-primary">
+                ₹{screens.reduce((sum, s) => sum + getScreenPricing(s, screenQuantities[s.id]).dailyTotal, 0).toLocaleString("en-IN")}/day
+              </span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2 max-h-[52vh] overflow-y-auto pr-1">
+          <CardContent className="space-y-4">
+            <div className="space-y-3 max-h-[56vh] overflow-y-auto pr-1">
               {screens.map((screen) => {
-                const pricePerDay = calculateScreenPricePerDay(screen);
+                const isMulti = Boolean(screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1);
+                const totalScreens = isMulti ? Math.max(1, Number(screen.numberOfScreens)) : 1;
+                const isBulkMandatory = isMulti && Boolean(screen.bulkBookingMandatory);
+                const requestedQty = screenQuantities[screen.id] || (isBulkMandatory ? totalScreens : 1);
+                const pricing = getScreenPricing(screen, requestedQty);
+
                 return (
                   <div
                     key={screen.id}
-                    className="flex items-center justify-between p-3 rounded-xl border bg-slate-50 gap-3"
+                    className="p-3.5 rounded-xl border bg-slate-50 space-y-2.5"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Monitor className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="text-sm font-semibold truncate">{screen.name}</p>
-                          {screen.isMultiScreen && screen.numberOfScreens && (
-                            <Badge variant="secondary" className="text-[10px] shrink-0">
-                              {getScreenCountDisplay(screen)}
-                            </Badge>
-                          )}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                          <Monitor className="h-4 w-4 text-primary" />
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          {[screen.city, screen.venueCategory].filter(Boolean).join(" · ")}
-                        </p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-semibold text-slate-900">{screen.name}</p>
+                            {isMulti && (
+                              <Badge
+                                variant={isBulkMandatory ? "default" : "secondary"}
+                                className={`text-[10px] shrink-0 ${
+                                  isBulkMandatory ? "bg-amber-500 hover:bg-amber-600 text-white" : ""
+                                }`}
+                              >
+                                {totalScreens} Screens Network {isBulkMandatory ? "(All Required)" : ""}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {[screen.city, screen.venueCategory].filter(Boolean).join(" · ")}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-primary">{fmtINR(pricePerDay)}/day</p>
-                      </div>
+
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-red-50"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-red-50 shrink-0"
                         onClick={() => removeScreen(screen.id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                    </div>
+
+                    {/* Quantity controls & Line-Item Breakdown */}
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      {isMulti && !isBulkMandatory ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-600 font-medium">Screens to book:</span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-7 w-7 rounded-md border-slate-300"
+                              disabled={pricing.requestedScreens <= 1}
+                              onClick={() => updateQuantity(screen.id, pricing.requestedScreens - 1, totalScreens)}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={totalScreens}
+                              value={pricing.requestedScreens}
+                              onChange={(e) => updateQuantity(screen.id, parseInt(e.target.value, 10) || 1, totalScreens)}
+                              className="h-7 w-14 text-center font-bold text-xs p-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-7 w-7 rounded-md border-slate-300"
+                              disabled={pricing.requestedScreens >= totalScreens}
+                              onClick={() => updateQuantity(screen.id, pricing.requestedScreens + 1, totalScreens)}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <span className="text-xs text-slate-500">of {totalScreens}</span>
+                          {pricing.requestedScreens < totalScreens && (
+                            <button
+                              type="button"
+                              onClick={() => updateQuantity(screen.id, totalScreens, totalScreens)}
+                              className="text-[11px] text-primary hover:underline font-semibold ml-1"
+                            >
+                              Select All
+                            </button>
+                          )}
+                        </div>
+                      ) : isMulti && isBulkMandatory ? (
+                        <div className="text-xs text-amber-800 font-medium flex items-center gap-1.5">
+                          <Badge variant="outline" className="text-[10px] border-amber-300 bg-amber-50 text-amber-800">
+                            Bulk Booking
+                          </Badge>
+                          All {totalScreens} screens booked together
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-600">Single display</div>
+                      )}
+
+                      {/* Pricing Breakdown */}
+                      <div className="text-right shrink-0">
+                        <div className="flex items-center gap-1 sm:justify-end text-xs">
+                          {isMulti ? (
+                            <span className="text-slate-600">
+                              ₹{pricing.unitPrice.toLocaleString("en-IN")}/screen × {pricing.requestedScreens} =
+                            </span>
+                          ) : null}
+                          <span className="text-sm font-bold text-primary">
+                            ₹{pricing.dailyTotal.toLocaleString("en-IN")}/day
+                          </span>
+                        </div>
+                        {pricing.minBookingDays > 1 && (
+                          <p className="text-[10px] text-amber-700">Min {pricing.minBookingDays} days booking</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -467,8 +620,21 @@ export default function QuickCampaignFromCart() {
             <Separator />
 
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">
-                {calculateTotalPhysicalScreens(screens)} physical screen{calculateTotalPhysicalScreens(screens) !== 1 ? "s" : ""}
+              <span className="text-muted-foreground font-medium">
+                Total:{" "}
+                {screens.reduce(
+                  (sum, s) =>
+                    sum + (screenQuantities[s.id] || (s.bulkBookingMandatory ? s.numberOfScreens || 1 : 1)),
+                  0
+                )}{" "}
+                physical screen
+                {screens.reduce(
+                  (sum, s) =>
+                    sum + (screenQuantities[s.id] || (s.bulkBookingMandatory ? s.numberOfScreens || 1 : 1)),
+                  0
+                ) !== 1
+                  ? "s"
+                  : ""}
               </span>
               <Button
                 variant="ghost"
@@ -483,7 +649,7 @@ export default function QuickCampaignFromCart() {
             <Alert className="bg-blue-50 border-blue-200 text-blue-800">
               <IndianRupee className="h-4 w-4" />
               <AlertDescription className="text-xs">
-                Pricing shown is per day. Total will be calculated once you set campaign duration.
+                Pricing shown is per day. Total campaign price will be computed from your selected duration.
               </AlertDescription>
             </Alert>
           </CardContent>
@@ -612,10 +778,10 @@ export default function QuickCampaignFromCart() {
                   )}
                   {form.watch("startDate") && days > 0 && (
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>End</span>
+                      <span>End (Inclusive)</span>
                       <span>{(() => {
                         const d = new Date(form.watch("startDate"));
-                        d.setDate(d.getDate() + days);
+                        d.setDate(d.getDate() + days - 1);
                         return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
                       })()}</span>
                     </div>
@@ -662,7 +828,14 @@ export default function QuickCampaignFromCart() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Screens</span>
-                <span className="font-semibold">{calculateTotalPhysicalScreens(screens)}</span>
+                <span className="font-semibold">
+                  {screens.reduce(
+                    (sum, s) =>
+                      sum + (screenQuantities[s.id] || (s.bulkBookingMandatory ? s.numberOfScreens || 1 : 1)),
+                    0
+                  )}{" "}
+                  screens ({screens.length} venues)
+                </span>
               </div>
               <Separator />
               <div className="flex justify-between text-base">

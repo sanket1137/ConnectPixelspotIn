@@ -8,6 +8,7 @@ import { useMetricRegistry } from "@/lib/metricRegistry";
 import { formatRupees, shortListingName, type VenueGroup } from "@/lib/venueGroups";
 import { directionsUrl, playsPerHour, priceInfo, screenFamily, screenPhotos, screenTypeLabel, primaryPhoto } from "@/lib/screenInfo";
 import { ScreenPhoto } from "@/components/discover/VenueTypeIcon";
+import { ScreenQuantityModal } from "@/components/screens/ScreenQuantityModal";
 
 interface ScreenDetailPanelProps {
   screen: Screen & { distanceKm?: number };
@@ -15,10 +16,11 @@ interface ScreenDetailPanelProps {
   similar: Array<{ screen: Screen; km: number | null }>;
   isAdded: boolean;
   priceOverride?: number;
+  selectedQuantity?: number;
   backLabel: string;
   onBack: () => void;
   onClose?: () => void; // mobile: close the whole sheet
-  onToggle: () => void;
+  onToggle: (quantity?: number) => void;
   onOpenScreen: (screen: Screen) => void;
   onOpenVenue?: () => void;
   zoneInfo?: ZoneInfo | null;
@@ -214,6 +216,7 @@ export function ScreenDetailPanel({
   similar,
   isAdded,
   priceOverride,
+  selectedQuantity,
   backLabel,
   onBack,
   onClose,
@@ -229,6 +232,20 @@ export function ScreenDetailPanel({
   const typeLabel = screenTypeLabel(screen);
   const price = priceInfo(screen, priceOverride);
   const [showFullAbout, setShowFullAbout] = useState(false);
+
+  const isMulti = Boolean(screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1);
+  const totalScreens = isMulti ? Math.max(1, Number(screen.numberOfScreens)) : 1;
+  const isBulkMandatory = isMulti && Boolean(screen.bulkBookingMandatory);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleButtonClick = () => {
+    if (isMulti && !isBulkMandatory) {
+      setIsModalOpen(true);
+    } else {
+      onToggle(isBulkMandatory ? totalScreens : 1);
+    }
+  };
 
   // Venue facts from stored attributes (flats, seats, employees…) + footfall/dwell + Est. metrics.
   // The venue's listings from the map are slim rows, so this screen's full row is used for itself.
@@ -464,25 +481,60 @@ export function ScreenDetailPanel({
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="text-lg font-bold text-slate-900 leading-tight">
-                {formatRupees(price.total)}
-                <span className="text-sm font-normal text-slate-500"> / day</span>
-                {price.isBulkMandatory && price.screens > 1 && <span className="text-sm font-medium text-slate-600"> · {price.screens} screens pkg</span>}
+                {formatRupees(price.perScreen)}
+                <span className="text-sm font-normal text-slate-500">
+                  {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 ? " / screen / day" : " / day"}
+                </span>
               </div>
               <div className="flex flex-wrap gap-x-2 text-[11px] text-slate-500 mt-0.5">
-                {price.isBulkMandatory && price.screens > 1 && <span>{formatRupees(price.perScreen)} per screen</span>}
+                {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && (
+                  <span>
+                    {price.isBulkMandatory
+                      ? `All ${price.screens} screens required · ${formatRupees(price.total)}/day total`
+                      : `${screen.numberOfScreens} screens network`}
+                  </span>
+                )}
                 {price.minDays !== null && <span>Min {price.minDays} days</span>}
               </div>
             </div>
             <Button
               className={`rounded-full h-11 px-5 font-semibold shrink-0 ${isAdded ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
-              onClick={onToggle}
+              onClick={handleButtonClick}
               aria-pressed={isAdded}
             >
-              {isAdded ? <><Check className="w-4 h-4 mr-1.5" /> Added</> : <><Plus className="w-4 h-4 mr-1.5" /> Add to campaign</>}
+              {isAdded ? (
+                <>
+                  <Check className="w-4 h-4 mr-1.5" />
+                  <span>Added ({selectedQuantity || (isBulkMandatory ? totalScreens : 1)})</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  <span>Add to Campaign</span>
+                </>
+              )}
             </Button>
           </div>
         )}
       </div>
+
+      {/* Screen Quantity Selection Popup Modal */}
+      {isMulti && !isBulkMandatory && (
+        <ScreenQuantityModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          screen={screen}
+          initialQuantity={selectedQuantity || 1}
+          priceOverride={priceOverride}
+          isAlreadyAdded={isAdded}
+          onConfirm={(_s, qty) => {
+            onToggle(qty);
+          }}
+          onRemove={() => {
+            onToggle();
+          }}
+        />
+      )}
     </div>
   );
 }

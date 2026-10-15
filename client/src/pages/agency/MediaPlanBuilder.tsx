@@ -23,7 +23,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Map, AdvancedMarker, InfoWindow, useMap } from "@vis.gl/react-google-maps";
 import { VENUE_CATEGORIES } from "@shared/constants";
-import { calculateScreenPricePerDay, getScreenCountDisplay } from "@shared/utils";
+import { calculateScreenPricePerDay, getScreenCountDisplay, calculateInclusiveDays } from "@shared/utils";
 import { SearchAutocomplete } from "@/components/map/SearchAutocomplete";
 import { Slider } from "@/components/ui/slider";
 import { ScreenDetailsModal } from "@/components/screens/ScreenDetailsModal";
@@ -807,13 +807,7 @@ export default function MediaPlanBuilder() {
 
   // ── Calculate days between campaign start & end date (inclusive) ──
   const getCampaignDays = (startStr: string, endStr: string): number => {
-    if (!startStr || !endStr) return 1;
-    const start = new Date(startStr);
-    const end = new Date(endStr);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
-    const diffMs = Math.abs(end.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    return Math.max(1, diffDays + 1); // Inclusive duration (e.g. Oct 1 to Oct 30 = 30 days)
+    return calculateInclusiveDays(startStr, endStr);
   };
 
   const handleStartDateChange = (val: string) => {

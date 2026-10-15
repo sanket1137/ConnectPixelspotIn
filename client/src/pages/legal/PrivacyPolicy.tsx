@@ -111,6 +111,7 @@ export default function PrivacyPolicy() {
             <h2 className="text-2xl font-semibold mb-4">6. Data Retention</h2>
             <ul className="list-disc pl-6 text-muted-foreground space-y-2">
               <li><strong>Active Accounts:</strong> Your data is retained as long as your account is active and you continue to use the platform.</li>
+              <li><strong>Proof of Play & Broadcast Verification Media:</strong> Execution photographs, video recordings, playback software run logs, and verification spreadsheets uploaded as Proof of Play are retained on active cloud storage (Google Cloud Storage) for thirty (30) calendar days following campaign completion. After this 30-day window, media assets are subject to administrative clean-up and permanent removal from cloud storage. Textual execution metadata and settlement records are retained perpetually.</li>
               <li><strong>Financial Records:</strong> Transaction records, invoices, and payment data are retained for a minimum of 8 years as required under Indian tax and financial laws.</li>
               <li><strong>Account Deletion:</strong> You may request deletion of your account and associated data by contacting us. We will process deletion requests subject to legal retention obligations.</li>
             </ul>

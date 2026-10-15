@@ -1,11 +1,7 @@
 import type { Screen } from "@shared/schema";
-import { calculateScreenPricePerDay } from "@shared/utils";
+import { calculateScreenPricePerDay, getScreenPricing } from "@shared/utils";
 import { getPlaysPerHour, getVenueFamily, type VenueFamily } from "@shared/venueTypes";
 import { getVenueType } from "@shared/venueTaxonomy";
-import { screenCount } from "@/lib/venueGroups";
-
-// Small, display-ready facts about one listing, shared by the result card and the detail panel.
-// Every helper returns null when the data isn't there, so callers simply skip the line.
 
 // Family from the canonical venue_type (phase 3); keyword guess only for rows not typed yet
 export function screenFamily(s: Screen): VenueFamily {
@@ -38,22 +34,17 @@ export interface PriceInfo {
 }
 
 export function priceInfo(s: Screen, override?: number, quantity?: number): PriceInfo {
-  let basePrice = Number(s.pricePerDay) || 0;
-  if (s.zonePricePerDay && s.zoneScreenCount && s.zoneScreenCount > 0) {
-    basePrice = s.zonePricePerDay / s.zoneScreenCount;
-  }
-  const isBulk = Boolean(s.isMultiScreen && s.numberOfScreens && s.numberOfScreens > 1 && s.bulkBookingMandatory);
-  const totalScreens = s.isMultiScreen && s.numberOfScreens && s.numberOfScreens > 1 ? s.numberOfScreens : 1;
-  const selectedScreens = isBulk ? totalScreens : (quantity && quantity >= 1 ? quantity : 1);
-  const total = override ?? (isBulk ? basePrice * totalScreens : basePrice * selectedScreens);
+  const p = getScreenPricing(s, quantity);
   return {
-    total,
-    screens: isBulk ? totalScreens : selectedScreens,
-    perScreen: basePrice,
-    isBulkMandatory: isBulk,
-    minDays: s.minBookingDays && s.minBookingDays > 1 ? s.minBookingDays : null,
+    total: override ?? p.dailyTotal,
+    screens: p.requestedScreens,
+    perScreen: p.unitPrice,
+    isBulkMandatory: p.isBulkMandatory,
+    minDays: p.minBookingDays > 1 ? p.minBookingDays : null,
   };
 }
+
+
 
 // "LED Video Wall · 16 x 9 ft" — size only when it has a number in it ("Not specified" is skipped)
 export function formatLine(s: Screen): string | null {

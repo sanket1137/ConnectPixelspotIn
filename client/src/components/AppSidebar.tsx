@@ -24,6 +24,7 @@ import {
   Menu,
   LifeBuoy,
   ImagePlus,
+  Clock,
 } from "lucide-react";
 
 import logo from "@assets/pixelspot-logo.png";
@@ -49,6 +50,8 @@ export function AppSidebar() {
     { title: "Manage Screens", url: "/admin/screens", icon: Monitor },
     { title: "Screen Images", url: "/admin/screen-images", icon: ImagePlus },
     { title: "Campaigns & Bookings", url: "/admin/bookings", icon: FileText },
+    { title: "Proof of Play", url: "/admin/proof-of-play", icon: Shield },
+    { title: "Abandoned Drafts & Activity", url: "/admin/abandoned-drafts", icon: Clock },
     { title: "Media Plans & Agency Tracker", url: "/admin/media-plans", icon: ClipboardList },
     { title: "Payments & Payouts", url: "/admin/payments", icon: CreditCard },
     { title: "AI Conversations", url: "/admin/ai-conversations", icon: MessageSquare },
@@ -64,6 +67,7 @@ export function AppSidebar() {
     { title: "My Screens", url: "/owner/screens", icon: Monitor },
     { title: "Add Screen", url: "/owner/screens/new", icon: PlusCircle },
     { title: "Booking Requests", url: "/owner/requests", icon: Calendar },
+    { title: "Proof of Play", url: "/owner/proof-of-play", icon: FileText },
     { title: "Earnings", url: "/owner/earnings", icon: DollarSign },
     { title: "Support", url: "/tickets", icon: LifeBuoy },
     { title: "Profile", url: "/owner/profile", icon: UserCircle },
@@ -73,6 +77,7 @@ export function AppSidebar() {
     { title: "Dashboard", url: "/advertiser", icon: LayoutDashboard },
     { title: "Find Screens", url: "/advertiser/discover", icon: MapPin },
     { title: "My Campaigns", url: "/advertiser/campaigns", icon: FileText },
+    { title: "Proof of Play", url: "/advertiser/proof-of-play", icon: Briefcase },
     { title: "Create Campaign", url: "/advertiser/campaigns/new", icon: PlusCircle },
     { title: "AI Campaign Advisor", url: "/advertiser/ai-advisor", icon: Sparkles },
     { title: "Payments", url: "/advertiser/payments", icon: CreditCard },
@@ -85,6 +90,7 @@ export function AppSidebar() {
     { title: "Media Plans", url: "/agency/media-plans", icon: ClipboardList },
     { title: "Find Screens", url: "/agency/discover", icon: MapPin },
     { title: "My Campaigns", url: "/agency/campaigns", icon: Briefcase },
+    { title: "Proof of Play", url: "/advertiser/proof-of-play", icon: FileText },
     { title: "AI Campaign Advisor", url: "/agency/ai-advisor", icon: Sparkles },
     { title: "Payments", url: "/agency/payments", icon: CreditCard },
     { title: "Support", url: "/tickets", icon: LifeBuoy },

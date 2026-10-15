@@ -33,6 +33,7 @@ interface BookingWithDetails {
     name: string;
     location: string;
     city: string;
+    host?: string | null;
   };
   campaign: {
     name: string;
@@ -212,9 +213,16 @@ export default function ManageBookings() {
             <CardTitle className="text-lg">
               {booking.screen?.name || "Screen Deleted"}
             </CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
-              {booking.screen ? `${booking.screen.location}, ${booking.screen.city}` : "Screen no longer available"}
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <p className="text-sm text-muted-foreground">
+                {booking.screen ? `${booking.screen.location}, ${booking.screen.city}` : "Screen no longer available"}
+              </p>
+              {(booking.screen?.host || booking.owner?.companyName || booking.owner?.name) && (
+                <Badge variant="outline" className="text-[11px] font-semibold bg-slate-50 text-slate-700 border-slate-300">
+                  Host: {booking.screen?.host || booking.owner?.companyName || booking.owner?.name}
+                </Badge>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
               Campaign: {booking.campaign?.name || "Unknown Campaign"}
             </p>
@@ -674,6 +682,14 @@ export default function ManageBookings() {
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Screen</span>
                     <span className="font-medium">{selectedBooking.screen.name}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-sm text-muted-foreground flex items-center gap-1.5 font-medium">
+                      <Building className="h-4 w-4 text-primary" /> Host / Network Code
+                    </span>
+                    <Badge variant="outline" className="font-semibold text-xs bg-slate-50 border-slate-300 text-slate-900">
+                      {selectedBooking.screen.host || selectedBooking.owner?.companyName || selectedBooking.owner?.name || "Direct / Admin"}
+                    </Badge>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Location</span>

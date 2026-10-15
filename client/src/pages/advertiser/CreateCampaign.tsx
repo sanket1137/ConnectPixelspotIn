@@ -13,8 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
 import { VENUE_CATEGORIES } from "@shared/constants";
-import { ArrowLeft, Target, MapPin, Filter as FilterIcon, Check, Map as MapIcon, Image as ImageIcon, X, Trash2, Search, SlidersHorizontal, ChevronRight, ChevronLeft, AlertTriangle, ArrowRight, LayoutGrid, Users, Layers } from "lucide-react";
-import { calculateScreenCampaignPrice, getScreenCountDisplay, calculateTotalPhysicalScreens, calculateScreenPricePerDay } from "@shared/utils";
+import { calculateScreenCampaignPrice, getScreenCountDisplay, calculateTotalPhysicalScreens, calculateScreenPricePerDay, calculateInclusiveDays, getScreenPricing } from "@shared/utils";
 import {
   Dialog,
   DialogContent,
@@ -505,10 +504,7 @@ export default function CreateCampaign() {
 
   // Calculate totals
   const calculateDays = () => {
-    const start = new Date(form.watch("startDate"));
-    const end = new Date(form.watch("endDate"));
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+    return calculateInclusiveDays(form.watch("startDate"), form.watch("endDate"));
   };
 
   const durationDays = calculateDays();
@@ -561,13 +557,17 @@ export default function CreateCampaign() {
 
       // Create bookings for each selected screen
       const bookingPromises = selectedScreensFull.map(screen => {
-        const dailyPrice = zonePriceOverrides.get(screen.id) ?? calculateScreenPricePerDay(screen);
-        const price = dailyPrice * durationDays;
+        const pricing = getScreenPricing(
+          zonePriceOverrides.has(screen.id) ? { ...screen, pricePerDay: zonePriceOverrides.get(screen.id) } : screen,
+          (screen as any).screensRequested
+        );
+        const price = pricing.dailyTotal * durationDays;
 
         return apiRequest("POST", "/api/advertiser/bookings", {
           screenId: screen.id,
           campaignId: campaign.id,
           price,
+          screensRequested: pricing.requestedScreens,
           startDate: new Date(data.startDate).toISOString(),
           endDate: new Date(data.endDate).toISOString(),
         });

@@ -34,6 +34,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { printMediaPlan } from "@/lib/mediaPlanPdf";
 import { ScreenPickerModal } from "@/pages/agency/MediaPlanBuilder";
+import { calculateInclusiveDays } from "@shared/utils";
 
 type UserResult = {
   id: string;
@@ -51,13 +52,7 @@ type UserResult = {
 
 // Helper: Calculate inclusive campaign duration in days
 function getCampaignDays(startStr: string, endStr: string): number {
-  if (!startStr || !endStr) return 1;
-  const start = new Date(startStr);
-  const end = new Date(endStr);
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
-  const diffMs = Math.abs(end.getTime() - start.getTime());
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  return Math.max(1, diffDays + 1);
+  return calculateInclusiveDays(startStr, endStr);
 }
 
 // Helper: Format currency INR
@@ -96,7 +91,9 @@ export default function AdminMediaPlanBuilder() {
   // Items & Screen Picker state
   const [selectedScreens, setSelectedScreens] = useState<any[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  type ActiveAction = "idle" | "save_only" | "save_and_generate" | "export_pdf";
+  const [activeAction, setActiveAction] = useState<ActiveAction>("idle");
+  const isBusy = activeAction !== "idle";
 
   // Load existing plan if editing
   const { data: planData, isLoading: loadingPlan } = useQuery<any>({
@@ -230,7 +227,6 @@ export default function AdminMediaPlanBuilder() {
       return null;
     }
 
-    setIsSaving(true);
     try {
       // First ensure a lead/user record exists in database
       let finalUserId = selectedUserId;
@@ -249,7 +245,7 @@ export default function AdminMediaPlanBuilder() {
 
       const itemsPayload = selectedScreens.map((s) => ({
         screenId: s.id,
-        days: campaignDays,
+        days: Math.max(1, Math.round(Number(campaignDays) || 1)),
       }));
 
       const payload = {
@@ -260,7 +256,7 @@ export default function AdminMediaPlanBuilder() {
         clientBrand: clientBrand || clientName.trim(),
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
-        agencyMargin: Number(agencyMargin) || 0,
+        agencyMargin: Math.round(Number(agencyMargin) || 0),
         notes,
         items: itemsPayload,
       };
@@ -288,35 +284,70 @@ export default function AdminMediaPlanBuilder() {
       return savedPlan;
     } catch (err: any) {
       console.error("Save media plan error:", err);
+      let errorMsg = err.message || "An unexpected error occurred while saving.";
+      if (errorMsg.includes("504") || errorMsg.includes("Gateway Time-out")) {
+        errorMsg = "Server request timed out (504 Gateway Time-out). The operation took too long. Please try again.";
+      }
       toast({
         title: "Failed to save media plan",
-        description: err.message || "An unexpected error occurred while saving.",
+        description: errorMsg,
         variant: "destructive",
       });
       return null;
-    } finally {
-      setIsSaving(false);
     }
   };
 
   const handleSaveOnly = async () => {
-    const saved = await savePlan();
-    if (saved) {
-      toast({ title: "Media plan saved successfully! ✓" });
+    setActiveAction("save_only");
+    try {
+      const saved = await savePlan();
+      if (saved) {
+        toast({ title: "Media plan saved successfully! ✓" });
+      }
+    } finally {
+      setActiveAction("idle");
     }
   };
 
   const handleSaveAndGenerate = async () => {
-    const saved = await savePlan();
-    if (saved) {
-      toast({ title: "Media plan saved! Exporting PDF proposal... ✓" });
-      try {
+    setActiveAction("save_and_generate");
+    try {
+      const saved = await savePlan();
+      if (saved) {
+        toast({ title: "Media plan saved! Exporting PDF proposal... ✓" });
         const pdfRes = await apiRequest("GET", `/api/admin/media-plans/${saved.id}/pdf-data`);
         const pdfData = await pdfRes.json();
         printMediaPlan(pdfData);
-      } catch (pdfErr) {
-        console.error("PDF generation error:", pdfErr);
       }
+    } catch (pdfErr: any) {
+      console.error("PDF generation error:", pdfErr);
+      toast({
+        title: "PDF generation failed",
+        description: pdfErr.message || "Failed to load PDF proposal data",
+        variant: "destructive",
+      });
+    } finally {
+      setActiveAction("idle");
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!currentPlanId) return;
+    setActiveAction("export_pdf");
+    try {
+      toast({ title: "Fetching proposal data for PDF... ✓" });
+      const pdfRes = await apiRequest("GET", `/api/admin/media-plans/${currentPlanId}/pdf-data`);
+      const pdfData = await pdfRes.json();
+      printMediaPlan(pdfData);
+    } catch (pdfErr: any) {
+      console.error("PDF export error:", pdfErr);
+      toast({
+        title: "PDF export failed",
+        description: pdfErr.message || "Failed to load PDF proposal data",
+        variant: "destructive",
+      });
+    } finally {
+      setActiveAction("idle");
     }
   };
 
@@ -400,38 +431,65 @@ export default function AdminMediaPlanBuilder() {
             variant="outline"
             size="sm"
             onClick={() => setLocation("/admin/media-plans")}
+            disabled={isBusy}
           >
             Cancel
           </Button>
+          {currentPlanId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPdf}
+              disabled={isBusy}
+              className="gap-1.5 font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              {activeAction === "export_pdf" ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+                  <span>Exporting…</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span>Export PDF</span>
+                </>
+              )}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
             onClick={handleSaveOnly}
-            disabled={isSaving || !clientName.trim() || clientMobile.replace(/\D/g, "").length < 10}
+            disabled={isBusy || !clientName.trim() || clientMobile.replace(/\D/g, "").length < 10}
             className="gap-1.5 font-semibold text-slate-700 hover:bg-slate-100"
           >
-            {isSaving ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
+            {activeAction === "save_only" ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Saving…</span>
+              </>
             ) : (
-              <Save className="w-4 h-4 text-slate-600" />
+              <>
+                <Save className="w-4 h-4 text-slate-600" />
+                <span>Save Plan</span>
+              </>
             )}
-            Save Plan
           </Button>
           <Button
             size="sm"
             onClick={handleSaveAndGenerate}
-            disabled={isSaving || !clientName.trim() || clientMobile.replace(/\D/g, "").length < 10}
+            disabled={isBusy || !clientName.trim() || clientMobile.replace(/\D/g, "").length < 10}
             className="gap-1.5 font-semibold bg-primary hover:bg-primary/90"
           >
-            {isSaving ? (
+            {activeAction === "save_and_generate" ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                Saving…
+                <span>Saving & Generating…</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                Save & Generate PDF
+                <span>Save & Generate PDF</span>
               </>
             )}
           </Button>

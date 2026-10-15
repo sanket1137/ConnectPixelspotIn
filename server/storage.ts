@@ -259,9 +259,15 @@ export interface IStorage {
   createProofOfPlay(proof: InsertProofOfPlay): Promise<ProofOfPlay>;
   getProofOfPlay(id: string): Promise<ProofOfPlay | undefined>;
   getProofOfPlayByBooking(bookingId: string): Promise<ProofOfPlay[]>;
+  getProofOfPlayByCampaign(campaignId: string): Promise<ProofOfPlay[]>;
   getProofOfPlayByOwner(ownerId: string): Promise<ProofOfPlay[]>;
   getAllProofOfPlay(): Promise<ProofOfPlay[]>;
   updateProofOfPlay(id: string, data: Partial<ProofOfPlay>): Promise<ProofOfPlay | undefined>;
+  deleteProofOfPlay(id: string): Promise<boolean>;
+  getAllProofOfPlayWithDetails(): Promise<any[]>;
+  getOwnerProofBookings(ownerId: string): Promise<any[]>;
+  getAdvertiserProofBookings(advertiserId: string): Promise<any[]>;
+  getProofCleanupCandidates(): Promise<any[]>;
 
   // Booking extended methods
   updateBooking(id: string, data: Partial<Booking>): Promise<Booking | undefined>;
@@ -1571,6 +1577,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(proofOfPlay.createdAt));
   }
 
+  async getProofOfPlayByCampaign(campaignId: string): Promise<ProofOfPlay[]> {
+    return await db.select().from(proofOfPlay)
+      .where(eq(proofOfPlay.campaignId, campaignId))
+      .orderBy(desc(proofOfPlay.createdAt));
+  }
+
   async getAllProofOfPlay(): Promise<ProofOfPlay[]> {
     return await db.select().from(proofOfPlay).orderBy(desc(proofOfPlay.createdAt));
   }
@@ -1578,6 +1590,160 @@ export class DatabaseStorage implements IStorage {
   async updateProofOfPlay(id: string, data: Partial<ProofOfPlay>): Promise<ProofOfPlay | undefined> {
     const [proof] = await db.update(proofOfPlay).set(data).where(eq(proofOfPlay.id, id)).returning();
     return proof || undefined;
+  }
+
+  async deleteProofOfPlay(id: string): Promise<boolean> {
+    const [deleted] = await db.delete(proofOfPlay).where(eq(proofOfPlay.id, id)).returning();
+    return !!deleted;
+  }
+
+  async getAllProofOfPlayWithDetails(): Promise<any[]> {
+    const result = await db.select({
+      proof: proofOfPlay,
+      booking: bookings,
+      screen: screens,
+      campaign: campaigns,
+      advertiser: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        companyName: users.companyName,
+      },
+    })
+    .from(proofOfPlay)
+    .leftJoin(bookings, eq(proofOfPlay.bookingId, bookings.id))
+    .leftJoin(screens, eq(proofOfPlay.screenId, screens.id))
+    .leftJoin(campaigns, eq(proofOfPlay.campaignId, campaigns.id))
+    .leftJoin(users, eq(campaigns.advertiserId, users.id))
+    .orderBy(desc(proofOfPlay.createdAt));
+
+    return result.map(r => ({
+      ...r.proof,
+      booking: r.booking,
+      screen: r.screen,
+      campaign: r.campaign,
+      advertiser: r.advertiser,
+    }));
+  }
+
+  async getOwnerProofBookings(ownerId: string): Promise<any[]> {
+    const ownerBookings = await db.select({
+      booking: bookings,
+      screen: screens,
+      campaign: campaigns,
+      advertiser: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        companyName: users.companyName,
+      },
+    })
+    .from(bookings)
+    .innerJoin(screens, and(eq(bookings.screenId, screens.id), eq(screens.ownerId, ownerId)))
+    .leftJoin(campaigns, eq(bookings.campaignId, campaigns.id))
+    .leftJoin(users, eq(campaigns.advertiserId, users.id))
+    .orderBy(desc(bookings.createdAt));
+
+    const bookingIds = ownerBookings.map(b => b.booking.id);
+    const proofs = bookingIds.length > 0
+      ? await db.select().from(proofOfPlay).where(inArray(proofOfPlay.bookingId, bookingIds)).orderBy(desc(proofOfPlay.createdAt))
+      : [];
+
+    return ownerBookings.map(ob => {
+      const bProofs = proofs.filter(p => p.bookingId === ob.booking.id);
+      return {
+        ...ob.booking,
+        screen: ob.screen,
+        campaign: ob.campaign,
+        advertiser: ob.advertiser,
+        proofs: bProofs,
+        latestProof: bProofs[0] || null,
+      };
+    });
+  }
+
+  async getAdvertiserProofBookings(advertiserId: string): Promise<any[]> {
+    const advertiserBookings = await db.select({
+      booking: bookings,
+      screen: screens,
+      campaign: campaigns,
+      owner: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        companyName: users.companyName,
+      },
+    })
+    .from(bookings)
+    .innerJoin(campaigns, and(eq(bookings.campaignId, campaigns.id), eq(campaigns.advertiserId, advertiserId)))
+    .leftJoin(screens, eq(bookings.screenId, screens.id))
+    .leftJoin(users, eq(screens.ownerId, users.id))
+    .orderBy(desc(bookings.createdAt));
+
+    const bookingIds = advertiserBookings.map(b => b.booking.id);
+    const proofs = bookingIds.length > 0
+      ? await db.select().from(proofOfPlay).where(inArray(proofOfPlay.bookingId, bookingIds)).orderBy(desc(proofOfPlay.createdAt))
+      : [];
+
+    return advertiserBookings.map(ab => {
+      const bProofs = proofs.filter(p => p.bookingId === ab.booking.id);
+      return {
+        ...ab.booking,
+        screen: ab.screen,
+        campaign: ab.campaign,
+        owner: ab.owner,
+        proofs: bProofs,
+        latestProof: bProofs[0] || null,
+      };
+    });
+  }
+
+  async getProofCleanupCandidates(): Promise<any[]> {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const candidates = await db.select({
+      proof: proofOfPlay,
+      booking: bookings,
+      screen: screens,
+      campaign: campaigns,
+      advertiser: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        companyName: users.companyName,
+      },
+    })
+    .from(proofOfPlay)
+    .innerJoin(bookings, eq(proofOfPlay.bookingId, bookings.id))
+    .leftJoin(screens, eq(proofOfPlay.screenId, screens.id))
+    .leftJoin(campaigns, eq(proofOfPlay.campaignId, campaigns.id))
+    .leftJoin(users, eq(campaigns.advertiserId, users.id))
+    .where(
+      and(
+        or(
+          lte(bookings.endDate, thirtyDaysAgo),
+          lte(proofOfPlay.cleanupEligibleAt, now)
+        ),
+        or(
+          isNull(proofOfPlay.cleanupStatus),
+          eq(proofOfPlay.cleanupStatus, "active"),
+          and(
+            eq(proofOfPlay.cleanupStatus, "snoozed"),
+            lte(proofOfPlay.snoozedUntil, now)
+          )
+        )
+      )
+    )
+    .orderBy(asc(bookings.endDate));
+
+    return candidates.map(c => ({
+      ...c.proof,
+      booking: c.booking,
+      screen: c.screen,
+      campaign: c.campaign,
+      advertiser: c.advertiser,
+    }));
   }
 
   // ── Booking extended methods ──────────────────

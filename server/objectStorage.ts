@@ -221,6 +221,38 @@ export class ObjectStorageService {
       requestedPermission: requestedPermission ?? ObjectPermission.READ,
     });
   }
+
+  async deleteObjectEntityFile(rawPath: string): Promise<boolean> {
+    try {
+      const normalizedPath = this.normalizeObjectEntityPath(rawPath);
+      let objectFile: File;
+      if (normalizedPath.startsWith("/objects/")) {
+        const parts = normalizedPath.slice(1).split("/");
+        const entityId = parts.slice(1).join("/");
+        let entityDir = this.getPrivateObjectDir();
+        if (!entityDir.endsWith("/")) {
+          entityDir = `${entityDir}/`;
+        }
+        const objectEntityPath = `${entityDir}${entityId}`;
+        const { bucketName, objectName } = parseObjectPath(objectEntityPath);
+        const bucket = objectStorageClient.bucket(bucketName);
+        objectFile = bucket.file(objectName);
+      } else {
+        const { bucketName, objectName } = parseObjectPath(normalizedPath);
+        const bucket = objectStorageClient.bucket(bucketName);
+        objectFile = bucket.file(objectName);
+      }
+      const [exists] = await objectFile.exists();
+      if (exists) {
+        await objectFile.delete({ ignoreNotFound: true });
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn("Failed to delete object storage file:", rawPath, err);
+      return false;
+    }
+  }
 }
 
 function parseObjectPath(path: string): {

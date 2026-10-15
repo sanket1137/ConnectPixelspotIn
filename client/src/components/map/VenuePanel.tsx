@@ -169,7 +169,11 @@ export function VenuePanel({
               </span>
             </div>
             {specLine(s) && <p className="text-xs text-slate-500 line-clamp-1">{specLine(s)}</p>}
-            <p className="text-xs text-slate-600">Your ad plays on all {n} screens together.</p>
+            <p className="text-xs text-slate-600">
+              {s.bulkBookingMandatory
+                ? `Your ad plays on all ${n} screens together.`
+                : `Flexible multi-screen network (${n} screens at venue).`}
+            </p>
             <div className="flex items-center gap-2 flex-wrap mt-0.5">
               {plays && <span className="text-[11px] text-slate-500">{plays}</span>}
               <MinDays days={s.minBookingDays} />
@@ -180,27 +184,41 @@ export function VenuePanel({
         <div className="flex items-center justify-between gap-3 px-4 pb-4">
           <div>
             <div className="text-lg font-bold text-slate-900 leading-none">
-              {formatRupees(total)}
-              <span className="text-sm font-normal text-slate-500"> / day</span>
+              {formatRupees(s.bulkBookingMandatory ? total : perScreen)}
+              <span className="text-sm font-normal text-slate-500">
+                {s.bulkBookingMandatory ? " / day" : " / screen / day"}
+              </span>
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
-              for all {n} screens{perScreen > 0 ? ` · ${formatRupees(perScreen)} per screen` : ""}
+              {s.bulkBookingMandatory
+                ? `for all ${n} screens · ${formatRupees(perScreen)} per screen`
+                : `${n} screens network · select quantity`}
             </div>
           </div>
           <Button
             size="sm"
             variant={added ? "default" : "outline"}
             className={`rounded-full h-10 px-4 font-semibold ${added ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
-            onClick={() => onToggle(s)}
+            onClick={() => {
+              if (!s.bulkBookingMandatory && !added) {
+                onOpenDetails(s);
+              } else {
+                onToggle(s);
+              }
+            }}
             aria-pressed={added}
           >
             {added ? (
               <>
                 <Check className="w-4 h-4 mr-1.5" /> Added
               </>
-            ) : (
+            ) : s.bulkBookingMandatory ? (
               <>
                 <Plus className="w-4 h-4 mr-1.5" /> Add package
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4 mr-1.5" /> Select screens
               </>
             )}
           </Button>

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { calculateInclusiveDays } from "@shared/utils";
 import {
   Table,
   TableBody,
@@ -141,13 +142,7 @@ function fmtCurrency(amount: number) {
 }
 
 function calculateCampaignDays(startStr: string, endStr: string): number {
-  if (!startStr || !endStr) return 1;
-  const start = new Date(startStr);
-  const end = new Date(endStr);
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
-  const diffMs = Math.abs(end.getTime() - start.getTime());
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  return Math.max(1, diffDays + 1);
+  return calculateInclusiveDays(startStr, endStr);
 }
 
 export default function AdminMediaPlans() {

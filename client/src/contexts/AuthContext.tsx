@@ -10,6 +10,7 @@ import { auth } from "@/lib/firebase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
+import { logActivity } from "@/lib/activityLogger";
 
 interface AuthContextType {
   firebaseUser: FirebaseUser | null;
@@ -110,6 +111,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // the race condition where /api/auth/me fires before the backend
       // user record is ready or the token has propagated
       queryClient.setQueryData(["/api/auth/me"], backendUser);
+      logActivity({
+        actionType: "user_login",
+        actionDetails: `User logged in: ${backendUser.name || backendUser.email} (${backendUser.role})`,
+        metadata: {
+          userId: backendUser.id,
+          email: backendUser.email,
+          role: backendUser.role,
+        },
+      });
     },
   });
 

@@ -33,6 +33,7 @@ import { VENUE_FAMILIES, parseSearchQuery, resolveVenueType, typesInFamily } fro
 import { screenFamily, priceInfo, primaryPhoto, localityLine } from "@/lib/screenInfo";
 import { ScreenPhoto } from "@/components/discover/VenueTypeIcon";
 import { formatRupees } from "@/lib/venueGroups";
+import { logActivity } from "@/lib/activityLogger";
 import { venuesInView, type MapViewport } from "@/lib/mapClusters";
 
 const SELECTED_SCREENS_KEY = "selectedScreenIds";
@@ -131,6 +132,7 @@ export default function DiscoverScreens() {
   const { user } = useAuth();
 
   const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set());
+  const [selectedScreenQuantities, setSelectedScreenQuantities] = useState<globalThis.Map<string, number>>(new globalThis.Map());
   const [hoveredScreenId, setHoveredScreenId] = useState<string | null>(null);
   // Sidebar: results ↔ screen detail ↔ venue (mirrored in the URL)
   const { panel, setPanel } = useDiscoverPanel();
@@ -196,7 +198,20 @@ export default function DiscoverScreens() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          setSelectedScreenIds(new Set(parsed));
+          const ids: string[] = [];
+          const qtys = new globalThis.Map<string, number>();
+          parsed.forEach((item: any) => {
+            if (typeof item === "string" && item) {
+              ids.push(item);
+            } else if (item && typeof item === "object" && item.id) {
+              ids.push(item.id);
+              if (item.screensRequested) {
+                qtys.set(item.id, Number(item.screensRequested));
+              }
+            }
+          });
+          setSelectedScreenIds(new Set(ids));
+          setSelectedScreenQuantities(qtys);
         }
       } catch (e) {
         console.error("Failed to parse selected screens from localStorage", e);
@@ -889,24 +904,81 @@ export default function DiscoverScreens() {
     );
   };
 
-  const toggleScreenSelection = (screen: Screen) => {
+  const toggleScreenSelection = (screen: Screen, requestedScreens?: number) => {
     const next = new Set(selectedScreenIds);
+    const nextQtys = new globalThis.Map(selectedScreenQuantities);
+
     if (next.has(screen.id)) {
-      next.delete(screen.id);
-      
-      // Cleanup zone price override if it exists
-      if (zonePriceOverrides.has(screen.id)) {
-        const newOverrides = new globalThis.Map(zonePriceOverrides);
-        newOverrides.delete(screen.id);
-        saveZoneOverrides(newOverrides);
+      if (requestedScreens !== undefined && requestedScreens !== null && requestedScreens > 0) {
+        nextQtys.set(screen.id, requestedScreens);
+        toast({
+          title: "Screen Count Updated",
+          description: `${screen.name} set to ${requestedScreens} screens.`,
+        });
+        logActivity({
+          actionType: "update_cart_quantity",
+          actionDetails: `Updated ${screen.name} to ${requestedScreens} screens in cart`,
+          metadata: {
+            screenId: screen.id,
+            screenName: screen.name,
+            venueName: screen.venueName,
+            city: screen.city,
+            screensRequested: requestedScreens,
+            pricePerDay: screen.pricePerDay,
+          },
+        });
+      } else {
+        next.delete(screen.id);
+        nextQtys.delete(screen.id);
+        
+        // Cleanup zone price override if it exists
+        if (zonePriceOverrides.has(screen.id)) {
+          const newOverrides = new globalThis.Map(zonePriceOverrides);
+          newOverrides.delete(screen.id);
+          saveZoneOverrides(newOverrides);
+        }
+        toast({ title: "Removed from Campaign", description: `${screen.name} removed.` });
+        logActivity({
+          actionType: "remove_from_cart",
+          actionDetails: `Removed ${screen.name} from cart`,
+          metadata: {
+            screenId: screen.id,
+            screenName: screen.name,
+          },
+        });
       }
-      toast({ title: "Removed from Campaign", description: `${screen.name} removed.` });
     } else {
       next.add(screen.id);
-      toast({ title: "Added to Campaign", description: `${screen.name} added.` });
+      const isMulti = Boolean(screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1);
+      const qty = requestedScreens || (isMulti ? (screen.bulkBookingMandatory ? (screen.numberOfScreens || 1) : 1) : 1);
+      nextQtys.set(screen.id, qty);
+      toast({
+        title: "Added to Campaign",
+        description: isMulti && qty > 1 ? `${screen.name} (${qty} screens) added.` : `${screen.name} added.`,
+      });
+      logActivity({
+        actionType: "add_to_cart",
+        actionDetails: `Added ${screen.name} (${qty} screens) to cart - ₹${((screen.pricePerDay || 0) * qty).toLocaleString('en-IN')}/day`,
+        metadata: {
+          screenId: screen.id,
+          screenName: screen.name,
+          venueName: screen.venueName,
+          city: screen.city,
+          screensRequested: qty,
+          unitPrice: screen.pricePerDay,
+          dailyTotal: (screen.pricePerDay || 0) * qty,
+        },
+      });
     }
+
     setSelectedScreenIds(next);
-    localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(Array.from(next)));
+    setSelectedScreenQuantities(nextQtys);
+
+    const structured = Array.from(next).map(id => ({
+      id,
+      screensRequested: nextQtys.get(id) || 1,
+    }));
+    localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(structured));
 
     // Only prompt login if adding a screen
     if (!user && !selectedScreenIds.has(screen.id)) {
@@ -918,9 +990,21 @@ export default function DiscoverScreens() {
   const addScreensToCampaign = (toAdd: Screen[]) => {
     if (toAdd.length === 0) return;
     const next = new Set(selectedScreenIds);
-    toAdd.forEach(s => next.add(s.id));
+    const nextQtys = new globalThis.Map(selectedScreenQuantities);
+    toAdd.forEach(s => {
+      next.add(s.id);
+      if (!nextQtys.has(s.id)) {
+        const qty = s.bulkBookingMandatory ? (s.numberOfScreens || 1) : 1;
+        nextQtys.set(s.id, qty);
+      }
+    });
     setSelectedScreenIds(next);
-    localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(Array.from(next)));
+    setSelectedScreenQuantities(nextQtys);
+    const structured = Array.from(next).map(id => ({
+      id,
+      screensRequested: nextQtys.get(id) || 1,
+    }));
+    localStorage.setItem(SELECTED_SCREENS_KEY, JSON.stringify(structured));
     toast({ title: "Added to Campaign", description: `${toAdd.length} ${toAdd.length === 1 ? "listing" : "listings"} added.` });
     if (!user) {
       setPendingAction(() => () => setLocation("/advertiser/quick-campaign"));
@@ -1250,17 +1334,18 @@ export default function DiscoverScreens() {
               screen={screen}
               typeFacts={typeFactsFor(screen)}
               isAdded={selectedScreenIds.has(screen.id)}
+              selectedQuantity={selectedScreenQuantities.get(screen.id)}
               isHighlighted={hoveredScreenId === screen.id}
               isSelected={detailScreenId === screen.id}
               moreAtVenue={moreAtVenue}
               priceOverride={zonePriceOverrides.get(screen.id)}
               showValue={effectiveSort === "value"}
               onOpen={() => openScreen(screen)}
-              onToggleAdd={() => {
+              onToggleAdd={(qty) => {
                 if ((screen.zoneId || screen.zoneName) && !selectedScreenIds.has(screen.id)) {
                   openScreen(screen);
                 } else {
-                  toggleScreenSelection(screen);
+                  toggleScreenSelection(screen, qty);
                 }
               }}
               onOpenVenue={venue ? () => openVenue(venue.key) : undefined}
@@ -1370,11 +1455,12 @@ export default function DiscoverScreens() {
       venue={detailVenue}
       similar={similarScreens}
       isAdded={selectedScreenIds.has(detailScreen.id)}
+      selectedQuantity={selectedScreenQuantities.get(detailScreen.id)}
       priceOverride={zonePriceOverrides.get(detailScreen.id)}
       backLabel={panel.kind === "screen" && panel.fromVenue && venueByKey.get(panel.fromVenue) ? venueByKey.get(panel.fromVenue)!.name : resultsLabel}
       onBack={goBack}
       onClose={isMobile ? () => navigatePanel({ kind: "results" }) : undefined}
-      onToggle={() => toggleScreenSelection(detailScreen)}
+      onToggle={(qty) => toggleScreenSelection(detailScreen, qty)}
       onOpenScreen={(s) => openScreen(s)}
       onOpenVenue={detailVenue && detailVenue.listings.length > 1 ? () => openVenue(detailVenue.key) : undefined}
       zoneInfo={zoneInfo}

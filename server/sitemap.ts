@@ -1,18 +1,7 @@
 import type { Request, Response } from "express";
 import { storage } from "./storage";
-import { toSlug } from "@shared/constants";
-
-/**
- * Resolve the public base URL of the site.
- * Priority: BASE_URL env → request Host header → production default.
- */
-function getBaseUrl(req: Request): string {
-  if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, "");
-  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
-  const host = (req.headers["x-forwarded-host"] as string) || req.get("host");
-  if (host) return `${proto}://${host}`;
-  return "https://connect.pixelspot.in";
-}
+import { toSlug, VENUE_CATEGORIES, normalizeVenueCategory } from "@shared/constants";
+import { TOP_LOCALITIES_BY_CITY } from "@shared/localities";
 
 function escapeXml(value: string): string {
   return value
@@ -49,92 +38,113 @@ export async function generateSitemapXml(baseUrl: string = "https://connect.pixe
 
   const entries: SitemapEntry[] = [
     { loc: `${baseUrl}/`, lastmod, changefreq: "daily", priority: 1.0 },
-    { loc: `${baseUrl}/discover-screens`, lastmod, changefreq: "daily", priority: 0.9 },
-    { loc: `${baseUrl}/about-us`, lastmod, changefreq: "monthly", priority: 0.5 },
-    { loc: `${baseUrl}/contact-us`, lastmod, changefreq: "monthly", priority: 0.5 },
-    { loc: `${baseUrl}/privacy-policy`, lastmod, changefreq: "yearly", priority: 0.3 },
-    { loc: `${baseUrl}/terms-of-service`, lastmod, changefreq: "yearly", priority: 0.3 },
-    { loc: `${baseUrl}/refund-policy`, lastmod, changefreq: "yearly", priority: 0.3 },
+    { loc: `${baseUrl}/about`, lastmod, changefreq: "monthly", priority: 0.5 },
+    { loc: `${baseUrl}/contact`, lastmod, changefreq: "monthly", priority: 0.5 },
+    { loc: `${baseUrl}/privacy`, lastmod, changefreq: "yearly", priority: 0.3 },
+    { loc: `${baseUrl}/terms`, lastmod, changefreq: "yearly", priority: 0.3 },
+    { loc: `${baseUrl}/refund`, lastmod, changefreq: "yearly", priority: 0.3 },
   ];
 
+  const seenLocs = new Set<string>();
+  seenLocs.add(`${baseUrl}/`);
+
+  // 1. City Hub Pages: connect.pixelspot.in/{city}
   for (const city of cities) {
-    entries.push({
-      loc: `${baseUrl}/city/${toSlug(city)}`,
-      lastmod,
-      changefreq: "weekly",
-      priority: 0.8,
-    });
+    const citySlug = toSlug(city);
+    const loc = `${baseUrl}/${citySlug}`;
+    if (!seenLocs.has(loc)) {
+      seenLocs.add(loc);
+      entries.push({
+        loc,
+        lastmod,
+        changefreq: "daily",
+        priority: 0.9,
+      });
+    }
+
+    // 2. Locality Hub Pages: connect.pixelspot.in/{city}/{locality}
+    const localities = TOP_LOCALITIES_BY_CITY[citySlug] || [];
+    for (const locality of localities) {
+      const locUrl = `${baseUrl}/${citySlug}/${locality.slug}`;
+      if (!seenLocs.has(locUrl)) {
+        seenLocs.add(locUrl);
+        entries.push({
+          loc: locUrl,
+          lastmod,
+          changefreq: "weekly",
+          priority: 0.85,
+        });
+      }
+    }
   }
 
+  // 3. City + Category Pages: connect.pixelspot.in/{city}/{category}-advertising
   for (const { city, venueCategory } of cityVenues) {
-    entries.push({
-      loc: `${baseUrl}/city/${toSlug(city)}/${toSlug(venueCategory)}`,
-      lastmod,
-      changefreq: "weekly",
-      priority: 0.7,
-    });
+    const citySlug = toSlug(city);
+    const catSlug = `${toSlug(normalizeVenueCategory(venueCategory))}-advertising`;
+    const loc = `${baseUrl}/${citySlug}/${catSlug}`;
+    if (!seenLocs.has(loc)) {
+      seenLocs.add(loc);
+      entries.push({
+        loc,
+        lastmod,
+        changefreq: "weekly",
+        priority: 0.8,
+      });
+    }
   }
 
+  // 4. Nationwide Category Hubs: connect.pixelspot.in/{category}-advertising
+  for (const cat of VENUE_CATEGORIES) {
+    const catSlug = `${toSlug(cat)}-advertising`;
+    const loc = `${baseUrl}/${catSlug}`;
+    if (!seenLocs.has(loc)) {
+      seenLocs.add(loc);
+      entries.push({
+        loc,
+        lastmod,
+        changefreq: "weekly",
+        priority: 0.75,
+      });
+    }
+  }
+
+  // 5. Individual Screen Pages: connect.pixelspot.in/screens/{screenSlug}
   try {
     const screens = await storage.getPublicScreens();
     for (const screen of screens) {
       if (screen.name) {
         const slug = `${toSlug(screen.name + "-" + (screen.city || ""))}-${screen.id.split('-')[0]}`;
-        entries.push({
-          loc: `${baseUrl}/screens/${slug}`,
-          lastmod,
-          changefreq: "weekly",
-          priority: 0.7,
-        });
+        const loc = `${baseUrl}/screens/${slug}`;
+        if (!seenLocs.has(loc)) {
+          seenLocs.add(loc);
+          entries.push({
+            loc,
+            lastmod,
+            changefreq: "weekly",
+            priority: 0.7,
+          });
+        }
       }
     }
   } catch (err) {
-    // Ignore error if getPublicScreens fails
+    // If public screens query fails, continue with hubs
   }
 
   return renderSitemap(entries);
 }
 
 /**
- * GET /sitemap.xml — dynamic sitemap including static routes + city + city/venue landing pages.
+ * Express handler for /sitemap.xml
  */
-export async function serveSitemap(req: Request, res: Response): Promise<void> {
+export async function sitemapHandler(_req: Request, res: Response) {
   try {
-    const baseUrl = getBaseUrl(req);
-    const xml = await generateSitemapXml(baseUrl);
-    res.set("Content-Type", "application/xml; charset=utf-8");
-    res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=7200");
+    const xml = await generateSitemapXml("https://connect.pixelspot.in");
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
     res.send(xml);
   } catch (error) {
-    console.error("[sitemap] Failed to generate sitemap.xml:", error);
-    res.status(500).set("Content-Type", "application/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>\n`,
-    );
+    console.error("Error generating sitemap:", error);
+    res.status(500).send("Error generating sitemap");
   }
-}
-
-/**
- * GET /robots.txt — production-aware robots.txt that points crawlers to our sitemap
- * and disallows private/admin areas.
- */
-export function serveRobotsTxt(req: Request, res: Response): void {
-  const baseUrl = getBaseUrl(req);
-  const body = [
-    "User-agent: *",
-    "Allow: /",
-    "Disallow: /admin",
-    "Disallow: /api/",
-    "Disallow: /profile",
-    "Disallow: /settings",
-    "Disallow: /manage-",
-    "Disallow: /owner/",
-    "Disallow: /advertiser/",
-    "Disallow: /agency/",
-    "",
-    `Sitemap: ${baseUrl}/sitemap.xml`,
-    "",
-  ].join("\n");
-  res.set("Content-Type", "text/plain; charset=utf-8");
-  res.set("Cache-Control", "public, max-age=3600");
-  res.send(body);
 }

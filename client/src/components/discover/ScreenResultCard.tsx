@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Check, Clock, Layers, Plus, Monitor, MapPin } from "lucide-react";
 import type { Screen } from "@shared/schema";
 import { VENUE_FAMILY_LABELS, formatCompact } from "@shared/venueTypes";
@@ -7,6 +7,7 @@ import { formatRupees } from "@/lib/venueGroups";
 import { footfallValue, formatLine, localityLine, primaryPhoto, priceInfo, screenFamily } from "@/lib/screenInfo";
 import { ScreenPhoto } from "@/components/discover/VenueTypeIcon";
 import { getScreenCountDisplay } from "@shared/utils";
+import { ScreenQuantityModal } from "@/components/screens/ScreenQuantityModal";
 
 interface ScreenResultCardProps {
   screen: Screen & { distanceKm?: number };
@@ -17,8 +18,9 @@ interface ScreenResultCardProps {
   moreAtVenue: number; // other screens at the same venue
   priceOverride?: number; // zone price share, when booked as part of a zone
   showValue?: boolean; // "Best value" sort: show ₹ per 1,000 daily footfall
+  selectedQuantity?: number;
   onOpen: () => void;
-  onToggleAdd: () => void;
+  onToggleAdd: (quantity?: number) => void;
   onOpenVenue?: () => void;
   onHoverChange: (hovered: boolean) => void;
   cardRef: (el: HTMLDivElement | null) => void;
@@ -33,6 +35,7 @@ export function ScreenResultCard({
   moreAtVenue,
   priceOverride,
   showValue = false,
+  selectedQuantity,
   onOpen,
   onToggleAdd,
   onOpenVenue,
@@ -45,6 +48,21 @@ export function ScreenResultCard({
   const format = formatLine(screen);
   const locality = localityLine(screen);
   const screenCountLabel = getScreenCountDisplay(screen);
+
+  const isMulti = Boolean(screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1);
+  const totalScreens = isMulti ? Math.max(1, Number(screen.numberOfScreens)) : 1;
+  const isBulkMandatory = isMulti && Boolean(screen.bulkBookingMandatory);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleButtonClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isMulti && !isBulkMandatory) {
+      setIsModalOpen(true);
+    } else {
+      onToggleAdd(isBulkMandatory ? totalScreens : 1);
+    }
+  };
 
   return (
     <div
@@ -148,17 +166,21 @@ export function ScreenResultCard({
         <div className="min-w-0">
           <div className="flex items-baseline gap-1">
             <span className="text-lg font-bold text-slate-900 leading-tight">
-              {formatRupees(price.total)}
+              {formatRupees(price.perScreen)}
             </span>
-            <span className="text-xs font-normal text-slate-500">/ day</span>
+            <span className="text-xs font-normal text-slate-500">
+              {screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 ? "/screen/day" : "/day"}
+            </span>
           </div>
           {screen.zoneName && (screen.zonePricePerDay || screen.zoneScreenCount) ? (
             <p className="text-[11px] text-blue-600 font-medium truncate mt-0.5" title={`Part of ${screen.zoneName} zone package`}>
               Part of {screen.zoneName} · {formatRupees(screen.zonePricePerDay || 1600)}/day ({screen.zoneScreenCount || 45} screens pkg)
             </p>
-          ) : price.isBulkMandatory && price.screens > 1 ? (
+          ) : screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 ? (
             <p className="text-[11px] text-slate-500 truncate mt-0.5">
-              {formatRupees(price.perScreen)}/screen · {price.screens} screens pkg
+              {price.isBulkMandatory
+                ? `All ${screen.numberOfScreens} screens required (₹${(price.perScreen * (screen.numberOfScreens || 1)).toLocaleString('en-IN')}/day)`
+                : `${screen.numberOfScreens} screens network`}
             </p>
           ) : showValue && rawFootfall && price.total > 0 ? (
             <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
@@ -169,12 +191,9 @@ export function ScreenResultCard({
 
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleAdd();
-          }}
+          onClick={handleButtonClick}
           aria-pressed={isAdded}
-          aria-label={isAdded ? `Remove ${screen.venueName} from campaign` : `Add ${screen.venueName} to campaign`}
+          aria-label={isAdded ? `Manage ${screen.venueName} in campaign` : `Add ${screen.venueName} to campaign`}
           className={`shrink-0 inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-xl text-xs font-semibold shadow-sm transition-all ${
             isAdded
               ? "bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow"
@@ -184,7 +203,7 @@ export function ScreenResultCard({
           {isAdded ? (
             <>
               <Check className="h-3.5 w-3.5" />
-              <span>Added</span>
+              <span>Added ({selectedQuantity || (isBulkMandatory ? totalScreens : 1)})</span>
             </>
           ) : (
             <>
@@ -207,6 +226,24 @@ export function ScreenResultCard({
         >
           <Layers className="h-3.5 w-3.5" /> +{moreAtVenue} more {moreAtVenue === 1 ? "screen" : "screens"} at this venue
         </button>
+      )}
+
+      {/* Screen Quantity Selection Popup Modal */}
+      {isMulti && !isBulkMandatory && (
+        <ScreenQuantityModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          screen={screen}
+          initialQuantity={selectedQuantity || 1}
+          priceOverride={priceOverride}
+          isAlreadyAdded={isAdded}
+          onConfirm={(_s, qty) => {
+            onToggleAdd(qty);
+          }}
+          onRemove={() => {
+            onToggleAdd();
+          }}
+        />
       )}
     </div>
   );

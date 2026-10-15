@@ -32,7 +32,7 @@ export function screenCount(screen: Screen): number {
 }
 
 export function isPackage(screen: Screen): boolean {
-  return Boolean(screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1 && screen.bulkBookingMandatory);
+  return Boolean(screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1);
 }
 
 export function venueKeyFor(screen: Screen): string | null {
@@ -88,12 +88,21 @@ export function groupScreensByVenue(screens: ListedScreen[]): VenueGroup[] {
     const mixed = distinctNames.length >= 4;
     const name = mixed ? `${distinctNames.length} venues at this spot` : mostCommon(names) || "Venue";
     const otherNames = mixed ? [] : Array.from(new Set(names.filter((n) => n.toLowerCase() !== name.toLowerCase())));
+    // Sort all listings by lowest screen price per day first
+    listings.sort((a, b) => {
+      const priceA = calculateScreenPricePerDay(a);
+      const priceB = calculateScreenPricePerDay(b);
+      return priceA - priceB;
+    });
+
     const first = listings[0];
     const venueCategory = mostCommon(listings.map((l) => l.venueCategory).filter(Boolean)) || "";
-    const packages = listings.filter(isPackage).sort((a, b) => screenCount(b) - screenCount(a));
+    const packages = listings
+      .filter(isPackage)
+      .sort((a, b) => calculateScreenPricePerDay(a) - calculateScreenPricePerDay(b));
     const singles = listings
       .filter((l) => !isPackage(l))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, { numeric: true, sensitivity: "base" }));
+      .sort((a, b) => calculateScreenPricePerDay(a) - calculateScreenPricePerDay(b));
     const prices = listings.map((l) => calculateScreenPricePerDay(l)).filter((p) => p > 0);
     const withImage = listings.find((l) => l.screenImages?.[0] || l.surroundingImages?.[0] || l.images?.[0]);
     const distances = listings.map((l) => l.distanceKm).filter((d): d is number => typeof d === "number");

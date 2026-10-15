@@ -7,7 +7,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { storage } from "./storage";
 import { db } from "./db";
 import { mediaPlans, mediaPlanItems, users } from "@shared/schema";
-import { calculateScreenPricePerDay } from "@shared/utils";
+import { calculateScreenPricePerDay, getScreenPricing, calculateInclusiveDays } from "@shared/utils";
 import { eq, and, sql } from "drizzle-orm";
 import { sanitizePublicScreen, sanitizePublicScreens } from "./utils/screenSanitizer";
 
@@ -66,8 +66,8 @@ export function registerAgencyRoutes(
           clientBrand,
           startDate: new Date(startDate),
           endDate: new Date(endDate),
-          budget: budget || 0,
-          agencyMargin: agencyMargin || 0,
+          budget: Math.round(Number(budget) || 0),
+          agencyMargin: Math.round(Number(agencyMargin) || 0),
           notes: notes || null,
           status: "draft",
         })
@@ -97,23 +97,24 @@ export function registerAgencyRoutes(
         .where(eq(mediaPlanItems.planId, plan.id));
 
       // Enrich each item with screen details (name, city, venueName, tags, owner info)
-      const enrichedItems = await Promise.all(
-        items.map(async (item) => {
-          const screen = await storage.getScreen(item.screenId);
-          const zoneInfo = screen ? await storage.getZoneForScreen(screen.id) : null;
-          return {
-            ...item,
-            zoneName: zoneInfo?.zoneName || null,
-            screen: screen
-              ? {
-                  ...screen,
-                  zoneId: screen.zoneId,
-                  zoneName: zoneInfo?.zoneName || null,
-                }
-              : null,
-          };
-        })
-      );
+      const screenIds = Array.from(new Set(items.map((it) => it.screenId)));
+      const screensList = await storage.getScreensByIds(screenIds);
+      const screensMap = new Map(screensList.map((s) => [s.id, s]));
+
+      const enrichedItems = items.map((item) => {
+        const screen = screensMap.get(item.screenId);
+        return {
+          ...item,
+          zoneName: (screen as any)?.zoneName || null,
+          screen: screen
+            ? {
+                ...screen,
+                zoneId: screen.zoneId,
+                zoneName: (screen as any)?.zoneName || null,
+              }
+            : null,
+        };
+      });
 
       res.json({ ...plan, items: enrichedItems });
     } catch (error) {
@@ -144,8 +145,8 @@ export function registerAgencyRoutes(
           ...(clientBrand !== undefined && { clientBrand }),
           ...(startDate !== undefined && { startDate: new Date(startDate) }),
           ...(endDate !== undefined && { endDate: new Date(endDate) }),
-          ...(budget !== undefined && { budget }),
-          ...(agencyMargin !== undefined && { agencyMargin }),
+          ...(budget !== undefined && { budget: Math.round(Number(budget) || 0) }),
+          ...(agencyMargin !== undefined && { agencyMargin: Math.round(Number(agencyMargin) || 0) }),
           ...(notes !== undefined && { notes }),
           ...(status !== undefined && { status }),
           updatedAt: new Date(),
@@ -162,10 +163,10 @@ export function registerAgencyRoutes(
 
         const planItemsList = await db.select().from(mediaPlanItems).where(eq(mediaPlanItems.planId, req.params.id));
         for (const item of planItemsList) {
-          const newTotal = item.pricePerDay * newDays;
+          const newTotal = Math.round(Number(item.pricePerDay) * newDays);
           await db
             .update(mediaPlanItems)
-            .set({ days: newDays, totalPrice: newTotal })
+            .set({ days: Math.round(newDays), totalPrice: Math.round(newTotal) })
             .where(eq(mediaPlanItems.id, item.id));
         }
       }
@@ -335,15 +336,16 @@ export function registerAgencyRoutes(
         const screen = await storage.getScreen(sid);
         if (!screen) continue;
 
-        let pricePerDay = screen.pricePerDay;
+        let pricePerDay = Math.round(Number(screen.pricePerDay) || 0);
         const zoneInfo = await storage.getZoneForScreen(screen.id);
         if (zoneInfo) {
           const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
           const count = zoneScreensRes.screens.length || 1;
-          pricePerDay = Math.round(zoneInfo.pricePerDay / count);
+          pricePerDay = Math.round(Number(zoneInfo.pricePerDay) / count);
         }
 
-        const totalPrice = Math.round(pricePerDay * numDays);
+        const itemDays = Math.max(1, Math.round(Number(numDays) || 1));
+        const totalPrice = Math.round(pricePerDay * itemDays);
 
         const [item] = await db
           .insert(mediaPlanItems)
@@ -351,7 +353,7 @@ export function registerAgencyRoutes(
             planId: plan.id,
             screenId: sid,
             screenOwnerId: screen.ownerId || null,
-            days: numDays,
+            days: itemDays,
             pricePerDay,
             totalPrice,
             status: "included",
@@ -407,8 +409,8 @@ export function registerAgencyRoutes(
             });
           }
 
-          updateData.days = days;
-          updateData.totalPrice = existingItem.pricePerDay * days;
+          updateData.days = Math.max(1, Math.round(Number(days) || 1));
+          updateData.totalPrice = Math.round(Number(existingItem.pricePerDay) * updateData.days);
         }
       }
 
@@ -500,9 +502,7 @@ export function registerAgencyRoutes(
 
       // Enforce each screen's minimum booking duration against the plan's actual date range —
       // the bookings created below all use plan.startDate/endDate, not each item's own `days`
-      const planDurationDays = Math.max(1, Math.round(
-        (new Date(plan.endDate).getTime() - new Date(plan.startDate).getTime()) / (1000 * 60 * 60 * 24)
-      ));
+      const planDurationDays = calculateInclusiveDays(plan.startDate, plan.endDate);
       for (const item of items) {
         const itemScreen = await storage.getScreen(item.screenId);
         if (itemScreen?.minBookingDays && planDurationDays < itemScreen.minBookingDays) {
@@ -868,8 +868,7 @@ export function registerAgencyRoutes(
 
       const start = new Date(startDate);
       const end = new Date(endDate);
-      const diffMs = Math.abs(end.getTime() - start.getTime());
-      const planDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
+      const planDays = calculateInclusiveDays(start, end);
 
       // Validate & resolve clientUserId to ensure Postgres foreign key integrity
       let validClientUserId: string | null = null;
@@ -883,34 +882,26 @@ export function registerAgencyRoutes(
       // If clientUserId was not resolved, search or create a real lead user in DB
       if (!validClientUserId && (clientName || clientMobile)) {
         const cleanMobile = (clientMobile || "").replace(/\D/g, "").slice(-10);
-        const allUsers = await storage.getAllUsers();
-        
-        const matchedUser = allUsers.find((u) => {
-          const uMobileDigits = (u.mobileNumber || "").replace(/\D/g, "");
-          const uPhoneDigits = (u.phone || "").replace(/\D/g, "");
-          return (
-            (cleanMobile.length >= 10 && (uMobileDigits.endsWith(cleanMobile) || uPhoneDigits.endsWith(cleanMobile))) ||
-            (clientName && u.name && u.name.toLowerCase() === clientName.toLowerCase())
-          );
-        });
-
-        if (matchedUser) {
-          validClientUserId = matchedUser.id;
-        } else if (cleanMobile.length >= 10) {
-          try {
-            const uniqueSuffix = `${cleanMobile}_${Date.now()}`;
-            const newLead = await storage.createUser({
-              name: (clientName || "Client Lead").trim(),
-              mobileNumber: cleanMobile,
-              firebaseUid: `unregistered_${uniqueSuffix}`,
-              email: `unregistered_${uniqueSuffix}@pixelspot.internal`,
-              role: "advertiser",
-              status: "active",
-              profileCompleted: false,
-            });
-            if (newLead) validClientUserId = newLead.id;
-          } catch (createErr) {
-            console.warn("Failed to create lead user for media plan:", createErr);
+        if (cleanMobile.length >= 10) {
+          const matchedUser = await storage.getUserByMobileNumber(cleanMobile);
+          if (matchedUser) {
+            validClientUserId = matchedUser.id;
+          } else {
+            try {
+              const uniqueSuffix = `${cleanMobile}_${Date.now()}`;
+              const newLead = await storage.createUser({
+                name: (clientName || "Client Lead").trim(),
+                mobileNumber: cleanMobile,
+                firebaseUid: `unregistered_${uniqueSuffix}`,
+                email: `unregistered_${uniqueSuffix}@pixelspot.internal`,
+                role: "advertiser",
+                status: "active",
+                profileCompleted: false,
+              });
+              if (newLead) validClientUserId = newLead.id;
+            } catch (createErr) {
+              console.warn("Failed to create lead user for media plan:", createErr);
+            }
           }
         }
       }
@@ -919,19 +910,24 @@ export function registerAgencyRoutes(
       const preparedItems = [];
       const seenScreenIds = new Set<string>();
 
+      // Extract unique screen IDs and batch-fetch all in 1 query
+      const rawScreenIds: string[] = (items || [])
+        .map((it: any) => it.screenId)
+        .filter((id: any): id is string => typeof id === "string" && id.length > 0);
+      const uniqueScreenIds: string[] = Array.from(new Set(rawScreenIds));
+
+      const screensList = await storage.getScreensByIds(uniqueScreenIds);
+      const screensMap = new Map(screensList.map((s) => [s.id, s]));
+
       for (const it of (items || [])) {
         if (!it.screenId || seenScreenIds.has(it.screenId)) continue;
         seenScreenIds.add(it.screenId);
-        const screen = await storage.getScreen(it.screenId);
+        const screen = screensMap.get(it.screenId);
         if (!screen) continue;
-        const itemDays = Number(it.days) || planDays;
-        let pricePerDay = Number(screen.pricePerDay) || 0;
-        const zoneInfo = await storage.getZoneForScreen(screen.id);
-        if (zoneInfo) {
-          const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
-          const count = zoneScreensRes.screens.length || 1;
-          pricePerDay = Math.round(zoneInfo.pricePerDay / count);
-        }
+
+        const itemDays = Math.max(1, Math.round(Number(it.days) || planDays));
+        const pricing = getScreenPricing(screen, it.screensRequested);
+        const pricePerDay = pricing.dailyTotal;
         const totalPrice = Math.round(pricePerDay * itemDays);
         totalNet += totalPrice;
 
@@ -956,8 +952,8 @@ export function registerAgencyRoutes(
           clientBrand,
           startDate: start,
           endDate: end,
-          budget,
-          agencyMargin: Number(agencyMargin) || 0,
+          budget: Math.round(budget),
+          agencyMargin: Math.round(Number(agencyMargin) || 0),
           notes: notes || null,
           status: "sent",
           clientUserId: validClientUserId,
@@ -967,11 +963,13 @@ export function registerAgencyRoutes(
         })
         .returning();
 
-      for (const pit of preparedItems) {
-        await db.insert(mediaPlanItems).values({
+      // Bulk insert all items in a single statement
+      if (preparedItems.length > 0) {
+        const itemsToInsert = preparedItems.map((pit) => ({
           ...pit,
           planId: plan.id,
-        });
+        }));
+        await db.insert(mediaPlanItems).values(itemsToInsert);
       }
 
       res.json(plan);
@@ -1008,8 +1006,7 @@ export function registerAgencyRoutes(
 
       const start = startDate ? new Date(startDate) : new Date(existing.startDate);
       const end = endDate ? new Date(endDate) : new Date(existing.endDate);
-      const diffMs = Math.abs(end.getTime() - start.getTime());
-      const planDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
+      const planDays = calculateInclusiveDays(start, end);
 
       // Validate & resolve clientUserId if provided
       let validClientUserId: string | null = existing.clientUserId;
@@ -1018,8 +1015,8 @@ export function registerAgencyRoutes(
         if (existingUser) validClientUserId = existingUser.id;
       }
 
-      const updatedMargin = agencyMargin !== undefined ? Number(agencyMargin) || 0 : existing.agencyMargin;
-      let newBudget = budget !== undefined ? Number(budget) || 0 : existing.budget;
+      const updatedMargin = agencyMargin !== undefined ? Math.round(Number(agencyMargin) || 0) : Math.round(Number(existing.agencyMargin) || 0);
+      let newBudget = budget !== undefined ? Math.round(Number(budget) || 0) : Math.round(Number(existing.budget) || 0);
 
       // Handle items update if provided
       if (Array.isArray(items)) {
@@ -1029,19 +1026,25 @@ export function registerAgencyRoutes(
         let totalNet = 0;
         const preparedItems = [];
         const seenScreenIds = new Set<string>();
+
+        // Extract unique screen IDs and batch-fetch all in 1 query
+        const rawScreenIds: string[] = items
+          .map((it: any) => it.screenId)
+          .filter((id: any): id is string => typeof id === "string" && id.length > 0);
+        const uniqueScreenIds: string[] = Array.from(new Set(rawScreenIds));
+
+        const screensList = await storage.getScreensByIds(uniqueScreenIds);
+        const screensMap = new Map(screensList.map((s) => [s.id, s]));
+
         for (const it of items) {
           if (!it.screenId || seenScreenIds.has(it.screenId)) continue;
           seenScreenIds.add(it.screenId);
-          const screen = await storage.getScreen(it.screenId);
+          const screen = screensMap.get(it.screenId);
           if (!screen) continue;
-          const itemDays = Number(it.days) || planDays;
-          let pricePerDay = Number(screen.pricePerDay) || 0;
-          const zoneInfo = await storage.getZoneForScreen(screen.id);
-          if (zoneInfo) {
-            const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
-            const count = zoneScreensRes.screens.length || 1;
-            pricePerDay = Math.round(zoneInfo.pricePerDay / count);
-          }
+
+          const itemDays = Math.max(1, Math.round(Number(it.days) || planDays));
+          const pricing = getScreenPricing(screen, it.screensRequested);
+          const pricePerDay = pricing.dailyTotal;
           const totalPrice = Math.round(pricePerDay * itemDays);
           totalNet += totalPrice;
 
@@ -1056,8 +1059,9 @@ export function registerAgencyRoutes(
           });
         }
 
-        for (const pit of preparedItems) {
-          await db.insert(mediaPlanItems).values(pit);
+        // Bulk insert items in a single statement
+        if (preparedItems.length > 0) {
+          await db.insert(mediaPlanItems).values(preparedItems);
         }
 
         const marginMultiplier = 1 + updatedMargin / 100;
@@ -1071,7 +1075,7 @@ export function registerAgencyRoutes(
           ...(clientBrand !== undefined && { clientBrand }),
           ...(startDate !== undefined && { startDate: start }),
           ...(endDate !== undefined && { endDate: end }),
-          budget: newBudget,
+          budget: Math.round(newBudget),
           ...(agencyMargin !== undefined && { agencyMargin: updatedMargin }),
           ...(notes !== undefined && { notes: notes || null }),
           ...(status !== undefined && { status }),
@@ -1105,11 +1109,14 @@ export function registerAgencyRoutes(
         .from(mediaPlanItems)
         .where(and(eq(mediaPlanItems.planId, plan.id), eq(mediaPlanItems.status, "included")));
 
-      const pdfItems = [];
-      for (const it of itemsRows) {
-        const screen = await storage.getScreen(it.screenId);
-        const zoneInfo = screen ? await storage.getZoneForScreen(screen.id) : null;
-        pdfItems.push({
+      // Batch fetch all screens in a single fast query
+      const screenIds = Array.from(new Set(itemsRows.map((it) => it.screenId)));
+      const screensList = await storage.getScreensByIds(screenIds);
+      const screensMap = new Map(screensList.map((s) => [s.id, s]));
+
+      const pdfItems = itemsRows.map((it) => {
+        const screen = screensMap.get(it.screenId);
+        return {
           screenId: it.screenId,
           screenName: screen?.name || it.screenId,
           venueName: screen?.venueName || "",
@@ -1124,17 +1131,17 @@ export function registerAgencyRoutes(
           totalPrice: Number(it.totalPrice) || 0,
           notes: it.notes,
           size: screen?.size || null,
-          zoneName: zoneInfo?.zoneName || null,
+          zoneName: (screen as any)?.zoneName || null,
           zoneId: screen?.zoneId || null,
           screen: screen
             ? {
                 ...screen,
                 zoneId: screen.zoneId,
-                zoneName: zoneInfo?.zoneName || null,
+                zoneName: (screen as any)?.zoneName || null,
               }
             : undefined,
-        });
-      }
+        };
+      });
 
       const isCreatedByAdmin = Boolean(plan.createdByAdmin);
       const agencyName = isCreatedByAdmin

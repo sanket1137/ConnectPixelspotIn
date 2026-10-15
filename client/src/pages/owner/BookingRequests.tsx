@@ -19,6 +19,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { calculateInclusiveDays } from "@shared/utils";
 
 interface BookingRequest {
   id: string;
@@ -209,10 +210,7 @@ export default function BookingRequests() {
   };
 
   const calculateDuration = (start: string, end: string) => {
-    const days = Math.ceil(
-      (new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return days;
+    return calculateInclusiveDays(start, end);
   };
 
   const pendingBookings = bookings.filter(b => b.status === "pending_owner");

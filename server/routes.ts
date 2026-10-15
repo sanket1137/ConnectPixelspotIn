@@ -5,10 +5,9 @@ import { verifyToken, auth as firebaseAdmin } from "./firebaseAdmin";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { User, Screen, Campaign, Booking } from "@shared/schema";
 import { db } from "./db";
-import { bookings, passwordResetTokens, campaigns, screens } from "@shared/schema";
-import { eq, and, gt, gte, lte, desc, sql, inArray, or } from "drizzle-orm";
-import { calculateScreenPricePerDay } from "@shared/utils";
-import { getCampaignAdvice } from "./ai-advisor";
+import { sql } from "drizzle-orm";
+import { bookings, passwordResetTokens, campaigns, screens, userActivityLogs } from "@shared/schema";
+import { calculateScreenPricePerDay, calculateInclusiveDays, getScreenPricing } from "@shared/utils";
 import { storeOTP, verifyOTP, sendEmailOTP, sendMobileOTP } from "./otp";
 import { notificationService } from "./notifications";
 import multer from "multer";
@@ -22,6 +21,7 @@ import { registerFlowRoutes } from "./routes-flow";
 import { registerAgencyRoutes } from "./routes-agency";
 import { registerScreenImportRoutes } from "./routes-screen-import";
 import { registerSupportRoutes } from "./routes-support";
+import { registerProofOfPlayRoutes } from "./routes-proof-of-play";
 import { geolocationService } from "./services/geolocation";
 // import { serveSitemap, serveRobotsTxt } from "./sitemap";
 import { fromCitySlug, fromVenueSlug, toSlug, normalizeCityName, USER_ROLES } from "@shared/constants";
@@ -2805,7 +2805,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // If fewer screens than requested → counter-offer (advertiser must accept/reject)
         if (screensAccepted < screensRequested) {
-          const days = Math.max(1, Math.ceil((new Date(existingBooking.endDate).getTime() - new Date(existingBooking.startDate).getTime()) / (1000 * 60 * 60 * 24)));
+          const days = calculateInclusiveDays(existingBooking.startDate, existingBooking.endDate);
           const newPrice = screen.pricePerDay * screensAccepted * days;
 
           const counterBooking = await storage.counterOfferBooking(id, screensAccepted, newPrice, req.body.reason);
@@ -2855,7 +2855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Handle full multi-screen acceptance (update screensAccepted to match)
       if (screen && screen.isMultiScreen && !screen.bulkBookingMandatory && req.body.screensAccepted) {
         const screensAccepted = parseInt(req.body.screensAccepted);
-        const days = Math.max(1, Math.ceil((new Date(booking.endDate).getTime() - new Date(booking.startDate).getTime()) / (1000 * 60 * 60 * 24)));
+        const days = calculateInclusiveDays(booking.startDate, booking.endDate);
         const newPrice = screen.pricePerDay * screensAccepted * days;
         await storage.updateBooking(booking.id, { screensAccepted, price: newPrice } as any);
         booking.screensAccepted = screensAccepted;
@@ -3070,80 +3070,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all proofs of play for the owner
-  app.get("/api/owner/proof-of-play", authenticate, requireRole("screen_owner"), async (req, res) => {
-    try {
-      const proofs = await storage.getProofOfPlayByOwner(req.user!.id);
-      res.json(proofs);
-    } catch (error) {
-      console.error("Get owner proofs error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  // Upload proof of play for a booking
-  app.post("/api/owner/bookings/:id/proof", authenticate, requireRole("screen_owner"), upload.array("files", 10), async (req, res) => {
-    try {
-      const bookingId = req.params.id;
-      const booking = await storage.getBooking(bookingId);
-      if (!booking) {
-        return res.status(404).json({ error: "Booking not found" });
-      }
-
-      // Verify the owner owns the screen for this booking
-      const screen = await storage.getScreen(booking.screenId);
-      if (!screen || screen.ownerId !== req.user!.id) {
-        return res.status(403).json({ error: "Not authorized for this booking" });
-      }
-
-      const files = req.files as Express.Multer.File[];
-      if (!files || files.length === 0) {
-        return res.status(400).json({ error: "At least one file is required" });
-      }
-
-      // Upload each file to object storage
-      const objectStorageService = new ObjectStorageService();
-      const fileUrls: Array<{ url: string; type: "photo" | "video" | "log"; caption?: string }> = [];
-
-      for (const file of files) {
-        const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-        const uploadResponse = await fetch(uploadURL, {
-          method: "PUT",
-          body: file.buffer,
-          headers: { "Content-Type": file.mimetype },
-        });
-
-        if (!uploadResponse.ok) {
-          throw new Error(`Upload to storage failed: ${uploadResponse.status}`);
-        }
-
-        const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(uploadURL, {
-          owner: req.user!.id.toString(),
-          visibility: "public",
-        });
-
-        const fileType: "photo" | "video" | "log" = file.mimetype.startsWith("video/") ? "video" :
-          file.mimetype === "application/pdf" ? "log" : "photo";
-
-        fileUrls.push({ url: objectPath, type: fileType, caption: file.originalname });
-      }
-
-      const proof = await storage.createProofOfPlay({
-        bookingId,
-        campaignId: booking.campaignId,
-        screenId: booking.screenId,
-        ownerId: req.user!.id,
-        fileUrls,
-        ownerNotes: req.body.notes || null,
-        status: "pending",
-      });
-
-      res.json(proof);
-    } catch (error) {
-      console.error("Upload proof error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
+  // Proof of Play routes are registered via registerProofOfPlayRoutes(app) below
 
   // ========== ADVERTISER ROUTES ==========
   
@@ -3802,6 +3729,197 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Log user operations & campaign funnel activity (screen search, cart additions, dropoffs)
+  app.post("/api/activity/log", async (req, res) => {
+    try {
+      const { actionType, actionDetails, metadata = {}, sessionId } = req.body;
+      if (!actionType || !actionDetails) {
+        return res.status(400).json({ error: "actionType and actionDetails are required" });
+      }
+
+      let userId: string | null = null;
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        try {
+          const token = authHeader.split("Bearer ")[1];
+          const decoded = await verifyToken(token);
+          if (decoded && decoded.uid) {
+            const user = await storage.getUserByFirebaseUid(decoded.uid);
+            if (user) userId = user.id;
+          }
+        } catch {
+          // Token could be expired or optional, ignore
+        }
+      }
+
+      const [log] = await db
+        .insert(userActivityLogs)
+        .values({
+          userId: userId || null,
+          sessionId: sessionId || null,
+          actionType: String(actionType),
+          actionDetails: String(actionDetails),
+          metadata: metadata || {},
+        })
+        .returning();
+
+      res.status(201).json(log);
+    } catch (error) {
+      console.error("Activity log error:", error);
+      res.status(500).json({ error: "Failed to record activity log" });
+    }
+  });
+
+  // Admin: Get all user activity logs with user info (latest on top)
+  app.get("/api/admin/user-activity-logs", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 50));
+      const offset = (page - 1) * limit;
+      const userId = req.query.userId as string | undefined;
+      const actionType = req.query.actionType as string | undefined;
+
+      let whereClause = sql`1=1`;
+      if (userId) {
+        whereClause = sql`${whereClause} AND l.user_id = ${userId}`;
+      }
+      if (actionType) {
+        whereClause = sql`${whereClause} AND l.action_type = ${actionType}`;
+      }
+
+      const logsResult = await db.execute(sql`
+        SELECT
+          l.id, l.user_id, l.session_id, l.action_type, l.action_details, l.metadata, l.created_at,
+          u.name AS user_name, u.email AS user_email, u.mobile_number AS user_mobile, u.company_name AS user_company
+        FROM user_activity_logs l
+        LEFT JOIN users u ON u.id = l.user_id
+        WHERE ${whereClause}
+        ORDER BY l.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `);
+
+      const totalResult = await db.execute(sql`
+        SELECT COUNT(*)::int AS count
+        FROM user_activity_logs l
+        WHERE ${whereClause}
+      `);
+
+      res.json({
+        logs: (logsResult.rows as any[]).map(r => ({
+          id: r.id,
+          userId: r.user_id,
+          sessionId: r.session_id,
+          actionType: r.action_type,
+          actionDetails: r.action_details,
+          metadata: r.metadata,
+          createdAt: r.created_at,
+          user: r.user_name ? {
+            id: r.user_id,
+            name: r.user_name,
+            email: r.user_email,
+            mobileNumber: r.user_mobile,
+            companyName: r.user_company,
+          } : null,
+        })),
+        total: (totalResult.rows[0] as any)?.count || 0,
+        page,
+        limit,
+      });
+    } catch (error) {
+      console.error("Get activity logs error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Admin: Get comprehensive abandoned campaign drafts and cart dropoffs
+  app.get("/api/admin/abandoned-drafts", authenticate, requireRole("admin"), async (req, res) => {
+    try {
+      // 1. Unsubmitted campaign drafts
+      const draftsResult = await db.execute(sql`
+        SELECT
+          c.id, c.name, c.budget, c.summary, c.creative_url, c.created_at, c.target_area,
+          u.id AS user_id, u.name AS user_name, u.email AS user_email,
+          u.mobile_number AS user_mobile, u.company_name AS user_company,
+          (
+            SELECT json_agg(json_build_object(
+              'screenId', b.screen_id,
+              'screenName', s.name,
+              'location', s.location,
+              'price', b.price
+            ))
+            FROM bookings b
+            JOIN screens s ON s.id = b.screen_id
+            WHERE b.campaign_id = c.id
+          ) AS booked_screens
+        FROM campaigns c
+        INNER JOIN users u ON u.id = c.advertiser_id
+        WHERE c.status = 'draft'
+        ORDER BY c.created_at DESC
+        LIMIT 100
+      `);
+
+      // 2. Users with cart operations in user_activity_logs in last 30 days
+      const cartLogsResult = await db.execute(sql`
+        SELECT
+          l.id, l.user_id, l.action_type, l.action_details, l.metadata, l.created_at,
+          u.name AS user_name, u.email AS user_email, u.mobile_number AS user_mobile, u.company_name AS user_company
+        FROM user_activity_logs l
+        JOIN users u ON u.id = l.user_id
+        WHERE l.action_type IN ('add_to_cart', 'update_cart_quantity')
+        ORDER BY l.created_at DESC
+        LIMIT 100
+      `);
+
+      // 3. Aggregate metrics
+      const totalDrafts = draftsResult.rows.length;
+      const totalDraftsBudget = (draftsResult.rows as any[]).reduce((sum, r) => sum + Number(r.budget || 0), 0);
+      const uniqueCartUsers = new Set((cartLogsResult.rows as any[]).map(r => r.user_id)).size;
+
+      res.json({
+        drafts: (draftsResult.rows as any[]).map(r => ({
+          id: r.id,
+          name: r.name,
+          budget: Number(r.budget || 0),
+          summary: r.summary,
+          creativeUrl: r.creative_url,
+          targetArea: r.target_area,
+          createdAt: r.created_at,
+          screens: r.booked_screens || [],
+          advertiser: {
+            id: r.user_id,
+            name: r.user_name,
+            email: r.user_email,
+            mobile: r.user_mobile,
+            company: r.user_company,
+          },
+        })),
+        cartActivities: (cartLogsResult.rows as any[]).map(r => ({
+          id: r.id,
+          userId: r.user_id,
+          actionType: r.action_type,
+          actionDetails: r.action_details,
+          metadata: r.metadata,
+          createdAt: r.created_at,
+          advertiser: {
+            id: r.user_id,
+            name: r.user_name,
+            email: r.user_email,
+            mobile: r.user_mobile,
+            company: r.user_company,
+          },
+        })),
+        stats: {
+          totalDrafts,
+          totalDraftsBudget,
+          uniqueCartUsers,
+        },
+      });
+    } catch (error) {
+      console.error("Admin abandoned drafts error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get campaigns (advertiser) — optimized: single JOIN with booking stats
 
   app.get("/api/advertiser/campaigns", authenticate, requireRole("advertiser", "agency"), async (req, res) => {
@@ -3872,7 +3990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Server-side price calculation based on booking mode
-      const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+      const days = calculateInclusiveDays(startDate, endDate);
 
       // Enforce the screen's minimum booking duration (never trust the client to have checked this)
       if (screen.minBookingDays && days < screen.minBookingDays) {
@@ -3889,34 +4007,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // individual screen price. The client may send zoneName as a hint; we
       // verify it server-side to prevent spoofing.
       const zoneInfo = await storage.getZoneForScreen(screen.id);
+      let screenToPrice = screen;
       if (zoneInfo) {
-        // Zone screens: price = zone price / number of screens in zone × days
         const zoneScreensRes = await storage.getScreensInZone(zoneInfo.zoneName);
         const count = zoneScreensRes.screens.length || 1;
-        serverPrice = (zoneInfo.pricePerDay / count) * days;
-      } else if (screen.isMultiScreen && screen.numberOfScreens && screen.numberOfScreens > 1) {
-        const requestedScreens = req.body.screensRequested ? parseInt(req.body.screensRequested) : null;
-
-        if (screen.bulkBookingMandatory) {
-          // Bulk mode: must book all screens
-          screensRequested = screen.numberOfScreens;
-          const dailyPrice = screen.pricePerDay * screen.numberOfScreens;
-          serverPrice = dailyPrice * days;
-        } else if (requestedScreens && requestedScreens >= 1) {
-          // Flexible mode: advertiser chose specific number of screens
-          if (requestedScreens > screen.numberOfScreens) {
-            return res.status(400).json({ error: `Cannot request more than ${screen.numberOfScreens} screens` });
-          }
-          screensRequested = requestedScreens;
-          serverPrice = screen.pricePerDay * requestedScreens * days;
-        } else {
-          screensRequested = 1;
-          serverPrice = (screen.pricePerDay || 0) * days;
-        }
-      } else {
-        // Single screen
-        serverPrice = (screen.pricePerDay || 0) * days;
+        screenToPrice = {
+          ...screen,
+          pricePerDay: Math.round(zoneInfo.pricePerDay / count),
+        };
       }
+
+      const pricing = getScreenPricing(screenToPrice, req.body.screensRequested);
+      screensRequested = pricing.requestedScreens;
+      serverPrice = pricing.dailyTotal * days;
+
 
       const booking = await storage.createBooking({
         ...req.body,
@@ -4938,6 +5042,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========== SUPPORT ROUTES ==========
   registerSupportRoutes(app, authenticate, requireRole, requireVerified);
 
+  // ========== PROOF OF PLAY ROUTES ==========
+  registerProofOfPlayRoutes(app, authenticate, requireRole);
 
   const httpServer = createServer(app);
   return httpServer;

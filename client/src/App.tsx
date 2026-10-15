@@ -78,6 +78,10 @@ const AgencyDashboard = lazy(() => import("@/pages/agency/AgencyDashboard"));
 const MediaPlansList = lazy(() => import("@/pages/agency/MediaPlansList"));
 const MediaPlanBuilder = lazy(() => import("@/pages/agency/MediaPlanBuilder"));
 const AdminMediaPlanBuilder = lazy(() => import("@/pages/admin/AdminMediaPlanBuilder"));
+const AdminAbandonedDrafts = lazy(() => import("@/pages/admin/AdminAbandonedDrafts"));
+const AdminProofOfPlay = lazy(() => import("@/pages/admin/AdminProofOfPlay"));
+const OwnerProofOfPlay = lazy(() => import("@/pages/owner/OwnerProofOfPlay"));
+const AdvertiserProofOfPlay = lazy(() => import("@/pages/advertiser/AdvertiserProofOfPlay"));
 // Agency reuses the same full-featured advertiser components for these flows:
 const AgencyDiscover = lazy(() => import("@/pages/advertiser/DiscoverScreens"));
 const AgencyCampaigns = lazy(() => import("@/pages/advertiser/CampaignsList"));
@@ -193,6 +197,16 @@ function Router() {
           <ManageBookings />
         </AuthGuard>
       </Route>
+      <Route path="/admin/proof-of-play">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminProofOfPlay />
+        </AuthGuard>
+      </Route>
+      <Route path="/admin/abandoned-drafts">
+        <AuthGuard allowedRoles={["admin"]}>
+          <AdminAbandonedDrafts />
+        </AuthGuard>
+      </Route>
       <Route path="/admin/analytics">
         <AuthGuard allowedRoles={["admin"]}>
           <Analytics />
@@ -280,6 +294,11 @@ function Router() {
           <BookingRequests />
         </AuthGuard>
       </Route>
+      <Route path="/owner/proof-of-play">
+        <AuthGuard allowedRoles={["screen_owner"]}>
+          <OwnerProofOfPlay />
+        </AuthGuard>
+      </Route>
       <Route path="/owner/earnings">
         <AuthGuard allowedRoles={["screen_owner"]}>
           <OwnerEarnings />
@@ -356,6 +375,11 @@ function Router() {
       <Route path="/advertiser/bookings">
         <AuthGuard allowedRoles={["advertiser"]}>
           <BookingManagement />
+        </AuthGuard>
+      </Route>
+      <Route path="/advertiser/proof-of-play">
+        <AuthGuard allowedRoles={["advertiser"]}>
+          <AdvertiserProofOfPlay />
         </AuthGuard>
       </Route>
       <Route path="/advertiser/ai-advisor">
@@ -436,7 +460,8 @@ function Router() {
 
       {/* Dynamic SEO Landing Pages (Must be placed last before NotFound) */}
       <Route path="/screens/:screenSlug" component={SEOLandingPage} />
-      <Route path="/:citySlug/:categorySlug" component={SEOLandingPage} />
+      <Route path="/:citySlug/:localitySlug/:categorySlug" component={SEOLandingPage} />
+      <Route path="/:citySlug/:localityOrCategorySlug" component={SEOLandingPage} />
       <Route path="/:slug" component={SEOLandingPage} />
 
       {/* Fallback */}

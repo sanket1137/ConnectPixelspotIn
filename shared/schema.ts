@@ -379,14 +379,24 @@ export const invoices = pgTable("invoices", {
   index("idx_invoices_number").on(table.invoiceNumber),
 ]);
 
-// Proof of Play table - owner uploads proof, admin verifies, advertiser confirms
+// Proof of Play table - owner or admin uploads proof, admin verifies, advertiser confirms
 export const proofOfPlay = pgTable("proof_of_play", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   bookingId: varchar("booking_id").notNull(),
   campaignId: varchar("campaign_id").notNull(),
   screenId: varchar("screen_id").notNull(),
   ownerId: varchar("owner_id").notNull(),
-  fileUrls: jsonb("file_urls").$type<Array<{ url: string; type: "photo" | "video" | "log"; caption?: string }>>().notNull(),
+  uploadedBy: varchar("uploaded_by"),
+  uploadedByRole: text("uploaded_by_role").notNull().default("screen_owner"), // "admin" | "screen_owner"
+  fileUrls: jsonb("file_urls").$type<Array<{
+    url: string;
+    type: "photo" | "video" | "pdf" | "excel" | "log";
+    originalName?: string;
+    fileSize?: number;
+    caption?: string;
+    uploadedAt?: string;
+  }>>().notNull(),
+  summary: text("summary"),
   ownerNotes: text("owner_notes"),
   // Admin verification
   adminVerified: boolean("admin_verified").notNull().default(false),
@@ -399,12 +409,20 @@ export const proofOfPlay = pgTable("proof_of_play", {
   advertiserNotes: text("advertiser_notes"),
   // Status: pending → admin_verified → confirmed → disputed
   status: text("status").notNull().default("pending"),
+  // 30-Day Storage Clean-up Tracking
+  cleanupEligibleAt: timestamp("cleanup_eligible_at"),
+  cleanupStatus: text("cleanup_status").default("active"), // "active" | "snoozed" | "purged"
+  cleanedUpAt: timestamp("cleaned_up_at"),
+  cleanedUpBy: varchar("cleaned_up_by"),
+  snoozedUntil: timestamp("snoozed_until"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_proof_of_play_booking_id").on(table.bookingId),
   index("idx_proof_of_play_campaign_id").on(table.campaignId),
   index("idx_proof_of_play_owner_id").on(table.ownerId),
   index("idx_proof_of_play_status").on(table.status),
+  index("idx_proof_of_play_cleanup_eligible").on(table.cleanupEligibleAt, table.cleanupStatus),
 ]);
 
 // Notifications table - in-app notification center
@@ -1100,5 +1118,23 @@ export const insertProposalSchema = z.object({
 
 export type Proposal = typeof proposals.$inferSelect;
 export type InsertProposal = z.infer<typeof insertProposalSchema>;
+
+// ========== USER ACTIVITY LOGS (CAMPAIGN FUNNEL & ABANDONED DRAFT TRACKING) ==========
+export const userActivityLogs = pgTable("user_activity_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id"),
+  actionType: varchar("action_type").notNull(), // 'user_login' | 'screen_search' | 'add_to_cart' | 'update_cart_quantity' | 'remove_from_cart' | 'campaign_draft_start' | 'campaign_step_advance' | 'campaign_abandoned'
+  actionDetails: text("action_details").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, any>>().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_activity_user_id").on(table.userId),
+  index("idx_activity_action_type").on(table.actionType),
+  index("idx_activity_created_at").on(table.createdAt),
+]);
+
+export type UserActivityLog = typeof userActivityLogs.$inferSelect;
+export type InsertUserActivityLog = typeof userActivityLogs.$inferInsert;
 
 

@@ -103,6 +103,7 @@ export default function TermsOfService() {
               <li>Payment is processed via Razorpay upon booking approval. All payments are in Indian Rupees (INR).</li>
               <li>Goods and Services Tax (GST) at the applicable rate (currently 18%) will be charged on all transactions.</li>
               <li>Invoices are generated automatically and available in your account dashboard.</li>
+              <li><strong>Proof of Play & 30-Day Media Retrieval Window:</strong> Screen Owners or Administrators shall upload broadcast execution proof (photos, videos, or player run sheets) upon campaign completion. Advertisers are granted direct platform access to inspect and download proof assets. Advertisers agree that media files are hosted on active cloud storage for a maximum of <strong>thirty (30) calendar days</strong> following campaign completion, and Advertisers are responsible for downloading and archiving their proofs locally within this period. Pixelspot reserves the right to clean up and permanently purge stored media files after 30 days without liability for unretrieved files.</li>
               <li>Pixelspot acts as a marketplace facilitator and is not a party to the advertising agreement between Advertisers and Screen Owners.</li>
             </ul>
           </section>
